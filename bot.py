@@ -466,33 +466,42 @@ async def casino_roulette(message: Message):
             "❌ Формат ставки:\n"
             "• рул кра [сумма] / рул чер [сумма]\n"
             "• рул бол [сумма] / рул мал [сумма]\n"
-            "• рул 13-24 [сумма]\n"
-            "• рул 7 [сумма]\n"
-            "Пример: рул кра 13кк", 
+            "• рул 1-12 [сумма] / рул 13-24 [сумма] / рул 25-36 [сумма]\n"
+            "• рул [число] [сумма] (или вб)\n"
+            "Пример: рул кра 13к или рул кра вб",
             parse_mode="MARKDOWN"
         )
         return
-    
-    target_str = args[1].lower()
-    amount = parse_sum(args[2])
-    
-    if not amount or amount <= 0:
-        await message.answer("❌ Неверная сумма ставки.")
-        return
 
+    target_str = args[1].lower()
+
+    # Узнаем баланс игрока из базы
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    bal = cursor.fetchone()[0]
-    
+    bal_row = cursor.fetchone()
+    bal = bal_row[0] if bal_row else 0
+
+    # Проверяем ставку всем балансом ("вб", "все", "all")
+    raw_amount_str = args[2].lower()
+    if raw_amount_str in ["вб", "все", "all"]:
+        amount = bal
+    else:
+        amount = parse_sum(args[2])
+
+    if not amount or amount <= 0:
+        await message.answer("❌ Неверная сумма ставки.")
+        conn.close()
+        return
+
     if bal < amount:
         await message.answer("❌ У вас недостаточно наличных для такой ставки.")
         conn.close()
         return
 
     rolled_num = random.randint(0, 36)
-    
+
     if rolled_num == 0:
         rolled_color = "🟢"
     elif rolled_num in RED_NUMBERS:
@@ -502,6 +511,7 @@ async def casino_roulette(message: Message):
 
     won = False
     payout = 0
+
     if target_str in ["кра", "красное"]:
         if rolled_num != 0 and rolled_num in RED_NUMBERS:
             won = True
@@ -543,31 +553,38 @@ async def casino_roulette(message: Message):
         net_profit = payout - amount
         cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
         conn.commit()
-        
+
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
 
+        profit_str = f"+{net_profit:,}".replace(",", " ")
+        balance_str = f"{new_bal:,}".replace(",", " ")
+
         await message.answer(
-            f"Ты выйграл 🎉 Выпало {rolled_num} {rolled_color}\n\n"
-            f"+{payout:,}¢\n\n"
-            f"Мой баланс:{new_bal:,}¢".replace(",", " ")
+            f"Ты выиграл 🎉 Выпало {rolled_num} {rolled_color}\n\n"
+            f"{profit_str}¢\n\n"
+            f"Ваш баланс: {balance_str}¢"
         )
     else:
         actual_loss = min(amount, bal)
         cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (actual_loss, user_id))
         conn.commit()
-        
+
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
 
+        loss_str = f"-{actual_loss:,}".replace(",", " ")
+        balance_str = f"{new_bal:,}".replace(",", " ")
+
         await message.answer(
             f"Ты проиграл 🫠 Выпало {rolled_num} {rolled_color}\n\n"
-            f"-{actual_loss:,}¢\n\n"
-            f"Ваш баланс:{new_bal:,}¢".replace(",", " ")
+            f"{loss_str}¢\n\n"
+            f"Ваш баланс: {balance_str}¢"
         )
 
+        
 # Покер по ставке из чата (покер 10ккк)
 @router.message(F.text.regexp(r"(?i)^покер\s+.+"))
 async def casino_poker_chat(message: Message):
