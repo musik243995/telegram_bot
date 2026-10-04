@@ -284,7 +284,7 @@ async def msg_check_profile(message: Message):
     await smart_answer(message, text)
 
 # --- ТОП ИГРОКОВ («топ») ---
-@router.message(F.text.casefold().in_((["топ", "топ игроков"])))
+@router.message(F.text.casefold().in_((("топ", "топ игроков"))))
 async def text_top(message: Message):
     if not await check_ban_and_register(message): return
     conn = get_db()
@@ -298,9 +298,13 @@ async def text_top(message: Message):
     for idx, (custom_name, uname, total) in enumerate(top_list, 1):
         # Если есть кастомный ник — берем его, иначе username или "Игрок"
         display_name = custom_name if custom_name else (uname if uname else "Игрок")
-        text += f"{idx}. {display_name} — {total:,} ¢\n"
-    
-    text = text.replace(",", " ")
+        
+        # Очищаем имя от спецсимволов Markdown, чтобы не ломалась разметки
+        safe_name = display_name.replace("*", "").replace("_", "").replace("`", "")
+        
+        formatted_total = f"{total:,}".replace(",", " ")
+        text += f"{idx}. {safe_name} — {formatted_total} ¢\n"
+
     await smart_answer(message, text)
 
 
