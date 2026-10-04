@@ -1192,7 +1192,62 @@ async def admin_unban(message: Message):
     conn.commit()
     conn.close()
     await message.answer(f"🟢 Пользователь @{target_username} был разбанен.")
+    
+# --- ПАНЕЛЬ ВЛАДЕЛЬЦА ---
+OWNER_ID = 1222239198  # Твой Telegram ID (обязательно замени на свой числовой ID!)
 
+@router.message(F.text.casefold() == "владелец")
+async def cmd_owner_panel(message: Message):
+    if message.from_user.id != OWNER_ID:
+        return
+    await message.answer(
+        "👑 Панель владельца:\n\n"
+        "• +админ @юз — назначить администратора\n"
+        "• -админ @юз — снять администратора",
+        parse_mode="MARKDOWN"
+    )
+
+# Назначить админа по юзернейму: +админ @username
+@router.message(F.text.regexp(r"(?i)^\+админ\s+@\w+"))
+async def owner_add_admin(message: Message):
+    if message.from_user.id != OWNER_ID:
+        return
+    
+    target_username = message.text.split()[1].replace("@", "").lower()
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    # Проверяем, есть ли такой пользователь в базе и обновляем его статус или добавляем в список
+    # (Предполагается, что у вас есть колонка is_admin или role в таблице users)
+    cursor.execute("UPDATE users SET is_admin = 1 WHERE LOWER(username) = ?", (target_username,))
+    conn.commit()
+    
+    if cursor.rowcount > 0:
+        await message.answer(f"✅ Пользователь @{target_username} назначен администратором.", parse_mode="MARKDOWN")
+    else:
+        await message.answer(f"❌ Пользователь @{target_username} не найден в базе данных (он должен хотя бы раз запустить бота).", parse_mode="MARKDOWN")
+    
+    conn.close()
+
+# Снять админа по юзернейму: -админ @username
+@router.message(F.text.regexp(r"(?i)^\-админ\s+@\w+"))
+async def owner_remove_admin(message: Message):
+    if message.from_user.id != OWNER_ID:
+        return
+    
+    target_username = message.text.split()[1].replace("@", "").lower()
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET is_admin = 0 WHERE LOWER(username) = ?", (target_username,))
+    conn.commit()
+    
+    if cursor.rowcount > 0:
+        await message.answer(f"❌ Пользователь @{target_username снят с поста администратора.", parse_mode="MARKDOWN")
+    else:
+        await message.answer(f"⚠️️ Пользователь @{target_username} не найден в базе.", parse_mode="MARKDOWN")
+        
+    conn.close()
 
 from aiohttp import web
 
