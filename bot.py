@@ -16,7 +16,7 @@ dp.include_router(router)
 work_cooldowns = {}
 
 # --- СПИСОК АДМИНИСТРАТОРОВ ---
-ADMIN_IDS = [1222239198]  # Укажи свои Telegram ID через запятую
+ADMIN_IDS = [1222239198, 8390540110]  # Укажи свои Telegram ID через запятую
 
 # Красные числа на рулетке
 RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
@@ -69,17 +69,6 @@ def init_db():
         )
     """)
 
-    # Добавляем колонку is_admin, если её еще нет в таблице users
-try:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
-    conn.commit()
-    conn.close()
-except sqlite3.OperationalError:
-    # Колонка уже существует, ничего страшного
-    pass
-    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_apartments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,21 +94,6 @@ except sqlite3.OperationalError:
     """)
     conn.commit()
     conn.close()
-
-def is_user_admin(user_id):
-    if user_id in ADMIN_IDS:
-        return True
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT is_admin FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    
-    if row and row[0] == 1:
-        return True
-        
-    return False    
 
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
@@ -1177,7 +1151,7 @@ async def user_activate_promo(message: Message):
 # --- АДМИН-ПАНЕЛЬ ---
 @router.message(F.text.casefold() == "админ")
 async def cmd_admin_panel(message: Message):
-    if not is_user_admin(message.from_user.id): return
+    if message.from_user.id not in ADMIN_IDS: return
     await message.answer(
         "🛠 Панель администратора:\n\n"
         "• выдать @юз сумма\n"
@@ -1205,7 +1179,7 @@ async def admin_give(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^обнулить\s+@\w+"))
 async def admin_reset(message: Message):
-    if not is_user_admin(message.from_user.id): return
+    if message.from_user.id not in ADMIN_IDS: return
     target_username = message.text.split()[1].replace("@", "").lower()
     conn = get_db()
     cursor = conn.cursor()
@@ -1217,7 +1191,7 @@ async def admin_reset(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^бан\s+@\w+"))
 async def admin_ban(message: Message):
-    if not is_user_admin(message.from_user.id): return
+    if message.from_user.id not in ADMIN_IDS: return
     target_username = message.text.split()[1].replace("@", "").lower()
     conn = get_db()
     cursor = conn.cursor()
@@ -1228,7 +1202,7 @@ async def admin_ban(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^разбан\s+@\w+"))
 async def admin_unban(message: Message):
-    if not is_user_admin(message.from_user.id): return
+    if message.from_user.id not in ADMIN_IDS: return
     target_username = message.text.split()[1].replace("@", "").lower()
     conn = get_db()
     cursor = conn.cursor()
@@ -1312,9 +1286,6 @@ async def web_server():
 
 # И самое главное — меняем запуск бота, чтобы он запускал и сервер, и самого бота одновременно:
 async def main():
-    # Создаем таблицы в базе данных при запуске
-    init_db()
-    
     # Запускаем веб-сервер в фоне
     await web_server()
     # Запускаем самого Telegram-бота
