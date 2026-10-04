@@ -1243,7 +1243,7 @@ async def owner_remove_admin(message: Message):
     conn.commit()
     
     if cursor.rowcount > 0:
-        await message.answer(f"❌ Пользователь @{target_username снят с поста администратора.", parse_mode="MARKDOWN")
+        await message.answer(f"❌ Пользователь @{target_username} снят с поста администратора.", parse_mode="MARKDOWN")
     else:
         await message.answer(f"⚠️️ Пользователь @{target_username} не найден в базе.", parse_mode="MARKDOWN")
         
