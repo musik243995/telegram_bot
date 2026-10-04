@@ -68,6 +68,18 @@ def init_db():
             ref_count INTEGER DEFAULT 0
         )
     """)
+
+    # Добавляем колонку is_admin, если её еще нет в таблице users
+try:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+    conn.commit()
+    conn.close()
+except sqlite3.OperationalError:
+    # Колонка уже существует, ничего страшного
+    pass
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_apartments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
