@@ -106,6 +106,21 @@ except sqlite3.OperationalError:
     conn.commit()
     conn.close()
 
+def is_user_admin(user_id):
+    if user_id in ADMIN_IDS:
+        return True
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT is_admin FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row and row[0] == 1:
+        return True
+        
+    return False    
+
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
     user_id = user.id
@@ -1162,7 +1177,7 @@ async def user_activate_promo(message: Message):
 # --- АДМИН-ПАНЕЛЬ ---
 @router.message(F.text.casefold() == "админ")
 async def cmd_admin_panel(message: Message):
-    if message.from_user.id not in ADMIN_IDS: return
+    if not is_user_admin(message.from_user.id): return
     await message.answer(
         "🛠 Панель администратора:\n\n"
         "• выдать @юз сумма\n"
@@ -1175,7 +1190,7 @@ async def cmd_admin_panel(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^выдать\s+@\w+\s+.+"))
 async def admin_give(message: Message):
-    if message.from_user.id not in ADMIN_IDS: return
+    if not is_user_admin(message.from_user.id): return
     args = message.text.split()
     target_username = args[1].replace("@", "").lower()
     amount = parse_sum(args[2])
@@ -1190,7 +1205,7 @@ async def admin_give(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^обнулить\s+@\w+"))
 async def admin_reset(message: Message):
-    if message.from_user.id not in ADMIN_IDS: return
+    if not is_user_admin(message.from_user.id): return
     target_username = message.text.split()[1].replace("@", "").lower()
     conn = get_db()
     cursor = conn.cursor()
@@ -1202,7 +1217,7 @@ async def admin_reset(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^бан\s+@\w+"))
 async def admin_ban(message: Message):
-    if message.from_user.id not in ADMIN_IDS: return
+    if not is_user_admin(message.from_user.id): return
     target_username = message.text.split()[1].replace("@", "").lower()
     conn = get_db()
     cursor = conn.cursor()
@@ -1213,7 +1228,7 @@ async def admin_ban(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^разбан\s+@\w+"))
 async def admin_unban(message: Message):
-    if message.from_user.id not in ADMIN_IDS: return
+    if not is_user_admin(message.from_user.id): return
     target_username = message.text.split()[1].replace("@", "").lower()
     conn = get_db()
     cursor = conn.cursor()
