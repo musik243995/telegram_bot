@@ -1164,7 +1164,7 @@ async def cmd_admin_panel(message: Message):
 
 @router.message(F.text.regexp(r"(?i)^выдать\s+@\w+\s+.+"))
 async def admin_give(message: Message):
-    if not is_user_admin(message.from_user.id): return
+    if message.from_user.id not in ADMIN_IDS: return
     args = message.text.split()
     target_username = args[1].replace("@", "").lower()
     amount = parse_sum(args[2])
