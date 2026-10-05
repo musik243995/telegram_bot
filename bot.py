@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKe
 from aiogram.filters import Command, CommandObject
 from aiohttp import web
 
-API_TOKEN = "8885671207:AAGpxxnH2HQqg3o09bE2ZPinj4Dvdof1WrQ"  # Замени на свой токен
+API_TOKEN = "8885671207:AAFiovqDHJXJ5HJ01vSdDGWLiQPYXOJHriI"  # Замени на свой токен
 
 bot = Bot(token=API_TOKEN)
 router = Router()
@@ -563,22 +563,35 @@ async def text_casino(message: Message):
     ).replace(",", " ")
     await smart_answer(message, text)
 
+# КУЛДАУН ДЛЯ ИГР (защита от спама)
+game_cooldowns = {}
+
+
+# --- РУЛЕТКА ---
 @router.message(F.text.regexp(r"(?i)^рул\s+.+"))
 async def casino_roulette(message: Message):
-    if not await check_ban_and_register(message): return
+    if not await check_ban_and_register(message):
+        return
+
+    user_id = message.from_user.id
+    now = time.time()
+    if now - game_cooldowns.get(user_id, 0) < 2:
+        await message.answer("❌ Нет так быстро!")
+        return
+    game_cooldowns[user_id] = now
+
     args = message.text.split()
     if len(args) < 3:
         await message.answer(
             "❌ Неверный формат ставки. Пример:\n"
             "• рул кра 10000\n• рул чер 10к\n• рул 1-12 10к\n• рул чет 10к\n• рул нечет 10к\n• рул от 0-36 10000\n• рул кра вб",
-            parse_mode="MARKDOWN"
+            parse_mode="MARKDOWN",
         )
         return
 
     target_str = " ".join(args[1:-1]).lower()
     raw_amount_str = args[-1].lower()
 
-    user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
@@ -650,7 +663,10 @@ async def casino_roulette(message: Message):
 
     if won:
         net_profit = int(payout) - amount
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (net_profit, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
@@ -662,32 +678,46 @@ async def casino_roulette(message: Message):
         await send_result_media(message, True, text)
     else:
         actual_loss = min(amount, bal)
-        cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (actual_loss, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance - ? WHERE user_id = ?",
+            (actual_loss, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-
         loss_str = f"-{actual_loss:,}".replace(",", " ")
         balance_str = f"{new_bal:,}".replace(",", " ")
         text = f"Ты проиграл 🫠 Выпало {rolled_num} {rolled_color}\n\n{loss_str}¢\n\nВаш баланс: {balance_str}¢"
         await send_result_media(message, False, text)
 
+
+# --- ПОКЕР ---
 @router.message(F.text.regexp(r"(?i)^покер\s+.+"))
 async def casino_poker_chat(message: Message):
-    if not await check_ban_and_register(message): return
+    if not await check_ban_and_register(message):
+        return
+
+    user_id = message.from_user.id
+    now = time.time()
+    if now - game_cooldowns.get(user_id, 0) < 2:
+        await message.answer("❌ Нет так быстро!")
+        return
+    game_cooldowns[user_id] = now
+
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("❌ Формат: покер 10000 или покер 10к", parse_mode="MARKDOWN")
+        await message.answer(
+            "❌ Формат: покер 10000 или покер 10к", parse_mode="MARKDOWN"
+        )
         return
-    
-    user_id = message.from_user.id
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     res = cursor.fetchone()
     bal = res[0] if res else 0
-    
+
     raw_amt = args[1].lower()
     if raw_amt in ["вб", "все", "all"]:
         amount = bal
@@ -698,65 +728,101 @@ async def casino_poker_chat(message: Message):
         await message.answer("❌ Неверная сумма ставки.")
         conn.close()
         return
-    
+
     if bal < amount:
-        await message.answer("❌ У вас недостаточно наличных для такой ставки.")
+        await message.answer(
+            "❌ У вас недостаточно наличных для такой ставки."
+        )
         conn.close()
         return
 
-    hands = ["Старшая карта", "Пара", "Две пары", "Тройка", "Стрит", "Фулл-Хаус", "Каре", "Флеш-Рояль"]
+    hands = [
+        "Старшая карта",
+        "Пара",
+        "Две пары",
+        "Тройка",
+        "Стрит",
+        "Фулл-Хаус",
+        "Каре",
+        "Флеш-Рояль",
+    ]
     weights = [60, 30, 6, 2, 1, 0.7, 0.2, 0.1]
-    
+
     player_hand = random.choices(hands, weights=weights)[0]
     dealer_hand = random.choices(hands, weights=weights)[0]
     hand_power = {h: i for i, h in enumerate(hands)}
-    
+
     if hand_power[player_hand] > hand_power[dealer_hand]:
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (amount, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🎉 Победа в покере!\nВаша комбинация: {player_hand} (Дилер: {dealer_hand})\n💰 Вы выиграли: +{amount:,} ¢\n💰 Баланс: {new_bal:,} ¢".replace(",", " ")
+        text = (
+            f"🎉 Победа в покере!\nВаша комбинация: {player_hand} (Дилер: {dealer_hand})\n💰 Вы выиграли: +{amount:,} ¢\n💰 Баланс: {new_bal:,} ¢"
+            .replace(",", " ")
+        )
         await send_result_media(message, True, text)
     else:
         actual_loss = min(amount, bal)
-        cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (actual_loss, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance - ? WHERE user_id = ?",
+            (actual_loss, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"😢 Проигрыш в покере.\nВаша комбинация: {player_hand} (Дилер: {dealer_hand})\n💸 Потеряно: -{actual_loss:,} ¢\n💰 Баланс: {new_bal:,} ¢".replace(",", " ")
+        text = (
+            f"😢 Проигрыш в покере.\nВаша комбинация: {player_hand} (Дилер: {dealer_hand})\n💸 Потеряно: -{actual_loss:,} ¢\n💰 Баланс: {new_bal:,} ¢"
+            .replace(",", " ")
+        )
         await send_result_media(message, False, text)
 
+
+# --- ФОРТУНА ---
 @router.message(F.text.regexp(r"(?i)^фортуна\s+.+"))
 async def casino_wheel_chat(message: Message):
-    if not await check_ban_and_register(message): return
+    if not await check_ban_and_register(message):
+        return
+
+    user_id = message.from_user.id
+    now = time.time()
+    if now - game_cooldowns.get(user_id, 0) < 2:
+        await message.answer("❌ Нет так быстро!")
+        return
+    game_cooldowns[user_id] = now
+
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("❌ Формат: фортуна 10000 или фортуна 10к", parse_mode="MARKDOWN")
+        await message.answer(
+            "❌ Формат: фортуна 10000 или фортуна 10к", parse_mode="MARKDOWN"
+        )
         return
-    
-    user_id = message.from_user.id
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     res = cursor.fetchone()
     bal = res[0] if res else 0
-    
+
     raw_amt = args[1].lower()
     if raw_amt in ["вб", "все", "all"]:
         cost = bal
     else:
         cost = parse_sum(raw_amt)
-
     if not cost or cost <= 0:
         await message.answer("❌ Неверная сумма ставки.")
         conn.close()
         return
-    
+
     if bal < cost:
-        await message.answer("❌ У вас недостаточно наличных для такой ставки.")
+        await message.answer(
+            "❌ У вас недостаточно наличных для такой ставки."
+        )
         conn.close()
         return
 
@@ -764,7 +830,7 @@ async def casino_wheel_chat(message: Message):
     weights = [25, 30, 15, 10, 5, 0.4, 0.1]
     mult = random.choices(multipliers, weights=weights)[0]
     net_change = int(cost * mult)
-    
+
     if bal + net_change < 0:
         actual_loss = bal
         cursor.execute("UPDATE users SET balance = 0 WHERE user_id = ?", (user_id,))
@@ -772,42 +838,73 @@ async def casino_wheel_chat(message: Message):
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🎡 Колесо Фортуны:\n💀 Катастрофа! Вы потеряли все наличные (-{actual_loss:,} ¢). Баланс: 0 ¢".replace(",", " ")
+        text = (
+            f"🎡 Колесо Фортуны:\n💀 Катастрофа! Вы потеряли все наличные (-{actual_loss:,} ¢). Баланс: 0 ¢"
+            .replace(",", " ")
+        )
         await send_result_media(message, False, text)
     else:
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_change, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (net_change, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        
+
         if net_change > 0:
-            text = f"🎡 Колесо Фортуны:\n✨ Удача! Вы выиграли +{net_change:,} ¢ (x{mult})\n💰 Баланс: {new_bal:,} ¢".replace(",", " ")
+            text = (
+                f"🎡 Колесо Фортуны:\n✨ Удача! Вы выиграли +{net_change:,} ¢ (x{mult})\n💰 Баланс: {new_bal:,} ¢"
+                .replace(",", " ")
+            )
             await send_result_media(message, True, text)
         elif net_change < 0:
-            text = f"🎡 Колесо Фортуны:\n💀 Неудача! Вы потеряли {net_change:,} ¢\n💰 Баланс: {new_bal:,} ¢".replace(",", " ")
+            text = (
+                f"🎡 Колесо Фортуны:\n💀 Неудача! Вы потеряли {net_change:,} ¢\n💰 Баланс: {new_bal:,} ¢"
+                .replace(",", " ")
+            )
             await send_result_media(message, False, text)
         else:
-            await message.answer(f"🎡 Колесо Фортуны:\n🤝 Ничья!\n💰 Баланс: {new_bal:,} ¢".replace(",", " "))
+            await message.answer(
+                f"🎡 Колесо Фортуны:\n🤝 Ничья!\n💰 Баланс: {new_bal:,} ¢"
+                .replace(",", " ")
+            )
 
-# --- ИГРА ДАРТС ---
+
+# --- ДАРТС ---
 @router.message(F.text.regexp(r"(?i)^дартс\s+.+"))
 async def game_darts(message: Message):
-    if not await check_ban_and_register(message): return
-    args = message.text.split()
-    if len(args) < 2:
-        await message.answer("❌ Формат: дартс 100000 центр / дартс 100000 мимо", parse_mode="MARKDOWN")
+    if not await check_ban_and_register(message):
         return
 
     user_id = message.from_user.id
+    now = time.time()
+    if now - game_cooldowns.get(user_id, 0) < 2:
+        await message.answer("❌ Нет так быстро!")
+        return
+    game_cooldowns[user_id] = now
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "❌ Формат: дартс 100000 центр / дартс 100000 мимо",
+            parse_mode="MARKDOWN",
+        )
+        return
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     res = cursor.fetchone()
     bal = res[0] if res else 0
 
-    mode = "центр" if "центр" in message.text.lower() else ("мимо" if "мимо" in message.text.lower() else "центр")
-    
+    mode = (
+        "центр"
+        if "центр" in message.text.lower()
+        else ("мимо" if "мимо" in message.text.lower() else "центр")
+    )
+
     amount_str = args[1].lower()
     if amount_str in ["центр", "мимо"] and len(args) > 2:
         amount_str = args[2].lower()
@@ -831,8 +928,8 @@ async def game_darts(message: Message):
     dice_val = msg_dice.dice.value
     await asyncio.sleep(3)
 
-    is_hit_center = (dice_val == 6)
-    is_miss = (dice_val <= 3)
+    is_hit_center = dice_val == 6
+    is_miss = dice_val <= 3
 
     won = False
     payout = 0
@@ -845,35 +942,59 @@ async def game_darts(message: Message):
         if is_miss:
             won = True
             payout = amount * 5
-
     if won:
         net_profit = payout - amount
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (net_profit, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🎯 Дартс: Успех!\nВы ставили на '{mode}', выпало значение {dice_val}.\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
+        text = (
+            f"🎯 Дартс: Успех!\nВы ставили на '{mode}', выпало значение {dice_val}.\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢"
+            .replace(",", " ")
+        )
         await message.answer(text, parse_mode="MARKDOWN")
     else:
         actual_loss = min(amount, bal)
-        cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (actual_loss, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance - ? WHERE user_id = ?",
+            (actual_loss, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🎯 Дартс: Мимо кассы!\nВы ставили на '{mode}', выпало значение {dice_val}.\nПроигрыш: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
+        text = (
+            f"🎯 Дартс: Мимо кассы!\nВы ставили на '{mode}', выпало значение {dice_val}.\nПроигрыш: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢"
+            .replace(",", " ")
+        )
         await message.answer(text, parse_mode="MARKDOWN")
 
-# --- ИГРА БАСКЕТБОЛ ---
+
+# --- БАСКЕТБОЛ ---
 @router.message(F.text.regexp(r"(?i)^баскет\s+.+"))
 async def game_basketball(message: Message):
-    if not await check_ban_and_register(message): return
+    if not await check_ban_and_register(message):
+        return
+
+    user_id = message.from_user.id
+    now = time.time()
+    if now - game_cooldowns.get(user_id, 0) < 2:
+        await message.answer("❌ Нет так быстро!")
+        return
+    game_cooldowns[user_id] = now
+
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("❌ Формат: баскет 100000 или баскет 100000 мимо", parse_mode="MARKDOWN")
+        await message.answer(
+            "❌ Формат: баскет 100000 или баскет 100000 мимо",
+            parse_mode="MARKDOWN",
+        )
         return
-    user_id = message.from_user.id
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
@@ -881,7 +1002,7 @@ async def game_basketball(message: Message):
     bal = res[0] if res else 0
 
     mode = "мимо" if "мимо" in message.text.lower() else "попал"
-    
+
     amount_str = args[1].lower()
     if amount_str in ["мимо"] and len(args) > 2:
         amount_str = args[2].lower()
@@ -905,7 +1026,7 @@ async def game_basketball(message: Message):
     dice_val = msg_dice.dice.value
     await asyncio.sleep(3)
 
-    is_scored = (dice_val in [4, 5])
+    is_scored = dice_val in [4, 5]
     won = False
     payout = 0
 
@@ -920,21 +1041,33 @@ async def game_basketball(message: Message):
 
     if won:
         net_profit = payout - amount
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (net_profit, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🏀 Баскетбол: Гол!\nМяч брошен. Вы угадали исходы!\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
+        text = (
+            f"🏀 Баскетбол: Гол!\nМяч брошен. Вы угадали исходы!\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢"
+            .replace(",", " ")
+        )
         await message.answer(text, parse_mode="MARKDOWN")
     else:
         actual_loss = min(amount, bal)
-        cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (actual_loss, user_id))
+        cursor.execute(
+            "UPDATE users SET balance = balance - ? WHERE user_id = ?",
+            (actual_loss, user_id),
+        )
         conn.commit()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🏀 Баскетбол: Мимо!\nМяч брошен. Вы проиграли ставку.\nПотеряно: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
+        text = (
+            f"🏀 Баскетбол: Мимо!\nМяч брошен. Вы проиграли ставку.\nПотеряно: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢"
+            .replace(",", " ")
+        )
         await message.answer(text, parse_mode="MARKDOWN")
 
 
@@ -1526,6 +1659,7 @@ async def admin_remove_creator(message: Message):
 
 async def handle(request):
     return web.Response(text="Бот работает 24/7! 🚀")
+
 
 async def web_server():
     app = web.Application()
