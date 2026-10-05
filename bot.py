@@ -260,6 +260,31 @@ async def set_custom_nickname(message: Message):
     conn.close()
     await message.answer(f"✅ Ваш игровой ник успешно изменен на: {new_name}", parse_mode="MARKDOWN")
 
+# Текст помощи, который вы указали
+HELP_TEXT = (
+    "Играть в игры нажми на кнопку \"казик\" в боте.\n"
+    "Переводы пример: Пер @юз сумма\n"
+    "Также по кнопке флипинг покупай квартиры в боте и продавай мб уйдешь в окуп:).\n"
+    "Закидуй в банк деньги чтоб получать процент:).\n"
+    "Нажми на кнопку рефералы и нажми на кнопку поделиться за 1 человека +100 000¢.💸\n"
+    "Получай бонус по кнопке в бота каждые 24 часа.💸\n"
+    "Работай собирай бутылки и металл и меняй на деньги💰.\n"
+    "Пиши \"я\" \"профиль\" чтобы смотреть свой профиль, пиши \"чекнуть\" под сообщением человека, чтобы смотреть его профиль.👀\n"
+    "Пиши \"топ\", чтобы знать лучший ли ты🏅.\n"
+    "Смотри свои квартиры по кнопке в боте"
+)
+
+# 1. Обработка текстового сообщения или кнопки с текстом "помощь" (регистр не важен)
+@dp.message(F.text.lower() == "помощь")
+async def cmd_help(message: Message):
+    await message.answer(HELP_TEXT, parse_mode="MARKDOWN")
+
+# 2. Обработка нажатия на инлайн-кнопку (если кнопка сделана через callback_data="help")
+@dp.callback_query(F.data == "help")
+async def callback_help(callback: CallbackQuery):
+    await callback.message.answer(HELP_TEXT, parse_mode="MARKDOWN")
+    await callback.answer() # Закрываем часики анимации на кнопке    
+
 # --- ПРОФИЛЬ И ТОП (АДМИНЫ СКРЫТЫ) ---
 def format_profile(user_data):
     user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat = user_data
