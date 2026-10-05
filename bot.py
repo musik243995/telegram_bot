@@ -15,6 +15,44 @@ router = Router()
 dp = Dispatcher()
 dp.include_router(router)
 
+# --- ВСТАВЛЯЕМ СЮДА ---
+original_send_message = bot.send_message
+original_send_photo = bot.send_photo
+
+STOP_WORDS = [
+    "special premium offers",
+    "premium videos",
+    "fresihbot_bot",
+    "video club",
+    "strawberries",
+    "referral reward levels",
+    "age confirmation",
+    "terms of use",
+    "100 stars =",
+    "250 stars =",
+    "500 stars =",
+    "1000 stars ="
+]
+
+async def filtered_send_message(chat_id, text, *args, **kwargs):
+    if text:
+        text_lower = str(text).lower()
+        if any(word in text_lower for word in STOP_WORDS):
+            print("🚫 Заблокирована отправка спама!")
+            return None
+    return await original_send_message(chat_id, text, *args, **kwargs)
+
+async def filtered_send_photo(chat_id, photo, caption=None, *args, **kwargs):
+    if caption:
+        caption_lower = str(caption).lower()
+        if any(word in caption_lower for word in STOP_WORDS):
+            print("🚫 Заблокирована отправка фото со спамом!")
+            return None
+    return await original_send_photo(chat_id, photo, caption=caption, *args, **kwargs)
+
+bot.send_message = filtered_send_message
+bot.send_photo = filtered_send_photo
+
 # Словари для кулдаунов
 work_cooldowns = {}
 creator_salary_cooldowns = {}
