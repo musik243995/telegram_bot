@@ -816,7 +816,7 @@ async def game_darts(message: Message):
         new_bal = cursor.fetchone()[0]
         conn.close()
         text = f"🎯 Дартс: Успех!\nВы ставили на '{mode}', выпало значение {dice_val}.\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
-        await send_result_media(message, True, text)
+        await message.answer(text, parse_mode="MARKDOWN")
     else:
         actual_loss = min(amount, bal)
         cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (actual_loss, user_id))
@@ -825,7 +825,7 @@ async def game_darts(message: Message):
         new_bal = cursor.fetchone()[0]
         conn.close()
         text = f"🎯 Дартс: Мимо кассы!\nВы ставили на '{mode}', выпало значение {dice_val}.\nПроигрыш: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
-        await send_result_media(message, False, text)
+        await message.answer(text, parse_mode="MARKDOWN")
 
 # --- ИГРА БАСКЕТБОЛ ---
 @router.message(F.text.regexp(r"(?i)^баскет\s+.+"))
@@ -888,7 +888,7 @@ async def game_basketball(message: Message):
         new_bal = cursor.fetchone()[0]
         conn.close()
         text = f"🏀 Баскетбол: Гол!\nМяч брошен (код {dice_val}). Вы угадали исходы!\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
-        await send_result_media(message, True, text)
+        await message.answer(text, parse_mode="MARKDOWN")
     else:
         actual_loss = min(amount, bal)
         cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (actual_loss, user_id))
@@ -897,7 +897,7 @@ async def game_basketball(message: Message):
         new_bal = cursor.fetchone()[0]
         conn.close()
         text = f"🏀 Баскетбол: Мимо!\nМяч брошен (код {dice_val}). Вы проиграли ставку.\nПотеряно: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
-        await send_result_media(message, False, text)
+        await message.answer(text, parse_mode="MARKDOWN")
 
 
 # --- БАНК И ПЕРЕВОДЫ ---
