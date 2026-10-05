@@ -584,7 +584,7 @@ async def casino_roulette(message: Message):
     if len(args) < 3:
         await message.answer(
             "❌ Неверный формат ставки. Пример:\n"
-            "• рул кра 10000\n• рул чер 10к\n• рул 1-12 10к\n• рул чет 10к\n• рул нечет 10к\n• рул от 0-36 10000\n• рул кра вб",
+            "• рул кра 10000\n• рул чер 10к\n• рул 1-12 10к\n• рул 13-24 10к\n• рул 25-36 10к\n• рул чет 10к",
             parse_mode="MARKDOWN",
         )
         return
@@ -592,21 +592,30 @@ async def casino_roulette(message: Message):
     target_str = " ".join(args[1:-1]).lower()
     raw_amount_str = args[-1].lower()
 
-    # Проверка на допустимые варианты ставок в рулетке
-    valid_targets = ["кра", "красное", "чер", "черное", "чет", "нечет", "от 0-36", "0-36"]
+    # Разрешенные варианты диапазонов (только эти три и больше никакие другие)
+    allowed_ranges = ["1-12", "13-24", "25-36"]
+    valid_targets = ["кра", "красное", "чер", "черное", "чет", "нечет", "от 0-36", "0-36"] + allowed_ranges
+    
     is_valid_target = False
     
-    if target_str in valid_targets or "-" in target_str:
+    if target_str in valid_targets:
         is_valid_target = True
     else:
         try:
-            int(target_str) # Проверяем, может это число от 0 до 36
-            is_valid_target = True
+            chosen_num = int(target_str)
+            if 0 <= chosen_num <= 36:
+                is_valid_target = True
         except ValueError:
             pass
 
     if not is_valid_target:
-        await message.answer("❌ Неправильная ставка! Напишите правильно, например: рул кра 10к или рул чер 5000.")
+        await message.answer(
+            "❌ Неправильная ставка! Разрешены только:\n"
+            "• Цвета: кра, чер\n"
+            "• Чет/нечет: чет, нечет\n"
+            "• Дюжины: 1-12, 13-24, 25-36\n"
+            "• Конкретные числа от 0 до 36"
+        )
         return
 
     conn = get_db()
@@ -661,14 +670,18 @@ async def casino_roulette(message: Message):
         if 0 <= rolled_num <= 36:
             won = True
             payout = amount * 1.5
-    elif "-" in target_str:
-        try:
-            low, high = map(int, target_str.split("-"))
-            if low <= rolled_num <= high:
-                won = True
-                payout = amount * 3
-        except:
-            pass
+    elif target_str == "1-12":
+        if 1 <= rolled_num <= 12:
+            won = True
+            payout = amount * 3
+    elif target_str == "13-24":
+        if 13 <= rolled_num <= 24:
+            won = True
+            payout = amount * 3
+    elif target_str == "25-36":
+        if 25 <= rolled_num <= 36:
+            won = True
+            payout = amount * 3
     else:
         try:
             chosen_num = int(target_str)
@@ -688,7 +701,6 @@ async def casino_roulette(message: Message):
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-
         profit_str = f"+{net_profit:,}".replace(",", " ")
         balance_str = f"{new_bal:,}".replace(",", " ")
         text = f"Ты выиграл 🎉 Выпало {rolled_num} {rolled_color}\n\n{profit_str}¢\n\nВаш баланс: {balance_str}¢"
