@@ -136,8 +136,31 @@ def init_db():
             PRIMARY KEY (user_id, code)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            action_type TEXT,
+            action_details TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()
+
+def log_user_action(user_id, username, action_type, details):
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO user_logs (user_id, username, action_type, action_details) VALUES (?, ?, ?, ?)",
+            (user_id, username, action_type, details)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Ошибка логирования: {e}")    
 
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
@@ -1257,6 +1280,25 @@ async def transfer_money(message: Message):
     conn.close()
 
     formatted_amount = f"{amount:,}".replace(",", " ")
+    
+    # Записываем перевод в логи
+    sender_name = message.from_user.username or message.from_user.first_name
+    log_user_action(sender_id, sender_name, "ПЕРЕВОД", f"Перевел {formatted_amount}¢ пользователю ID: {target_id} ({target_display_name})")
+
+    # Уведомление админам, если перевод крупный (от 500 млн)
+    if amount >= 500_000_000:
+        alert_text = (
+            f"🚨 ВНИМАНИЕ: КРУПНЫЙ ПЕРЕВОД!\n\n"
+            f"• От кого: @{sender_name} (ID: {sender_id})\n"
+            f"• Кому ID: {target_id} ({target_display_name})\n"
+            f"• Сумма: {formatted_amount} ¢"
+        )
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(admin_id, alert_text, parse_mode="MARKDOWN")
+            except:
+                pass
+
     await message.answer(f"✅ Успешно переведено {formatted_amount} ¢ пользователю {target_display_name}.")
 
 
@@ -1714,6 +1756,36 @@ async def admin_remove_creator(message: Message):
         await message.answer(f"⚠️ Пользователь @{target_username} не найден.", parse_mode="MARKDOWN")
     conn.close()
 
+@router.message(F.text.regexp(r"(?i)^/history\s+\d+"))
+async def admin_view_history(message: Message):
+    if message.from_user.id not in ADMIN_IDS: 
+        return
+
+    args = message.text.split()
+    target_user_id = args[1]
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT action_type, action_details, timestamp FROM user_logs WHERE user_id = ? ORDER BY id DESC LIMIT 15",
+        (target_user_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    if not rows:
+        await message.answer(f"📭 Записей для пользователя {target_user_id} не найдено.")
+        return
+
+    text = f"📜 **Последние действия игрока {target_user_id}:**\n\n"
+    for action_type, details, timestamp in rows:
+        text += f"▪️ [{timestamp}] **{action_type}**: {details}\n"
+
+    if len(text) > 4096:
+        text = text[:4090] + "..."
+
+    await message.answer(text, parse_mode="MARKDOWN")    
+
 async def handle(request):
     return web.Response(text="Бот работает 24/7! 🚀")
 
@@ -1727,6 +1799,13 @@ async def web_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"Веб-сервер запущен на порту {port}")
+
+@router.message()
+async def log_all_text_messages(message: Message):
+    if message.text and not message.text.startswith("/"):
+        user = message.from_user
+        username = user.username or user.first_name
+        log_user_action(user.id, username, "СООБЩЕНИЕ", message.text)    
 
 async def main():
     init_db()
