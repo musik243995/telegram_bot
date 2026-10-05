@@ -929,7 +929,7 @@ async def game_darts(message: Message):
     await asyncio.sleep(3)
 
     is_hit_center = dice_val == 6
-    is_miss = dice_val <= 3
+    is_absolute_miss = dice_val == 1  # Дротик вообще никуда не попал (в самый край/мимо мишени)
 
     won = False
     payout = 0
@@ -939,9 +939,10 @@ async def game_darts(message: Message):
             won = True
             payout = amount * 4
     elif mode == "мимо":
-        if is_miss:
+        if is_absolute_miss:
             won = True
-            payout = amount * 5
+            payout = amount * 5  # Коэффициент выигрыша при абсолютном промахе
+
     if won:
         net_profit = payout - amount
         cursor.execute(
@@ -972,7 +973,6 @@ async def game_darts(message: Message):
             .replace(",", " ")
         )
         await message.answer(text, parse_mode="MARKDOWN")
-
 
 # --- БАСКЕТБОЛ ---
 @router.message(F.text.regexp(r"(?i)^баскет\s+.+"))
