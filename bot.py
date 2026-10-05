@@ -887,7 +887,7 @@ async def game_basketball(message: Message):
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🏀 Баскетбол: Гол!\nМяч брошен (код {dice_val}). Вы угадали исходы!\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
+        text = f"🏀 Баскетбол: Гол!\nМяч брошен. Вы угадали исходы!\nВыигрыш: +{net_profit:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
         await message.answer(text, parse_mode="MARKDOWN")
     else:
         actual_loss = min(amount, bal)
@@ -896,7 +896,7 @@ async def game_basketball(message: Message):
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = cursor.fetchone()[0]
         conn.close()
-        text = f"🏀 Баскетбол: Мимо!\nМяч брошен (код {dice_val}). Вы проиграли ставку.\nПотеряно: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
+        text = f"🏀 Баскетбол: Мимо!\nМяч брошен. Вы проиграли ставку.\nПотеряно: -{actual_loss:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " ")
         await message.answer(text, parse_mode="MARKDOWN")
 
 
