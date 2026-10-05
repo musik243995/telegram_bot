@@ -576,7 +576,7 @@ async def casino_roulette(message: Message):
     user_id = message.from_user.id
     now = time.time()
     if now - game_cooldowns.get(user_id, 0) < 2:
-        await message.answer("❌ Нет так быстро!")
+        await message.answer("❌ Не так быстро!")
         return
     game_cooldowns[user_id] = now
 
@@ -591,6 +591,23 @@ async def casino_roulette(message: Message):
 
     target_str = " ".join(args[1:-1]).lower()
     raw_amount_str = args[-1].lower()
+
+    # Проверка на допустимые варианты ставок в рулетке
+    valid_targets = ["кра", "красное", "чер", "черное", "чет", "нечет", "от 0-36", "0-36"]
+    is_valid_target = False
+    
+    if target_str in valid_targets or "-" in target_str:
+        is_valid_target = True
+    else:
+        try:
+            int(target_str) # Проверяем, может это число от 0 до 36
+            is_valid_target = True
+        except ValueError:
+            pass
+
+    if not is_valid_target:
+        await message.answer("❌ Неправильная ставка! Напишите правильно, например: рул кра 10к или рул чер 5000.")
+        return
 
     conn = get_db()
     cursor = conn.cursor()
@@ -691,7 +708,6 @@ async def casino_roulette(message: Message):
         text = f"Ты проиграл 🫠 Выпало {rolled_num} {rolled_color}\n\n{loss_str}¢\n\nВаш баланс: {balance_str}¢"
         await send_result_media(message, False, text)
 
-
 # --- ПОКЕР ---
 @router.message(F.text.regexp(r"(?i)^покер\s+.+"))
 async def casino_poker_chat(message: Message):
@@ -701,7 +717,7 @@ async def casino_poker_chat(message: Message):
     user_id = message.from_user.id
     now = time.time()
     if now - game_cooldowns.get(user_id, 0) < 2:
-        await message.answer("❌ Нет так быстро!")
+        await message.answer("❌ Не так быстро!")
         return
     game_cooldowns[user_id] = now
 
@@ -873,7 +889,7 @@ async def casino_wheel_chat(message: Message):
 
 
 # --- ДАРТС ---
-@router.message(F.text.regexp(r"(?i)^дартс\s+.+"))
+@router.message(F.text.regexp(r"(?i)^дартс\b"))
 async def game_darts(message: Message):
     if not await check_ban_and_register(message):
         return
@@ -881,16 +897,25 @@ async def game_darts(message: Message):
     user_id = message.from_user.id
     now = time.time()
     if now - game_cooldowns.get(user_id, 0) < 2:
-        await message.answer("❌ Нет так быстро!")
+        await message.answer("❌ Не так быстро!")
         return
     game_cooldowns[user_id] = now
 
     args = message.text.split()
-    if len(args) < 2:
+    if len(args) < 3:
         await message.answer(
-            "❌ Формат: дартс 100000 центр / дартс 100000 мимо",
+            "❌ Неправильная ставка! Формат: дартс 100000 центр / дартс 100000 мимо",
             parse_mode="MARKDOWN",
         )
+        return
+
+    text_lower = message.text.lower()
+    if "центр" in text_lower:
+        mode = "центр"
+    elif "мимо" in text_lower:
+        mode = "мимо"
+    else:
+        await message.answer("❌ Неправильная ставка! Укажите режим: «центр» или «мимо». Пример: дартс 10к центр")
         return
 
     conn = get_db()
@@ -899,15 +924,12 @@ async def game_darts(message: Message):
     res = cursor.fetchone()
     bal = res[0] if res else 0
 
-    mode = (
-        "центр"
-        if "центр" in message.text.lower()
-        else ("мимо" if "мимо" in message.text.lower() else "центр")
-    )
-
+    # Определяем сумму (она может быть вторым или третьим аргументом)
     amount_str = args[1].lower()
     if amount_str in ["центр", "мимо"] and len(args) > 2:
         amount_str = args[2].lower()
+    elif len(args) > 2 and args[2].lower() in ["центр", "мимо"]:
+        amount_str = args[1].lower()
 
     if amount_str in ["вб", "все", "all"]:
         amount = bal
@@ -915,7 +937,7 @@ async def game_darts(message: Message):
         amount = parse_sum(amount_str)
 
     if not amount or amount <= 0:
-        await message.answer("❌ Укажите корректную сумму ставки.")
+        await message.answer("❌ Неправильная сумма ставки.")
         conn.close()
         return
 
@@ -929,7 +951,7 @@ async def game_darts(message: Message):
     await asyncio.sleep(3)
 
     is_hit_center = dice_val == 6
-    is_absolute_miss = dice_val == 1  # Дротик вообще никуда не попал (в самый край/мимо мишени)
+    is_absolute_miss = dice_val == 1
 
     won = False
     payout = 0
@@ -941,7 +963,7 @@ async def game_darts(message: Message):
     elif mode == "мимо":
         if is_absolute_miss:
             won = True
-            payout = amount * 5  # Коэффициент выигрыша при абсолютном промахе
+            payout = amount * 5
 
     if won:
         net_profit = payout - amount
@@ -975,7 +997,7 @@ async def game_darts(message: Message):
         await message.answer(text, parse_mode="MARKDOWN")
 
 # --- БАСКЕТБОЛ ---
-@router.message(F.text.regexp(r"(?i)^баскет\s+.+"))
+@router.message(F.text.regexp(r"(?i)^баскет\b"))
 async def game_basketball(message: Message):
     if not await check_ban_and_register(message):
         return
@@ -983,17 +1005,33 @@ async def game_basketball(message: Message):
     user_id = message.from_user.id
     now = time.time()
     if now - game_cooldowns.get(user_id, 0) < 2:
-        await message.answer("❌ Нет так быстро!")
+        await message.answer("❌ Не так быстро!")
         return
     game_cooldowns[user_id] = now
 
     args = message.text.split()
     if len(args) < 2:
         await message.answer(
-            "❌ Формат: баскет 100000 или баскет 100000 мимо",
+            "❌ Неправильная ставка! Формат: баскет 100000 или баскет 100000 мимо",
             parse_mode="MARKDOWN",
         )
         return
+
+    text_lower = message.text.lower()
+    
+    # Определяем режим и валидируем текст
+    if "мимо" in text_lower:
+        mode = "мимо"
+        # Проверим, что кроме слова "баскет", суммы и слова "мимо" нет лишнего мусора
+        # (если аргументов больше 3, значит написали что-то лишнее)
+        if len(args) > 3:
+            await message.answer("❌ Неправильная ставка! Проверьте правильность написания.")
+            return
+    else:
+        mode = "попал"
+        if len(args) > 2:
+            await message.answer("❌ Неправильная ставка! Если хотите поставить на промах, пишите: баскет [сумма] мимо.")
+            return
 
     conn = get_db()
     cursor = conn.cursor()
@@ -1001,11 +1039,18 @@ async def game_basketball(message: Message):
     res = cursor.fetchone()
     bal = res[0] if res else 0
 
-    mode = "мимо" if "мимо" in message.text.lower() else "попал"
+    # Извлекаем сумму из аргументов
+    amount_str = None
+    for arg in args[1:]:
+        arg_low = arg.lower()
+        if arg_low != "мимо":
+            amount_str = arg_low
+            break
 
-    amount_str = args[1].lower()
-    if amount_str in ["мимо"] and len(args) > 2:
-        amount_str = args[2].lower()
+    if not amount_str:
+        await message.answer("❌ Укажите сумму ставки.")
+        conn.close()
+        return
 
     if amount_str in ["вб", "все", "all"]:
         amount = bal
@@ -1013,7 +1058,7 @@ async def game_basketball(message: Message):
         amount = parse_sum(amount_str)
 
     if not amount or amount <= 0:
-        await message.answer("❌ Укажите корректную сумму ставки.")
+        await message.answer("❌ Неправильная сумма ставки.")
         conn.close()
         return
 
