@@ -1752,10 +1752,22 @@ async def activate_promo_code(message: Message):
     await message.answer(f"🎉 Промокод {code} успешно активирован!\n💰 Получено: +{reward:,} ¢\n💼 Баланс: {new_bal:,} ¢".replace(",", " "), parse_mode="MARKDOWN")
 
 
-# --- ЗАПУСК БОТА ---
+async def handle(request):
+    return web.Response(text="Бот работает 24/7! 🚀")
+
+async def web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Веб-сервер запущен на порту {port}")
+
 async def main():
     init_db()
-    print("Бот запущен и готов к работе!")
+    await web_server()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
