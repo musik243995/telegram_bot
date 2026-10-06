@@ -379,7 +379,7 @@ def format_profile(user_data):
         f"👥 Приглашено друзей: {ref_count} шт."
     ).replace(",", " ")
 
-@router.message(F.text.casefold().in_(["профиль", "я", "👤 профиль"]))
+@router.message(F.text.casefold().in_(["👤 Профиль", "я", "👤 профиль"]))
 async def msg_profile(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Профиль")
@@ -438,7 +438,7 @@ async def msg_check_profile(message: Message):
     text = format_profile((target_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat))
     await smart_answer(message, text)
 
-@router.message(F.text.casefold().in_((("топ", "топ игроков", "🏆 топ"))))
+@router.message(F.text.casefold().in_((("🏆 Топ", "топ", "топ игроков", "🏆 топ"))))
 async def text_top(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Топ")
@@ -469,7 +469,7 @@ async def text_top(message: Message):
 
 
 # --- РАБОТА И МГНОВЕННОЕ ОБНОВЛЕНИЕ РЕСУРСОВ ---
-@router.message(F.text.casefold().in_(["работа", "ферма", "болото", "👷 работа"]))
+@router.message(F.text.casefold().in_(["👷 Работа", "работа", "ферма", "болото", "👷 работа"]))
 async def text_work(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Работа")
@@ -638,7 +638,7 @@ COMPANY_LEVELS = {
     5: {"name": "Международный холдинг", "cost": 2_500_000_000, "income": 125_000_000, "next_cost": 0, "next_income": 0}
 }
 
-@router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
+@router.message(F.text.casefold().in_(["🏢 компания по флипингу 💸," "компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
 async def text_company_menu(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Компания по флипингу")
@@ -805,7 +805,7 @@ async def callback_upgrade_company(callback: CallbackQuery):
 
 
 # --- КАЗИНО И ИГРЫ ---
-@router.message(F.text.casefold().in_(["казино", "🎰 казино"]))
+@router.message(F.text.casefold().in_(["🎰 Казино", "казино", "🎰 Казино"]))
 async def text_casino(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Казино")
@@ -1253,7 +1253,7 @@ async def game_basketball(message: Message):
 
 
 # --- БАНК И ПЕРЕВОДЫ ---
-@router.message(F.text.casefold().in_(["банк", "баланс", "🏦 банк"]))
+@router.message(F.text.casefold().in_(["🏦 Банк", "баланс", "🏦 банк"]))
 async def text_bank(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Банк")
@@ -1388,7 +1388,7 @@ async def transfer_money(message: Message):
 
     await message.answer(f"✅ Успешно переведено {formatted_amount} ¢ пользователю {target_display_name}.")
 # --- ФЛИПИНГ И КВАРТИРЫ ---
-@router.message(F.text.casefold().in_(["флипинг", "💸 флипинг"]))
+@router.message(F.text.casefold().in_(["💸 Флипинг", "флипинг", "💸 флипинг"]))
 async def text_flipping(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Флипинг")
@@ -1492,7 +1492,7 @@ async def buy_apartment(callback: CallbackQuery):
         pass
     await callback.answer("🏠 Квартира успешно куплена!", show_alert=True)
 
-@router.message(F.text.casefold().in_(["мои квартиры", "квартиры", "🏠 квартиры"]))
+@router.message(F.text.casefold().in_(["🏠 квартиры", "мои квартиры", "квартиры", "🏠 квартиры"]))
 async def text_my_apartments(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Квартиры")
@@ -1561,7 +1561,7 @@ async def sell_apartment(callback: CallbackQuery):
 
 
 # --- БОНУС И РЕФЕРАЛЫ ---
-@router.message(F.text.casefold().in_(["бонус", "🎁 бонус"]))
+@router.message(F.text.casefold().in_(["🎁 Бонус", "бонус", "🎁 бонус"]))
 async def text_bonus(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Бонус")
@@ -1590,7 +1590,7 @@ async def text_bonus(message: Message):
     conn.close()
     await message.answer("🎉 Вы успешно забрали ежедневный бонус: +50 000 ¢!")
     
-@router.message(F.text.casefold().in_(["реф", "рефералы", "реферал", "👥 рефералы"]))
+@router.message(F.text.casefold().in_(["👥 Рефералы", "реф", "рефералы", "реферал", "👥 рефералы"]))
 async def text_referral(message: Message):
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Рефералы")
@@ -1621,7 +1621,7 @@ async def text_referral(message: Message):
 
 
 # --- МЕНЮ КРЕАТОРОВ (НОВАЯ КОМАНДА И КНОПКИ ЗП / ПРОМО) ---
-@router.message(F.text.casefold().in_(["креатор", "🎬 креатор"]))
+@router.message(F.text.casefold().in_(["🎬 Креатор" "креатор", "🎬 креатор"]))
 async def text_creator_command(message: Message):
     user_id = message.from_user.id
     if not await is_creator(user_id):
