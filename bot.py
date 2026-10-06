@@ -18,6 +18,16 @@ router = Router()
 dp = Dispatcher()
 dp.include_router(router)
 
+from aiogram.fsm.state import State, StatesGroup
+
+# Обязательно объявляем класс AdminStates вверху файла
+class AdminStates(StatesGroup):
+    waiting_for_broadcast = State()
+    waiting_for_user_id_to_ban = State()
+    waiting_for_balance_change = State()
+    waiting_for_creator_action = State()  # Для выдачи/забора креатора через FSM (если нужно)
+    waiting_for_reset = State()          # Для обнуления через FSM (если нужно)
+
 # --- АНТИСПАМ ФИЛЬТРЫ ---
 original_send_message = bot.send_message
 original_send_photo = bot.send_photo
@@ -1771,27 +1781,6 @@ async def activate_promo_code(message: Message):
 
     await message.answer(f"🎉 Промокод {code} успешно активирован!\n💰 Получено: +{reward:,} ¢\n💼 Баланс: {new_bal:,} ¢".replace(",", " "), parse_mode="MARKDOWN")
     
-
-# Состояния для FSM (машин состояний), например, для рассылки или выдачи баланса
-class AdminStates(StatesGroup):
-    waiting_for_broadcast = State()
-    waiting_for_user_id_to_ban = State()
-    waiting_for_balance_change = State()
-
-
-# ================= КНОПКИ АДМИНКИ =================
-def get_admin_keyboard():
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-            [InlineKeyboardButton(text="📢 Сделать рассылку", callback_data="admin_broadcast")],
-            [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
-            [InlineKeyboardButton(text="🚫 Забанить / Разбанить", callback_data="admin_ban_menu")],
-        ]
-    )
-    return keyboard
-
-
 # ================= ОБРАБОТЧИКИ КОМАНД =================
 
 # Команда для вызова админ-панели (можно написать "админ" или "/admin")
@@ -1802,7 +1791,12 @@ async def cmd_admin_panel(message: Message):
     
     await message.answer(
         "🛠 Панель администратора:\n\n"
-        "Выберите нужное действие с помощью кнопок ниже:",
+        "Выберите нужное действие с помощью кнопок ниже или используйте команды:\n"
+        "• выдавать креатора @юз (или ID)\n"
+        "• забрать креатора @юз (или ID)\n"
+        "• обнулить @юз (или ID)\n"
+        "• бан @юз (или ID)\n"
+        "• разбан @юз (или ID)",
         reply_markup=get_admin_keyboard(),
         parse_mode="Markdown"
     )
@@ -1814,7 +1808,6 @@ async def admin_stats_callback(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         return await callback.answer("У вас нет прав!", show_alert=True)
     
-    # Здесь можешь подключить подсчет пользователей из своей базы данных (например, SQLite)
     total_users = 150  # Пример значения
     
     await callback.message.edit_text(
@@ -1870,8 +1863,8 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
     text_to_send = message.text
     await state.clear()
     
-    # Здесь пишется логика отправки по списку ID из твоей базы данных (например, цикл for user in users...)
     await message.answer("✅ Рассылка успешно завершена! (Пример)")
+
 
 # Функция для перевода сокращений (1к, 1кк, 1ккк...) в числа
 def parse_amount(text: str) -> int:
@@ -1902,7 +1895,6 @@ def parse_amount(text: str) -> int:
 async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
         return await callback.answer("У вас нет прав!", show_alert=True)
-    
     await callback.message.answer(
         "💰 Введите цель и сумму (например: @username 5кк или 123456789 1ккк):\n\n"
         "Поддерживаемые суффиксы:\n"
@@ -1936,33 +1928,30 @@ async def admin_balance_process(message: Message, state: FSMContext):
         target_raw = parts[0].strip()
         amount_raw = parts[1].strip()
         
-        # Переводим сумму из строки (с учетом к, кк...) в число
         amount = parse_amount(amount_raw)
         
-        # Подключаемся к базе данных SQLite
         import sqlite3
-        conn = sqlite3.connect("game.db") # Укажи название своего файла бд, если оно отличается
+        conn = sqlite3.connect("game.db")
         cursor = conn.cursor()
         
         target_user_id = None
-        
-        # Проверяем, ввели ID или юзернейм с @
         if target_raw.startswith("@"):
-            username = target_raw[1:] # Убираем символ @
+            username = target_raw[1:]
             cursor.execute("SELECT user_id FROM users WHERE username = ?", (username,))
             res = cursor.fetchone()
             if res:
                 target_user_id = res[0]
         else:
-            # Если ввели просто цифры (ID)
-            target_user_id = int(target_raw)
+            try:
+                target_user_id = int(target_raw)
+            except ValueError:
+                pass
             
         if not target_user_id:
             conn.close()
             await message.answer(f"❌ Пользователь {target_raw} не найден в базе данных!")
             return
             
-        # Обновляем баланс в базе данных (замени 'users', 'balance' и 'user_id' на свои названия столбцов если они другие)
         cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_user_id))
         conn.commit()
         conn.close()
@@ -1977,7 +1966,7 @@ async def admin_balance_process(message: Message, state: FSMContext):
 # Вспомогательная функция поиска user_id по ID или @username
 def find_user_id(target_raw: str):
     import sqlite3
-    conn = sqlite3.connect("game.db") # Укaжи имя своей базы данных
+    conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
     
     user_id = None
@@ -2021,18 +2010,15 @@ async def admin_ban_user(message: Message):
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
     
-    # Меняем статус в бд (предполагаем, что столбец называется is_banned)
     cursor.execute("UPDATE users SET is_banned = 1 WHERE user_id = ?", (target_user_id,))
     conn.commit()
     conn.close()
     
     await message.answer(f"🚫 Пользователь {target_raw} (ID: {target_user_id}) успешно забанен!")
-
-
 # Команда разбана: разбан @юз или разбан ID
 @router.message(F.text.lower().startswith("разбан "))
 async def admin_unban_user(message: Message):
-    if message.from_user.id not in ADMIN_IDs:
+    if message.from_user.id not in ADMIN_IDS:
         return
         
     parts = message.text.split(maxsplit=1)
@@ -2051,12 +2037,109 @@ async def admin_unban_user(message: Message):
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
     
-    # Снимаем бан в бд
     cursor.execute("UPDATE users SET is_banned = 0 WHERE user_id = ?", (target_user_id,))
     conn.commit()
     conn.close()
     
     await message.answer(f"✅ Пользователь {target_raw} (ID: {target_user_id}) успешно разбанен!")
+
+
+# ================= НОВЫЕ КОМАНДЫ (КРИАТОРЫ И ОБНУЛЕНИЕ) =================
+
+# Выдать креатора: выдавать креатора @юз (или ID)
+@router.message(F.text.casefold().regexp(r"^выдавать\s+креатора\s+"))
+async def admin_give_creator(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+        
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        await message.answer("❌ Неверный формат! Пример: выдавать креатора @username или выдавать креатора 123456789")
+        return
+        
+    target_raw = parts[2].strip()
+    target_user_id = find_user_id(target_raw)
+    
+    if not target_user_id:
+        await message.answer(f"❌ Пользователь {target_raw} не найден в базе данных!")
+        return
+        
+    import sqlite3
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET is_creator = 1 WHERE user_id = ?", (target_user_id,))
+    conn.commit()
+    conn.close()
+    
+    await message.answer(f"🎬 Пользователь {target_raw} (ID: {target_user_id}) успешно назначен креатором!")
+
+
+# Забрать креатора: забрать креатора @юз (или ID)
+@router.message(F.text.casefold().regexp(r"^забрать\s+креатора\s+"))
+async def admin_take_creator(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+        
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        await message.answer("❌ Неверный формат! Пример: забрать креатора @username или забрать креатора 123456789")
+        return
+        
+    target_raw = parts[2].strip()
+    target_user_id = find_user_id(target_raw)
+    
+    if not target_user_id:
+        await message.answer(f"❌ Пользователь {target_raw} не найден в базе данных!")
+        return
+        
+    import sqlite3
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET is_creator = 0 WHERE user_id = ?", (target_user_id,))
+    conn.commit()
+    conn.close()
+    
+    await message.answer(f"❌ У пользователя {target_raw} (ID: {target_user_id}) забран статус креатора.")
+
+
+# Обнулить игрока: обнулить @юз (или ID)
+@router.message(F.text.casefold().startswith("обнулить "))
+async def admin_reset_user(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+        
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("❌ Укажите пользователя! Пример: обнулить @username или обнулить 123456789")
+        return
+        
+    target_raw = parts[1].strip()
+    target_user_id = find_user_id(target_raw)
+    
+    if not target_user_id:
+        await message.answer(f"❌ Пользователь {target_raw} не найден в базе данных!")
+        return
+        
+    import sqlite3
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    
+    # Сбрасываем основные параметры игрока до стартовых значений
+    # (можешь скорректировать столбцы под структуру своей базы данных)
+    cursor.execute(
+        "UPDATE users SET balance = 10000, bank_balance = 0, invested = 0, bottles = 0, metal = 0, ref_count = 0 WHERE user_id = ?", 
+        (target_user_id,)
+    )
+    # Если у тебя есть таблица с недвижимостью/квартирами пользователя, удаляем её тоже
+    try:
+        cursor.execute("DELETE FROM user_apartments WHERE user_id = ?", (target_user_id,))
+    except sqlite3.OperationalError:
+        pass  # Если таблица называется иначе или её нет, просто пропускаем
+        
+    conn.commit()
+    conn.close()
+    
+    await message.answer(f"✅ Игрок {target_raw} (ID: {target_user_id}) полностью обнулен.")
 
 
 # Обновленная кнопка «Забанить / Разбанить» в меню админки
@@ -2066,16 +2149,42 @@ async def admin_ban_menu_callback(callback: CallbackQuery):
         return await callback.answer("У вас нет прав!", show_alert=True)
     
     await callback.message.edit_text(
-        "🚫 Управление блокировками:\n\n"
-        "Вы можете банить и разбанять пользователей прямо в чате с помощью команд:\n\n"
+        "🚫 Управление блокировками и правами:\n\n"
+        "Вы можете использовать следующие текстовые команды прямо в чате:\n\n"
         "• бан @username (или ID)\n"
-        "• разбан @username (или ID)",
+        "• разбан @username (или ID)\n"
+        "• выдавать креатора @username (или ID)\n"
+        "• забрать креатора @username (или ID)\n"
+        "• обнулить @username (или ID)",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]]
         ),
         parse_mode="Markdown"
     )
     await callback.answer()
+# Состояния для FSM (машин состояний), например, для рассылки или выдачи баланса
+class AdminStates(StatesGroup):
+    waiting_for_broadcast = State()
+    waiting_for_user_id_to_ban = State()
+    waiting_for_balance_change = State()
+    waiting_for_creator_action = State()  # Если понадобится для FSM
+    waiting_for_reset = State()          # Если понадобится для FSM
+
+
+# КНОПКИ АДМИНКИ
+def get_admin_keyboard():
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="📢 Сделать рассылку", callback_data="admin_broadcast")],
+            [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
+            [InlineKeyboardButton(text="🚫 Забанить / Разбанить", callback_data="admin_ban_menu")],
+            [InlineKeyboardButton(text="🎬 Управление креаторами", callback_data="admin_creator_menu")],
+            [InlineKeyboardButton(text="🔄 Обнулить игрока", callback_data="admin_reset_menu")]
+        ]
+    )
+    return keyboard
+
     
 async def handle(request):
     return web.Response(text="Бот работает 24/7! 🚀")
