@@ -1856,6 +1856,30 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
     # Здесь пишется логика отправки по списку ID из твоей базы данных (например, цикл for user in users...)
     await message.answer("✅ Рассылка успешно завершена! (Пример)")
 
+# Функция для перевода сокращений (1к, 1кк, 1ккк...) в числа
+def parse_amount(text: str) -> int:
+    text = text.lower().strip()
+    multiplier = 1
+    
+    if text.endswith('ккккк'):
+        multiplier = 1_000_000_000_000_000
+        text = text[:-5]
+    elif text.endswith('кккк'):
+        multiplier = 1_000_000_000_000
+        text = text[:-4]
+    elif text.endswith('ккк'):
+        multiplier = 1_000_000_000
+        text = text[:-3]
+    elif text.endswith('кк'):
+        multiplier = 1_000_000
+        text = text[:-2]
+    elif text.endswith('к'):
+        multiplier = 1_000
+        text = text[:-1]
+        
+    return int(float(text) * multiplier)
+
+
 # Кнопка: Изменить баланс
 @router.callback_query(F.data == "admin_balance")
 async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
@@ -1863,11 +1887,18 @@ async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
         return await callback.answer("У вас нет прав!", show_alert=True)
     
     await callback.message.answer(
-        "💰 Введите ID пользователя и сумму через пробел (например: 123456789 500):\n"
-        "(Или напишите /cancel для отмены)"
+        "💰 Введите цель и сумму (например: @username 5кк или 123456789 1ккк):\n\n"
+        "Поддерживаемые суффиксы:\n"
+        "• к = 1 000\n"
+        "• кк = 1 000 000\n"
+        "• ккк = 1 000 000 000\n"
+        "• кккк = 1 000 000 000 000\n"
+        "• ккккк = 1 000 000 000 000 000\n\n"
+        "(Для отмены напишите /cancel)"
     )
     await state.set_state(AdminStates.waiting_for_balance_change)
     await callback.answer()
+
 
 @router.message(AdminStates.waiting_for_balance_change)
 async def admin_balance_process(message: Message, state: FSMContext):
@@ -1880,37 +1911,155 @@ async def admin_balance_process(message: Message, state: FSMContext):
         return
 
     try:
-        parts = message.text.split()
-        target_user_id = int(parts[0])
-        amount = int(parts[1])
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            await message.answer("❌ Ошибка! Неверный формат. Пример: @username 5кк")
+            return
+            
+        target_raw = parts[0].strip()
+        amount_raw = parts[1].strip()
         
-        # Здесь пишется код изменения баланса в твоей базе данных (sqlite3)
-        # Пример:
-        # cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_user_id))
-        # conn.commit()
+        # Переводим сумму из строки (с учетом к, кк...) в число
+        amount = parse_amount(amount_raw)
+        
+        # Подключаемся к базе данных SQLite
+        import sqlite3
+        conn = sqlite3.connect("game.db") # Укажи название своего файла бд, если оно отличается
+        cursor = conn.cursor()
+        
+        target_user_id = None
+        
+        # Проверяем, ввели ID или юзернейм с @
+        if target_raw.startswith("@"):
+            username = target_raw[1:] # Убираем символ @
+            cursor.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+            res = cursor.fetchone()
+            if res:
+                target_user_id = res[0]
+        else:
+            # Если ввели просто цифры (ID)
+            target_user_id = int(target_raw)
+            
+        if not target_user_id:
+            conn.close()
+            await message.answer(f"❌ Пользователь {target_raw} не найден в базе данных!")
+            return
+            
+        # Обновляем баланс в базе данных (замени 'users', 'balance' и 'user_id' на свои названия столбцов если они другие)
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_user_id))
+        conn.commit()
+        conn.close()
         
         await state.clear()
-        await message.answer(f"✅ Баланс пользователя {target_user_id} успешно изменен на {amount}!")
+        await message.answer(f"✅ Баланс пользователя {target_raw} успешно изменен на {amount_raw} ({amount:,} монет)!")
+        
     except Exception as e:
-        await message.answer("❌ Ошибка! Убедитесь, что пишите в формате: ID сумма (например: 123456789 500)")
+        await message.answer(f"❌ Ошибка обработки: пропишите в формате @юз сумма (например: @durov 1кк)")
 
 
-# Кнопка: Меню банов/разбанов
+# Вспомогательная функция поиска user_id по ID или @username
+def find_user_id(target_raw: str):
+    import sqlite3
+    conn = sqlite3.connect("game.db") # Укaжи имя своей базы данных
+    cursor = conn.cursor()
+    
+    user_id = None
+    target_raw = target_raw.strip()
+    
+    if target_raw.startswith("@"):
+        username = target_raw[1:]
+        cursor.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+        res = cursor.fetchone()
+        if res:
+            user_id = res[0]
+    else:
+        try:
+            user_id = int(target_raw)
+        except ValueError:
+            pass
+            
+    conn.close()
+    return user_id
+
+
+# Команда бана: бан @юз или бан ID
+@router.message(F.text.lower().startswith("бан "))
+async def admin_ban_user(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+        
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("❌ Укажите пользователя! Пример: бан @username или бан 123456789")
+        return
+        
+    target_raw = parts[1].strip()
+    target_user_id = find_user_id(target_raw)
+    
+    if not target_user_id:
+        await message.answer(f"❌ Пользователь {target_raw} не найден в базе данных!")
+        return
+        
+    import sqlite3
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    
+    # Меняем статус в бд (предполагаем, что столбец называется is_banned)
+    cursor.execute("UPDATE users SET is_banned = 1 WHERE user_id = ?", (target_user_id,))
+    conn.commit()
+    conn.close()
+    
+    await message.answer(f"🚫 Пользователь {target_raw} (ID: {target_user_id}) успешно забанен!")
+
+
+# Команда разбана: разбан @юз или разбан ID
+@router.message(F.text.lower().startswith("разбан "))
+async def admin_unban_user(message: Message):
+    if message.from_user.id not in ADMIN_IDs:
+        return
+        
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("❌ Укажите пользователя! Пример: разбан @username или разбан 123456789")
+        return
+        
+    target_raw = parts[1].strip()
+    target_user_id = find_user_id(target_raw)
+    
+    if not target_user_id:
+        await message.answer(f"❌ Пользователь {target_raw} не найден в базе данных!")
+        return
+        
+    import sqlite3
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    
+    # Снимаем бан в бд
+    cursor.execute("UPDATE users SET is_banned = 0 WHERE user_id = ?", (target_user_id,))
+    conn.commit()
+    conn.close()
+    
+    await message.answer(f"✅ Пользователь {target_raw} (ID: {target_user_id}) успешно разбанен!")
+
+
+# Обновленная кнопка «Забанить / Разбанить» в меню админки
 @router.callback_query(F.data == "admin_ban_menu")
-async def admin_ban_menu(callback: CallbackQuery):
+async def admin_ban_menu_callback(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         return await callback.answer("У вас нет прав!", show_alert=True)
     
     await callback.message.edit_text(
         "🚫 Управление блокировками:\n\n"
-        "Отправьте ID пользователя, которого нужно забанить или разбанить (в разработке).",
+        "Вы можете банить и разбанять пользователей прямо в чате с помощью команд:\n\n"
+        "• бан @username (или ID)\n"
+        "• разбан @username (или ID)",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]]
         ),
         parse_mode="Markdown"
     )
-    await callback.answer()    
-
+    await callback.answer()
+    
 async def handle(request):
     return web.Response(text="Бот работает 24/7! 🚀")
 
