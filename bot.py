@@ -625,7 +625,7 @@ async def sell_resources(callback: CallbackQuery):
     await callback.answer(f"💰 Продано!\n🍾 Бутылок: {b} | ⚙️ Металла: {m}\nПолучено: {payout:,} ¢".replace(",", " "), show_alert=True)
 
 
-# --- СИСТЕМА КОМПАНИЙ ПО ФЛИПИНГУ ---
+# --- НОВАЯ СИСТЕМА КОМПАНИЙ ПО ФЛИПИНГУ ---
 COMPANY_LEVELS = {
     1: {"name": "Стартовое агентство", "cost": 100_000_000, "income": 2_500_000, "next_cost": 250_000_000, "next_income": 10_000_000},
     2: {"name": "Районная сеть филиалов", "cost": 250_000_000, "income": 10_000_000, "next_cost": 500_000_000, "next_income": 25_000_000},
@@ -634,16 +634,12 @@ COMPANY_LEVELS = {
     5: {"name": "Международный холдинг", "cost": 2_500_000_000, "income": 125_000_000, "next_cost": 0, "next_income": 0}
 }
 
-@router.message(F.text.casefold().in_(["🏢 компания по флипингу 💸", "компания", "компания по флипингу"]))
-async def text_company_menu(message: Message):
-    if not await check_ban_and_register(message): return
-    log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Компания по флипингу")
-    user_id = message.from_user.id
-    
+def get_company_data_and_keyboard(user_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
     comp = cursor.fetchone()
+    conn.close()
     
     if not comp:
         text = (
@@ -655,6 +651,7 @@ async def text_company_menu(message: Message):
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🛒 Купить компанию (100 млн)", callback_data="buy_company")]
         ])
+        return text, keyboard
     else:
         level, last_claim, earned_bal = comp
         now = time.time()
@@ -688,8 +685,13 @@ async def text_company_menu(message: Message):
         if upgrade_btn:
             kb_rows.append([upgrade_btn])
         keyboard = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+        return text, keyboard
 
-    conn.close()
+@router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
+async def text_company_menu(message: Message):
+    if not await check_ban_and_register(message): return
+    log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Компания по флипингу")
+    text, keyboard = get_company_data_and_keyboard(message.from_user.id)
     await message.answer(text, reply_markup=keyboard, parse_mode="MARKDOWN")
 
 @router.callback_query(F.data == "buy_company")
@@ -705,14 +707,19 @@ async def callback_buy_company(callback: CallbackQuery):
         await callback.answer("❌ У вас недостаточно наличных для покупки компании (нужно 100 млн ¢)!", show_alert=True)
         conn.close()
         return
-
     cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (cost, user_id))
     cursor.execute("INSERT OR REPLACE INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, 1, ?, 0)", (user_id, time.time()))
     conn.commit()
     conn.close()
     
     await callback.answer("🎉 Вы успешно купили компанию по флипингу 1 уровня!", show_alert=True)
-    await text_company_menu(callback.message)
+    
+    # Плавное обновление интерфейса вместо отправки нового сообщения
+    text, keyboard = get_company_data_and_keyboard(user_id)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+    except:
+        pass
 
 @router.callback_query(F.data == "claim_company_profit")
 async def callback_claim_company(callback: CallbackQuery):
@@ -748,7 +755,12 @@ async def callback_claim_company(callback: CallbackQuery):
     conn.close()
     
     await callback.answer(f"💶 Вы успешно забрали прибыль: +{total_to_claim:,} ¢!".replace(",", " "), show_alert=True)
-    await text_company_menu(callback.message)
+    
+    text, keyboard = get_company_data_and_keyword(user_id) if 'get_company_data_and_keyword' else get_company_data_and_keyboard(user_id)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+    except:
+        pass
 
 @router.callback_query(F.data == "upgrade_company")
 async def callback_upgrade_company(callback: CallbackQuery):
@@ -781,6 +793,7 @@ async def callback_upgrade_company(callback: CallbackQuery):
 
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     bal = cursor.fetchone()[0]
+
     if bal < upgrade_cost:
         await callback.answer(f"❌ Недостаточно средств для прокачки! Нужно {upgrade_cost:,} ¢".replace(",", " "), show_alert=True)
         conn.close()
@@ -791,9 +804,13 @@ async def callback_upgrade_company(callback: CallbackQuery):
                    (next_level, now, total_earned, user_id))
     conn.commit()
     conn.close()
-
     await callback.answer(f"📈 Компания успешно прокачана до {next_level} уровня!", show_alert=True)
-    await text_company_menu(callback.message)
+    
+    text, keyboard = get_company_data_and_keyboard(user_id)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+    except:
+        pass
 
 
 # --- КАЗИНО И ИГРЫ ---
