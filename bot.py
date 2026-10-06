@@ -838,8 +838,9 @@ async def casino_roulette(message: Message):
     raw_amount_str = args[-1].lower()
     log_user_action(user_id, message.from_user.username or message.from_user.first_name, "РУЛЕТКА", f"Ставка: {target_str} на сумму {raw_amount_str}")
 
+    # Разрешенные варианты ставок (убран диапазон 0-36, добавлены 1-12, 13-24, 25-36)
     allowed_ranges = ["1-12", "13-24", "25-36"]
-    valid_targets = ["кра", "красное", "чер", "черное", "чет", "нечет", "от 0-36", "0-36"] + allowed_ranges
+    valid_targets = ["кра", "красное", "чер", "черное", "чет", "нечет"] + allowed_ranges
     
     is_valid_target = False
     if target_str in valid_targets:
@@ -851,8 +852,9 @@ async def casino_roulette(message: Message):
                 is_valid_target = True
         except ValueError:
             pass
+            
     if not is_valid_target:
-        await message.answer("❌ Неправильная ставка в рулетке!")
+        await message.answer("❌ Неправильная ставка! Доступно: 1-12, 13-24, 25-36, кра, чер, чет, нечет или число от 0 до 36.")
         return
 
     conn = get_db()
@@ -886,6 +888,7 @@ async def casino_roulette(message: Message):
 
     won = False
     payout = 0
+
     if target_str in ["кра", "красное"]:
         if rolled_num != 0 and rolled_num in RED_NUMBERS:
             won = True
@@ -902,10 +905,6 @@ async def casino_roulette(message: Message):
         if rolled_num != 0 and rolled_num % 2 != 0:
             won = True
             payout = amount * 2
-    elif target_str in ["от 0-36", "0-36"]:
-        if 0 <= rolled_num <= 36:
-            won = True
-            payout = amount * 1.5
     elif target_str == "1-12":
         if 1 <= rolled_num <= 12:
             won = True
