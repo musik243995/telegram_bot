@@ -2046,6 +2046,61 @@ async def admin_unban_user(message: Message):
 
 # ================= НОВЫЕ КОМАНДЫ (КРИАТОРЫ И ОБНУЛЕНИЕ) =================
 
+# Кнопка: Меню управления креаторами
+@router.callback_query(F.data == "admin_creator_menu")
+async def admin_creator_menu_callback(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        return await callback.answer("У вас нет прав!", show_alert=True)
+    
+    await callback.message.edit_text(
+        "🎬 Управление креаторами:\n\n"
+        "Используйте команды в чате:\n"
+        "• выдавать креатора @username (или ID)\n"
+        "• забрать креатора @username (или ID)",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]]
+        ),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# Кнопка: Меню обнуления
+@router.callback_query(F.data == "admin_reset_menu")
+async def admin_reset_menu_callback(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        return await callback.answer("У вас нет прав!", show_alert=True)
+    
+    await callback.message.edit_text(
+        "🔄 Обнуление игрока:\n\n"
+        "Используйте команду в чате:\n"
+        "• обнулить @username (или ID)",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]]
+        ),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# Кнопка: Меню банов (убедись, что этот обработчик тоже есть)
+@router.callback_query(F.data == "admin_ban_menu")
+async def admin_ban_menu_callback(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        return await callback.answer("У вас нет прав!", show_alert=True)
+    
+    await callback.message.edit_text(
+        "🚫 Управление блокировками:\n\n"
+        "Используйте команды в чате:\n"
+        "• бан @username (или ID)\n"
+        "• разбан @username (или ID)",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]]
+        ),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
 # Выдать креатора: выдавать креатора @юз (или ID)
 @router.message(F.text.casefold().regexp(r"^выдавать\s+креатора\s+"))
 async def admin_give_creator(message: Message):
