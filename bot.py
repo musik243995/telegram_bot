@@ -7,6 +7,9 @@ from aiogram import F, Bot, Dispatcher, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile
 from aiogram.filters import Command, CommandObject
 from aiohttp import web
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 API_TOKEN = "8885671207:AAEvMCPSWoiJZR8U_TXQvwgxJzK2sn28kKU"  # Твой токен
 
@@ -1751,17 +1754,6 @@ async def activate_promo_code(message: Message):
 
     await message.answer(f"🎉 Промокод {code} успешно активирован!\n💰 Получено: +{reward:,} ¢\n💼 Баланс: {new_bal:,} ¢".replace(",", " "), parse_mode="MARKDOWN")
     
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-
-router = Router()
-
-# ================= НАСТРОЙКИ =================
-# Впиши сюда свой Telegram ID (или несколько ID через запятую)
-ADMIN_IDS = [1222239198, 8390540110] 
-
 
 # Состояния для FSM (машин состояний), например, для рассылки или выдачи баланса
 class AdminStates(StatesGroup):
