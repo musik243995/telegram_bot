@@ -1856,6 +1856,61 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
     # Здесь пишется логика отправки по списку ID из твоей базы данных (например, цикл for user in users...)
     await message.answer("✅ Рассылка успешно завершена! (Пример)")
 
+# Кнопка: Изменить баланс
+@router.callback_query(F.data == "admin_balance")
+async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        return await callback.answer("У вас нет прав!", show_alert=True)
+    
+    await callback.message.answer(
+        "💰 Введите ID пользователя и сумму через пробел (например: 123456789 500):\n"
+        "(Или напишите /cancel для отмены)"
+    )
+    await state.set_state(AdminStates.waiting_for_balance_change)
+    await callback.answer()
+
+@router.message(AdminStates.waiting_for_balance_change)
+async def admin_balance_process(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Действие отменено.")
+        return
+
+    try:
+        parts = message.text.split()
+        target_user_id = int(parts[0])
+        amount = int(parts[1])
+        
+        # Здесь пишется код изменения баланса в твоей базе данных (sqlite3)
+        # Пример:
+        # cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_user_id))
+        # conn.commit()
+        
+        await state.clear()
+        await message.answer(f"✅ Баланс пользователя {target_user_id} успешно изменен на {amount}!")
+    except Exception as e:
+        await message.answer("❌ Ошибка! Убедитесь, что пишите в формате: ID сумма (например: 123456789 500)")
+
+
+# Кнопка: Меню банов/разбанов
+@router.callback_query(F.data == "admin_ban_menu")
+async def admin_ban_menu(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        return await callback.answer("У вас нет прав!", show_alert=True)
+    
+    await callback.message.edit_text(
+        "🚫 Управление блокировками:\n\n"
+        "Отправьте ID пользователя, которого нужно забанить или разбанить (в разработке).",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]]
+        ),
+        parse_mode="Markdown"
+    )
+    await callback.answer()    
+
 async def handle(request):
     return web.Response(text="Бот работает 24/7! 🚀")
 
