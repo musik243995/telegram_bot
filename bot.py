@@ -6,6 +6,7 @@ import asyncio
 from aiogram import F, Bot, Dispatcher, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile
 from aiogram.filters import Command, CommandObject
+from aiohttp import web
 
 API_TOKEN = "8885671207:AAEvMCPSWoiJZR8U_TXQvwgxJzK2sn28kKU"  # Твой токен
 
