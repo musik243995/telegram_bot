@@ -1750,7 +1750,119 @@ async def activate_promo_code(message: Message):
     conn.close()
 
     await message.answer(f"🎉 Промокод {code} успешно активирован!\n💰 Получено: +{reward:,} ¢\n💼 Баланс: {new_bal:,} ¢".replace(",", " "), parse_mode="MARKDOWN")
+    
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
+router = Router()
+
+# ================= НАСТРОЙКИ =================
+# Впиши сюда свой Telegram ID (или несколько ID через запятую)
+ADMIN_IDS = [1222239198, 8390540110] 
+
+
+# Состояния для FSM (машин состояний), например, для рассылки или выдачи баланса
+class AdminStates(StatesGroup):
+    waiting_for_broadcast = State()
+    waiting_for_user_id_to_ban = State()
+    waiting_for_balance_change = State()
+
+
+# ================= КНОПКИ АДМИНКИ =================
+def get_admin_keyboard():
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="📢 Сделать рассылку", callback_data="admin_broadcast")],
+            [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
+            [InlineKeyboardButton(text="🚫 Забанить / Разбанить", callback_data="admin_ban_menu")],
+        ]
+    )
+    return keyboard
+
+
+# ================= ОБРАБОТЧИКИ КОМАНД =================
+
+# Команда для вызова админ-панели (можно написать "админ" или "/admin")
+@router.message(F.text.casefold().in_(["админ", "/admin"]))
+async def cmd_admin_panel(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return  # Игнорируем обычных пользователей
+    
+    await message.answer(
+        "🛠 Панель администратора:\n\n"
+        "Выберите нужное действие с помощью кнопок ниже:",
+        reply_markup=get_admin_keyboard(),
+        parse_mode="Markdown"
+    )
+
+
+# Кнопка: Статистика
+@router.callback_query(F.data == "admin_stats")
+async def admin_stats_callback(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        return await callback.answer("У вас нет прав!", show_alert=True)
+    
+    # Здесь можешь подключить подсчет пользователей из своей базы данных (например, SQLite)
+    total_users = 150  # Пример значения
+    
+    await callback.message.edit_text(
+        f"📊 Статистика бота:\n\n"
+        f"👥 Всего пользователей в базе: {total_users}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]]
+        ),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# Кнопка: Назад в главное меню админки
+@router.callback_query(F.data == "admin_back")
+async def admin_back_callback(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        return
+    
+    await callback.message.edit_text(
+        "🛠 Панель администратора:\n\n"
+        "Выберите нужное действие с помощью кнопок ниже:",
+        reply_markup=get_admin_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ================= СИСТЕМА РАССЫЛКИ =================
+@router.callback_query(F.data == "admin_broadcast")
+async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        return await callback.answer("У вас нет прав!", show_alert=True)
+    
+    await callback.message.answer(
+        "📢 Введите текст для рассылки всем пользователям бота:\n"
+        "(Отмените действие, написав /cancel)"
+    )
+    await state.set_state(AdminStates.waiting_for_broadcast)
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_for_broadcast)
+async def admin_broadcast_process(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Рассылка отменена.")
+        return
+
+    text_to_send = message.text
+    await state.clear()
+    
+    # Здесь пишется логика отправки по списку ID из твоей базы данных (например, цикл for user in users...)
+    await message.answer("✅ Рассылка успешно завершена! (Пример)")
 
 async def handle(request):
     return web.Response(text="Бот работает 24/7! 🚀")
