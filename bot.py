@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKe
 from aiogram.filters import Command, CommandObject
 from aiohttp import web
 
-API_TOKEN = "8885671207:AAFiovqDHJXJ5HJ01vSdDGWLiQPYXOJHriI"  # Твой токен
+API_TOKEN = "8885671207:AAEvMCPSWoiJZR8U_TXQvwgxJzK2sn28kKU"  # Твой токен
 
 bot = Bot(token=API_TOKEN)
 router = Router()
