@@ -214,7 +214,7 @@ def update_quest_progress(user_id, quest_type, amount=1):
         elif quest_type == 2 and new_progress >= 2_000_000: reward, is_done = 3_000_000, 1
         elif quest_type == 3 and new_progress >= 1: reward, is_done = 1_000_000, 1
     elif day_num == 2:
-        if quest_type == 1 and new_progress >= 1: reward, is_done = 1_000_000, 1 # Ограбление банка
+        if quest_type == 1 and new_progress >= 1: reward, is_done = 1_000_000, 1
         elif quest_type == 2 and new_progress >= 2_000_000: reward, is_done = 3_000_000, 1
         elif quest_type == 3 and new_progress >= 1: reward, is_done = 1_000_000, 1
     elif day_num == 3:
@@ -319,17 +319,22 @@ async def text_main_menu(message: Message):
     await smart_answer(message, "🏠 Главное меню игры:")
 
 HELP_TEXT = (
-    "🎰 Казино:\n"
-    "• рул кра / чер / чет / нечет / мал / бол / ряд 1-3 / [число 0-36] [ставка]\n\n"
-    "🃏 Другие игры:\n"
+    "📖 Инструкция по игре:\n\n"
+    "🎰 Казино (пишите строго по шаблонам):\n"
+    "• рул кра [ставка] (или чер, чет, нечет, мал, бол, ряд 1-3, число 0-36)\n"
     "• покер [ставка]\n"
     "• фортуна [ставка]\n"
     "• дартс [ставка] центр (или мимо)\n"
     "• баскет [ставка]\n\n"
-    "💰 Переводы: пер @юз сумма ИЛИ пер вб\n"
-    "🥷 Нычка: нычка положить / взять [сумма]\n"
-    "📜 Квесты: выполняй ежедневные задания\n"
-    "🔫 Банда: грабь банк каждый час"
+    "💰 Переводы и Банк:\n"
+    "• пер @юз сумма (или пер вб)\n"
+    "• вложить [сумма] / снять [сумма]\n\n"
+    "🥷 Нычка:\n"
+    "• нычка положить [сумма]\n"
+    "• нычка взять [сумма]\n\n"
+    "🔫 Банда и Работа:\n"
+    "• Меню «Банда» — ограбление банка каждый час\n"
+    "• Меню «Работа» — сбор бутылок и металла"
 )
 
 @router.message(F.text.casefold().in_(["помощь", "📖 помощь"]))
@@ -365,9 +370,10 @@ async def text_nyachka_menu(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT nyachka FROM users WHERE user_id = ?", (user_id,))
-    nyachka = cursor.fetchone()[0] or 0
+    row = cursor.fetchone()
+    nyachka = row[0] if row and row[0] is not None else 0
     conn.close()
-    text = f"🥷 Секретная нычка:\n💰 В нычке: {nyachka:,} ¢ (скрыто от топа)\n\nКоманды:\n• нычка положить [сумма]\n• нычка снять [сумма]".replace(",", " ")
+    text = f"🥷 Секретная нычка:\n💰 В нычке: {nyachka:,} ¢ (скрыто от топа)\n\nКоманды:\n• нычка положить [сумма]\n• нычка взять [сумма]".replace(",", " ")
     await message.answer(text, parse_mode="MARKDOWN")
 
 @router.message(F.text.regexp(r"(?i)^нычка\s+(положить|взять|снять)\s+(.+)"))
@@ -382,7 +388,9 @@ async def nyachka_actions(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance, nyachka FROM users WHERE user_id = ?", (user_id,))
-    bal, nyach = cursor.fetchone()
+    u_row = cursor.fetchone()
+    bal, nyach = u_row[0], (u_row[1] or 0)
+    
     if action == "положить":
         if bal < amount:
             await message.answer("❌ Недостаточно наличных!")
@@ -411,9 +419,10 @@ async def text_gang_menu(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT gang_name FROM users WHERE user_id = ?", (user_id,))
-    gang = cursor.fetchone()[0]
+    row = cursor.fetchone()
+    gang = row[0] if row else None
     conn.close()
-    gang_text = f"Ваша банда: {gang}" if gang else "Вы без банда."
+    gang_text = f"Ваша банда: {gang}" if gang else "Вы не состоите в банде."
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔫 Вступить в банду", callback_data="join_gang")],
         [InlineKeyboardButton(text="🏦 Ограбить банк (КД 1ч)", callback_data="gang_rob_bank")]
@@ -427,7 +436,7 @@ async def callback_join_gang(callback: CallbackQuery):
     cursor.execute("UPDATE users SET gang_name = 'Уличные волки' WHERE user_id = ?", (callback.from_user.id,))
     conn.commit()
     conn.close()
-    await callback.answer("🔫 Вы в банде 'Уличные волки'!", show_alert=True)
+    await callback.answer("🔫 Вы вступили в банду 'Уличные волки'!", show_alert=True)
 
 @router.callback_query(F.data == "gang_rob_bank")
 async def callback_gang_rob(callback: CallbackQuery):
@@ -613,6 +622,117 @@ async def sell_resources(callback: CallbackQuery):
     except: pass
     await callback.answer(f"💰 Продано на {payout:,} ¢!".replace(",", " "), show_alert=True)
 
+# --- КОМПАНИИ ПО ФЛИПИНГУ ---
+COMPANY_LEVELS = {
+    1: {"name": "Стартовое агентство", "cost": 100_000_000, "income": 2_500_000},
+    2: {"name": "Районная сеть филиалов", "cost": 250_000_000, "income": 10_000_000},
+    3: {"name": "Корпорация недвижимости", "cost": 500_000_000, "income": 25_000_000},
+    4: {"name": "Империя застройки города", "cost": 1_000_000_000, "income": 50_000_000},
+    5: {"name": "Международный холдинг", "cost": 2_500_000_000, "income": 125_000_000}
+}
+
+def get_company_data_and_keyboard(user_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
+    comp = cursor.fetchone()
+    conn.close()
+    if not comp:
+        text = "🏢 Компания по флипингу 💸\n\nУ вас нет компании.\n💰 Стоимость: 100 000 000 ¢"
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛒 Купить компанию (100 млн)", callback_data="buy_company")]])
+        return text, kb
+    level, last_claim, earned_bal = comp
+    hours = min(24, (time.time() - last_claim) / 3600)
+    total = earned_bal + int(hours * COMPANY_LEVELS[level]["income"])
+    text = f"🏢 Компания ({COMPANY_LEVELS[level]['name']} Ур.{level}/5)\nНакоплено: {total:,} ¢".replace(",", " ")
+    kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="claim_company_profit")]]
+    if level < 5:
+        kb_rows.append([InlineKeyboardButton(text="📈 Прокачать", callback_data="upgrade_company")])
+    return text, InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
+@router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
+async def text_company_menu(message: Message):
+    if not await check_ban_and_register(message): return
+    text, keyboard = get_company_data_and_keyboard(message.from_user.id)
+    await message.answer(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+
+@router.callback_query(F.data == "buy_company")
+async def callback_buy_company(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    bal = cursor.fetchone()[0]
+    if bal < 100_000_000:
+        await callback.answer("❌ Нужно 100 млн ¢!", show_alert=True)
+        conn.close()
+        return
+    cursor.execute("UPDATE users SET balance = balance - 100000000 WHERE user_id = ?", (user_id,))
+    cursor.execute("INSERT OR REPLACE INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, 1, ?, 0)", (user_id, time.time()))
+    conn.commit()
+    conn.close()
+    await callback.answer("🎉 Компания куплена!", show_alert=True)
+    text, kb = get_company_data_and_keyboard(user_id)
+    try: await callback.message.edit_text(text, reply_markup=kb, parse_mode="MARKDOWN")
+    except: pass
+
+@router.callback_query(F.data == "claim_company_profit")
+async def callback_claim_company(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
+    comp = cursor.fetchone()
+    if not comp:
+        await callback.answer("❌ У вас нет компании.", show_alert=True)
+        conn.close()
+        return
+    level, last_claim, earned_bal = comp
+    hours = min(24, (time.time() - last_claim) / 3600)
+    total = earned_bal + int(hours * COMPANY_LEVELS[level]["income"])
+    if total <= 0:
+        await callback.answer("❌ Еще ничего не накопилось!", show_alert=True)
+        conn.close()
+        return
+    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (total, user_id))
+    cursor.execute("UPDATE user_companies SET last_claim = ?, earned_balance = 0 WHERE user_id = ?", (time.time(), user_id))
+    conn.commit()
+    conn.close()
+    await callback.answer(f"💶 Забрано: +{total:,} ¢!".replace(",", " "), show_alert=True)
+    text, kb = get_company_data_and_keyboard(user_id)
+    try: await callback.message.edit_text(text, reply_markup=kb, parse_mode="MARKDOWN")
+    except: pass
+
+@router.callback_query(F.data == "upgrade_company")
+async def callback_upgrade_company(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
+    comp = cursor.fetchone()
+    if not comp or comp[0] >= 5:
+        await callback.answer("⭐ Максимальный уровень!", show_alert=True)
+        conn.close()
+        return
+    level, last_claim, earned_bal = comp
+    next_level = level + 1
+    cost = COMPANY_LEVELS[next_level]["cost"]
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    if cursor.fetchone()[0] < cost:
+        await callback.answer(f"❌ Нужно {cost:,} ¢!".replace(",", " "), show_alert=True)
+        conn.close()
+        return
+    hours = min(24, (time.time() - last_claim) / 3600)
+    total_earned = earned_bal + int(hours * COMPANY_LEVELS[level]["income"])
+    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (cost, user_id))
+    cursor.execute("UPDATE user_companies SET level = ?, last_claim = ?, earned_balance = ? WHERE user_id = ?", (next_level, time.time(), total_earned, user_id))
+    conn.commit()
+    conn.close()
+    await callback.answer(f"📈 Прокачано до {next_level} уровня!", show_alert=True)
+    text, kb = get_company_data_and_keyboard(user_id)
+    try: await callback.message.edit_text(text, reply_markup=kb, parse_mode="MARKDOWN")
+    except: pass
+
 # --- КАЗИНО (СО СТРОГОЙ ПРОВЕРКОЙ СЛОВ) ---
 @router.message(F.text.casefold().in_(["🎰 казино", "казино"]))
 async def text_casino(message: Message):
@@ -639,8 +759,6 @@ async def casino_roulette(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
     args = message.text.split()
-    
-    # Строгий парсинг рулетки без возможности опечаток
     if len(args) < 3:
         await message.answer("❌ Ошибка формата! Пример: рул кра 10к или рул ряд 1 10к")
         return
@@ -699,7 +817,7 @@ async def casino_roulette(message: Message):
 
     net_profit = payout - amount if won else -amount
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
-    cursor.commit()
+    conn.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
@@ -732,7 +850,7 @@ async def casino_poker(message: Message):
     won = random.choice([True, False])
     net = amount if won else -amount
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
-    cursor.commit()
+    conn.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
@@ -762,7 +880,7 @@ async def casino_wheel(message: Message):
     mult = random.choice([-1.0, -0.5, 0.5, 1.0, 2.0, 5.0])
     net = int(amount * mult)
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
-    cursor.commit()
+    conn.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
@@ -800,7 +918,7 @@ async def game_darts(message: Message):
     net = (amount * mult) - amount if won else -amount
 
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
-    cursor.commit()
+    conn.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
@@ -834,7 +952,7 @@ async def game_basketball(message: Message):
     net = amount if won else -amount
 
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
-    cursor.commit()
+    conn.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
@@ -1017,7 +1135,7 @@ async def sell_apartment(callback: CallbackQuery):
     conn.close()
     await callback.answer(f"💰 Продано за {sell_price:,} ¢!".replace(",", " "), show_alert=True)
 
-# --- БОНУС И РЕФЕРАЛЫ (С КНОПКОЙ ПОДЕЛИТЬСЯ) ---
+# --- БОНУС И РЕФЕРАЛЫ ---
 @router.message(F.text.casefold().in_(["🎁 бонус", "бонус"]))
 async def text_bonus(message: Message):
     if not await check_ban_and_register(message): return
@@ -1042,7 +1160,8 @@ async def text_referral(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
-    ref_count = cursor.fetchone()[0] or 0
+    row = cursor.fetchone()
+    ref_count = row[0] if row and row[0] is not None else 0
     conn.close()
     ref_link = f"https://t.me/Flippincv_bot?start=ref_{user_id}"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📤 Поделиться", url=f"https://t.me/share/url?url={ref_link}&text=Заходи в крутого бота по флипингу и заработку!")]])
@@ -1068,7 +1187,7 @@ async def activate_promo_code(message: Message):
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
     conn.commit()
     conn.close()
-    update_quest_progress(user_id, 3, 1) # Квест промокод день 1
+    update_quest_progress(user_id, 3, 1)
     await message.answer(f"🎉 Промокод активирован! Получено: +{reward:,} ¢".replace(",", " "))
 
 @router.message(F.text.casefold().in_(["🎬 креатор"]))
@@ -1117,7 +1236,7 @@ async def create_promo_universal(message: Message):
     conn.close()
     await message.answer(f"✅ Промокод {code} создан на {reward:,} ¢!".replace(",", " "))
 
-# --- ИСПРАВЛЕННАЯ АДМИН-ПАНЕЛЬ (КНОПКИ И СОСТОЯНИЯ) ---
+# --- АДМИН-ПАНЕЛЬ ---
 @router.message(F.text.casefold().in_(["админ", "/admin"]))
 async def cmd_admin_panel(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
