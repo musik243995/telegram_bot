@@ -11,7 +11,7 @@ from aiohttp import web
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-API_TOKEN = os.getenv("8885671207:AAEvMCPSWoiJZR8U_TXQvwgxJzK2sn28kKU")
+API_TOKEN = os.getenv("BOT_TOKEN")
 if not API_TOKEN:
     raise RuntimeError("BOT_TOKEN не задан в переменных окружения Render")
 
