@@ -92,7 +92,8 @@ def get_admin_keyboard():
 
 # --- БАЗА ДАННЫХ ---
 def get_db():
-    return sqlite3.connect("game.db", timeout=30.0)
+    conn = sqlite3.connect("game.db")
+    return conn
 
 def init_db():
     conn = get_db()
