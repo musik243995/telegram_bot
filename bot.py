@@ -1,7 +1,7 @@
 import random
 import time
 import os
-import sqlite3
+import asyncpg  # Вместо sqlite3
 import asyncio
 from aiogram import F, Bot, Dispatcher, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile
@@ -92,79 +92,75 @@ def get_private_keyboard(is_creator_flag=False):
         kb.append([KeyboardButton(text="🎬 Креатор")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
-# --- БАЗА ДАННЫХ ---
-def get_db():
-    conn = sqlite3.connect("game.db")
-    return conn
+# --- БАЗА ДАННЫХ (POSTGRESQL) ---
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
+async def get_db():
+    return await asyncpg.connect(DATABASE_URL)
+
+async def init_db():
+    conn = await get_db()
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
+            user_id BIGINT PRIMARY KEY,
             username TEXT,
             custom_name TEXT DEFAULT NULL,
-            balance INTEGER DEFAULT 10000,
-            bank_balance INTEGER DEFAULT 0,
-            invested INTEGER DEFAULT 0,
+            balance BIGINT DEFAULT 10000,
+            bank_balance BIGINT DEFAULT 0,
+            invested BIGINT DEFAULT 0,
             bottles INTEGER DEFAULT 0,
             metal INTEGER DEFAULT 0,
             banned INTEGER DEFAULT 0,
             is_creator INTEGER DEFAULT 0,
-            last_bank_calc REAL,
-            last_bonus REAL DEFAULT 0,
-            last_salary REAL DEFAULT 0,
-            referrer_id INTEGER DEFAULT 0,
+            last_bank_calc DOUBLE PRECISION,
+            last_bonus DOUBLE PRECISION DEFAULT 0,
+            last_salary DOUBLE PRECISION DEFAULT 0,
+            referrer_id BIGINT DEFAULT 0,
             ref_count INTEGER DEFAULT 0
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS user_apartments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
             apartment_name TEXT,
-            price INTEGER,
-            buy_time REAL
+            price BIGINT,
+            buy_time DOUBLE PRECISION
         )
     """)
-
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS user_companies (
-            user_id INTEGER PRIMARY KEY,
+            user_id BIGINT PRIMARY KEY,
             level INTEGER DEFAULT 1,
-            last_claim REAL,
-            earned_balance INTEGER DEFAULT 0
+            last_claim DOUBLE PRECISION,
+            earned_balance BIGINT DEFAULT 0
         )
     """)
-
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS promo_codes (
             code TEXT PRIMARY KEY,
-            reward INTEGER,
+            reward BIGINT,
             activations_left INTEGER
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS user_promo (
-            user_id INTEGER,
+            user_id BIGINT,
             code TEXT,
             PRIMARY KEY (user_id, code)
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS user_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
             username TEXT,
             action_type TEXT,
             action_details TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    conn.commit()
-    conn.close()
-
+    await conn.close()
 def log_user_action(user_id, username, action_type, details):
     try:
         conn = get_db()
@@ -2255,7 +2251,7 @@ async def web_server():
     print(f"Веб-сервер запущен на порту {port}")
 
 async def main():
-    init_db()
+    await init_db()  # Обязательно с await
     await web_server()
     await dp.start_polling(bot)
 
