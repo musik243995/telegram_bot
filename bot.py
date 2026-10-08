@@ -57,6 +57,7 @@ gang_rob_cooldowns = {}
 ADMIN_IDS = [1222239198, 8390540110]
 RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
 
+# Названия квартир для флипинга
 APARTMENT_NAMES = [
     "Убитая хрущевка на окраине", "Сталинка в центре под ремонт", 
     "Студия в новостройке с черновой отделкой", "Элитный пентхаус с видом на парк", 
@@ -901,17 +902,14 @@ async def casino_roulette(message: Message):
     user_id = message.from_user.id
     args = message.text.split()
     if len(args) < 3:
-        await message.answer("❌ Ошибка формата! Пример: рул кра 10к или рул ряд 1 10к")
+        await message.answer("❌ Ошибка формата! Пример: рул кра 10к или рул 1-12 10к")
         return
 
-    if args[1].lower() == "ряд" and len(args) >= 4:
-        target_str = f"ряд {args[2]}"
-        raw_amount_str = args[3].lower()
-    else:
-        target_str = args[1].lower()
-        raw_amount_str = args[2].lower()
+    target_str = args[1].lower()
+    raw_amount_str = args[2].lower()
 
-    valid_exact_targets = ["кра", "чер", "чет", "нечет", "мал", "бол", "ряд 1", "ряд 2", "ряд 3"]
+    # Разрешенные варианты ставок
+    valid_exact_targets = ["кра", "чер", "чет", "нечет", "мал", "бол", "1-12", "13-24", "25-36"]
     is_valid = target_str in valid_exact_targets
     if not is_valid:
         try:
@@ -920,7 +918,7 @@ async def casino_roulette(message: Message):
         except: pass
 
     if not is_valid:
-        await message.answer("❌ Неверная ставка! Пишите строго: рул кра, рул чер, рул мал, рул бол, рул ряд 1 (2 или 3) или число от 0 до 36.")
+        await message.answer("❌ Неверная ставка! Пишите строго: рул кра, рул чер, рул мал, рул бол, рул 1-12, рул 13-24, рул 25-36 или число от 0 до 36.")
         return
 
     conn = get_db()
@@ -938,9 +936,6 @@ async def casino_roulette(message: Message):
     rolled_color = "🟢" if rolled_num == 0 else ("🔴" if rolled_num in RED_NUMBERS else "⚫")
 
     won, payout = False, 0
-    row_1 = {1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34}
-    row_2 = {2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35}
-    row_3 = {3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36}
 
     if target_str == "кра" and rolled_num != 0 and rolled_num in RED_NUMBERS: won, payout = True, amount * 2
     elif target_str == "чер" and rolled_num != 0 and rolled_num not in RED_NUMBERS: won, payout = True, amount * 2
@@ -948,9 +943,9 @@ async def casino_roulette(message: Message):
     elif target_str == "нечет" and rolled_num != 0 and rolled_num % 2 != 0: won, payout = True, amount * 2
     elif target_str == "мал" and 1 <= rolled_num <= 18: won, payout = True, amount * 2
     elif target_str == "бол" and 19 <= rolled_num <= 36: won, payout = True, amount * 2
-    elif target_str == "ряд 1" and rolled_num in row_1: won, payout = True, amount * 3
-    elif target_str == "ряд 2" and rolled_num in row_2: won, payout = True, amount * 3
-    elif target_str == "ряд 3" and rolled_num in row_3: won, payout = True, amount * 3
+    elif target_str == "1-12" and 1 <= rolled_num <= 12: won, payout = True, amount * 3
+    elif target_str == "13-24" and 13 <= rolled_num <= 24: won, payout = True, amount * 3
+    elif target_str == "25-36" and 25 <= rolled_num <= 36: won, payout = True, amount * 3
     else:
         try:
             if int(target_str) == rolled_num: won, payout = True, amount * 36
@@ -958,7 +953,7 @@ async def casino_roulette(message: Message):
 
     net_profit = payout - amount if won else -amount
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
-    conn.commit()
+    cursor.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
@@ -1191,10 +1186,11 @@ async def transfer_money(message: Message):
     conn.close()
     await message.answer(f"✅ Успешно переведено {amount:,} ¢ игроку {target_name}!".replace(",", " "))
 
-# --- ФЛИПИНГ ---
+# --- ФЛИПИНГ И КВАРТИРЫ ---
 @router.message(F.text.casefold().in_(["💸 флипинг", "флипинг"]))
 async def text_flipping(message: Message):
     if not await check_ban_and_register(message): return
+    log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Флипинг")
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -1203,78 +1199,163 @@ async def text_flipping(message: Message):
     conn.close()
     price = random.randint(1_000_000, 100_000_000)
     apt_name = random.choice(APARTMENT_NAMES)
-    text = f"🏢 Рынок недвижимости:\n• {apt_name}\n💰 Цена: {price:,} ¢\n📊 У вас: {apt_count}/10".replace(",", " ")
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy_apt_{price}_{apt_name[:12]}"), InlineKeyboardButton(text="⏭ Другой", callback_data="refresh_flip")]])
-    await message.answer(text, reply_markup=kb, parse_mode="MARKDOWN")
+
+    text = (
+        f"🏢 Рынок недвижимости (Флипинг):\n\n"
+        f"• {apt_name}\n"
+        f"💰 Цена покупки: {price:,} ¢\n\n"
+        f"📊 У вас недвижимости: {apt_count}/10 шт."
+    ).replace(",", " ")
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+         [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{price}_{apt_name[:12]}"),
+         InlineKeyboardButton(text="⏭ Другой вариант", callback_data="refresh_flip")]
+    ])
+    await message.answer(text, reply_markup=keyboard, parse_mode="MARKDOWN")
 
 @router.callback_query(F.data == "refresh_flip")
 async def refresh_flipping(callback: CallbackQuery):
-    price, apt_name = random.randint(1_000_000, 100_000_000), random.choice(APARTMENT_NAMES)
+    price = random.randint(1_000_000, 100_000_000)
+    apt_name = random.choice(APARTMENT_NAMES)
+    user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (callback.from_user.id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
     apt_count = cursor.fetchone()[0]
     conn.close()
-    text = f"🏢 Рынок недвижимости:\n• {apt_name}\n💰 Цена: {price:,} ¢\n📊 У вас: {apt_count}/10".replace(",", " ")
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy_apt_{price}_{apt_name[:12]}"), InlineKeyboardButton(text="⏭ Другой", callback_data="refresh_flip")]])
-    try: await callback.message.edit_text(text, reply_markup=kb, parse_mode="MARKDOWN")
-    except: pass
+
+    text = (
+        f"🏢 Рынок недвижимости (Флипинг):\n\n"
+        f"• {apt_name}\n"
+        f"💰 Цена покупки: {price:,} ¢\n\n"
+        f"📊 У вас недвижимости: {apt_count}/10 шт."
+    ).replace(",", " ")
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{price}_{apt_name[:12]}"),
+         InlineKeyboardButton(text="⏭ Другой вариант", callback_data="refresh_flip")]
+    ])
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
 
 @router.callback_query(F.data.startswith("buy_apt_"))
 async def buy_apartment(callback: CallbackQuery):
     user_id = callback.from_user.id
     parts = callback.data.split("_")
-    price, apt_name = int(parts[2]), " ".join(parts[3:]) if len(parts) > 3 else "Квартира"
+    price = int(parts[2])
+    apt_name = " ".join(parts[3:]) if len(parts) > 3 else "Квартира"
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    if cursor.fetchone()[0] < price:
-        await callback.answer("❌ Недостаточно средств!", show_alert=True)
+    res = cursor.fetchone()
+    bal = res[0] if res else 0
+    if bal < price:
+        await callback.answer("❌ Недостаточно средств для покупки!", show_alert=True)
         conn.close()
         return
+
     cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
-    if cursor.fetchone()[0] >= 10:
-        await callback.answer("❌ Лимит 10 квартир!", show_alert=True)
+    apt_res = cursor.fetchone()
+    apt_count = apt_res[0] if apt_res else 0
+    if apt_count >= 10:
+        await callback.answer("❌ Лимит недвижимости (максимум 10)!", show_alert=True)
         conn.close()
         return
+
     cursor.execute("UPDATE users SET balance = balance - ?, invested = invested + ? WHERE user_id = ?", (price, price, user_id))
-    cursor.execute("INSERT INTO user_apartments (user_id, apartment_name, price, buy_time) VALUES (?, ?, ?, ?)", (user_id, apt_name, price, time.time()))
+    cursor.execute("INSERT INTO user_apartments (user_id, apartment_name, price, buy_time) VALUES (?, ?, ?, ?)", 
+                   (user_id, apt_name, price, time.time()))
     conn.commit()
+
+    new_price = random.randint(1_000_000, 100_000_000)
+    new_apt_name = random.choice(APARTMENT_NAMES)
+    
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    new_apt_count = cursor.fetchone()[0]
     conn.close()
-    await callback.answer("🏠 Квартира куплена!", show_alert=True)
+
+    text = (
+        f"🏢 Рынок недвижимости (Флипинг):\n\n"
+        f"• {new_apt_name}\n"
+        f"💰 Цена покупки: {new_price:,} ¢\n\n"
+        f"📊 У вас недвижимости: {new_apt_count}/10 шт."
+    ).replace(",", " ")
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{new_price}_{new_apt_name[:12]}"),
+         InlineKeyboardButton(text="⏭ Другой вариант", callback_data="refresh_flip")]
+    ])
+    
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+    except:
+        pass
+    await callback.answer("🏠 Квартира успешно куплена!", show_alert=True)
 
 @router.message(F.text.casefold().in_(["🏠 квартиры", "мои квартиры", "квартиры"]))
 async def text_my_apartments(message: Message):
     if not await check_ban_and_register(message): return
+    log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Квартиры")
+    user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = ?", (message.from_user.id,))
+    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = ?", (user_id,))
     apartments = cursor.fetchall()
     conn.close()
     if not apartments:
-        await message.answer("📦 У вас нет недвижимости.")
+        await message.answer("📦 У вас пока нет купленной недвижимости.")
         return
     text = f"📦 Ваша недвижимость ({len(apartments)}/10):\n\n"
-    keyboard = [[InlineKeyboardButton(text=f"💰 Продать «{name[:10]}»", callback_data=f"sell_apt_{apt_id}")] for apt_id, name, price in apartments]
+    keyboard = []
+    for apt_id, name, price in apartments:
+        text += f"• {name} | Куплена за: {price:,} ¢\n"
+        keyboard.append([InlineKeyboardButton(text=f"💰 Продать «{name[:10]}»", callback_data=f"sell_apt_{apt_id}")])
+
     await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode="MARKDOWN")
 
 @router.callback_query(F.data.startswith("sell_apt_"))
 async def sell_apartment(callback: CallbackQuery):
-    user_id, apt_id = callback.from_user.id, int(callback.data.split("_")[2])
+    user_id = callback.from_user.id
+    apt_id = int(callback.data.split("_")[2])
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT price FROM user_apartments WHERE id = ? AND user_id = ?", (apt_id, user_id))
     apt = cursor.fetchone()
     if not apt:
-        await callback.answer("❌ Не найдено.", show_alert=True)
+        await callback.answer("❌ Квартира не найдена.", show_alert=True)
         conn.close()
         return
-    sell_price = int(apt[0] * random.uniform(0.95, 1.05))
+
+    price = apt[0]
+    percent = random.uniform(-0.05, 0.05)
+    sell_price = int(price * (1 + percent))
+    if sell_price < 1: sell_price = 1
+
     cursor.execute("DELETE FROM user_apartments WHERE id = ?", (apt_id,))
-    cursor.execute("UPDATE users SET balance = balance + ?, invested = invested - ? WHERE user_id = ?", (sell_price, apt[0], user_id))
+    cursor.execute("UPDATE users SET balance = balance + ?, invested = invested - ? WHERE user_id = ?", (sell_price, price, user_id))
     conn.commit()
+
+    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = ?", (user_id,))
+    apartments = cursor.fetchall()
     conn.close()
-    await callback.answer(f"💰 Продано за {sell_price:,} ¢!".replace(",", " "), show_alert=True)
+
+    diff = sell_price - price
+    diff_sign = f"+{diff:,}" if diff >= 0 else f"{diff:,}"
+
+    if not apartments:
+        await callback.message.edit_text("📦 У вас больше нет купленной недвижимости.", reply_markup=None)
+    else:
+        text = f"📦 Ваша недвижимость ({len(apartments)}/10):\n\n"
+        keyboard = []
+        for a_id, name, p in apartments:
+            text += f"• {name} | Куплена за: {p:,} ¢\n"
+            keyboard.append([InlineKeyboardButton(text=f"💰 Продать «{name[:10]}»", callback_data=f"sell_apt_{a_id}")])
+        try:
+            await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode="MARKDOWN")
+        except:
+            pass
+
+    await callback.answer(f"💰 Продано за {sell_price:,} ¢ (Разница: {diff_sign} ¢)".replace(",", " "), show_alert=True)
 
 # --- БОНУС И РЕФЕРАЛЫ ---
 @router.message(F.text.casefold().in_(["🎁 бонус", "бонус"]))
@@ -1289,10 +1370,12 @@ async def text_bonus(message: Message):
         await message.answer("⏳ Бонус доступен раз в 24 часа!")
         conn.close()
         return
-    cursor.execute("UPDATE users SET balance = balance + 50000, last_bonus = ? WHERE user_id = ?", (time.time(), user_id))
+    
+    # Награда изменена на 500 000 ¢
+    cursor.execute("UPDATE users SET balance = balance + 500000, last_bonus = ? WHERE user_id = ?", (time.time(), user_id))
     conn.commit()
     conn.close()
-    await message.answer("🎉 Бонус получен: +50 000 ¢!")
+    await message.answer("🎉 Бонус получен: +500 000 ¢!")
 
 @router.message(F.text.casefold().in_(["👥 рефералы", "реф", "рефералы"]))
 async def text_referral(message: Message):
