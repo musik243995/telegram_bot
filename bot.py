@@ -11,7 +11,9 @@ from aiohttp import web
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-API_TOKEN = "8885671207:AAEvMCPSWoiJZR8U_TXQvwgxJzK2sn28kKU"  # Твой токен
+API_TOKEN = os.getenv("8885671207:AAEvMCPSWoiJZR8U_TXQvwgxJzK2sn28kKU")
+if not API_TOKEN:
+    raise RuntimeError("BOT_TOKEN не задан в переменных окружения Render")
 
 bot = Bot(token=API_TOKEN)
 router = Router()
@@ -92,7 +94,10 @@ def get_admin_keyboard():
 
 # --- БАЗА ДАННЫХ ---
 def get_db():
-    conn = sqlite3.connect("game.db")
+    conn = sqlite3.connect("game.db", timeout=30.0)
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 def init_db():
@@ -252,9 +257,19 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
         cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
         if ref_id != 0:
             cursor.execute("UPDATE users SET balance = balance + 100000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
-            try: await bot.send_message(ref_id, "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 100 000 ¢.")
-            except: pass
         conn.commit()
+        conn.close()
+
+        # Telegram API вызываем только после завершения транзакции SQLite.
+        if ref_id != 0:
+            try:
+                await bot.send_message(
+                    ref_id,
+                    "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 100 000 ¢."
+                )
+            except Exception:
+                pass
+        return True
     elif res[0] == 1:
         conn.close()
         await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
@@ -954,7 +969,7 @@ async def casino_roulette(message: Message):
 
     net_profit = payout - amount if won else -amount
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
-    cursor.commit()
+    conn.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
