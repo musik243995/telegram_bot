@@ -161,6 +161,70 @@ async def init_db():
         )
     """)
     await conn.close()
+
+async def log_user_action(user_id, username, action_type, details):
+    try:
+        conn = await get_db()
+        await conn.execute(
+            "INSERT INTO user_logs (user_id, username, action_type, action_details) VALUES ($1, $2, $3, $4)",
+            user_id, username, action_type, details
+        )
+        await conn.close()
+    except Exception as e:
+        print(f"Ошибка логирования: {e}")    
+
+async def check_ban_and_register(message: Message, command: CommandObject = None):
+    user = message.from_user
+    user_id = user.id
+    username = user.username or user.first_name
+
+    conn = await get_db()
+    row = await conn.fetchrow("SELECT banned FROM users WHERE user_id = $1", user_id)
+
+    if row is None:
+        ref_id = 0
+        if command and command.args and command.args.startswith("ref_"):
+            try:
+                potential_ref = int(command.args.replace("ref_", ""))
+                if potential_ref != user_id:
+                    ref_check = await conn.fetchrow("SELECT user_id FROM users WHERE user_id = $1", potential_ref)
+                    if ref_check:
+                        ref_id = potential_ref
+            except:
+                pass
+
+        await conn.execute("""
+            INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) 
+            VALUES ($1, $2, 10000, $3, $4)
+        """, user_id, username, time.time(), ref_id)
+        
+        if ref_id != 0:
+            await conn.execute("UPDATE users SET balance = balance + 100000, ref_count = ref_count + 1 WHERE user_id = $1", ref_id)
+            try:
+                await bot.send_message(
+                    ref_id, 
+                    f"🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 100 000 ¢.".replace(",", " "),
+                    parse_mode="MARKDOWN"
+                )
+            except:
+                pass
+    elif row["banned"] == 1:
+        await conn.close()
+        await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
+        return False
+    else:
+        await conn.execute("UPDATE users SET username = $1 WHERE user_id = $2", username, user_id)
+    
+    await conn.close()
+    return True
+
+async def is_creator(user_id: int) -> bool:
+    if user_id in ADMIN_IDS:
+        return True
+    conn = await get_db()
+    row = await conn.fetchrow("SELECT is_creator FROM users WHERE user_id = $1", user_id)
+    await conn.close()
+    return row and row["is_creator"] == 1
 def log_user_action(user_id, username, action_type, details):
     try:
         conn = get_db()
