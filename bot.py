@@ -20,10 +20,7 @@ dp.include_router(router)
 
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
-    waiting_for_user_id_to_ban = State()
     waiting_for_balance_change = State()
-    waiting_for_creator_action = State()
-    waiting_for_reset = State()
 
 # --- АНТИСПАМ ФИЛЬТРЫ ---
 original_send_message = bot.send_message
@@ -54,7 +51,6 @@ bot.send_photo = filtered_send_photo
 
 work_cooldowns = {}
 creator_salary_cooldowns = {}
-company_claim_cooldowns = {}
 game_cooldowns = {}
 gang_rob_cooldowns = {}
 
@@ -84,10 +80,19 @@ def get_private_keyboard(is_creator_flag=False):
         kb.append([KeyboardButton(text="🎬 Креатор")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
+def get_admin_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="📢 Сделать рассылку", callback_data="admin_broadcast")],
+            [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
+            [InlineKeyboardButton(text="🚫 Баны / Креаторы", callback_data="admin_ban_menu")]
+        ]
+    )
+
 # --- БАЗА ДАННЫХ ---
 def get_db():
-    conn = sqlite3.connect("game.db")
-    return conn
+    return sqlite3.connect("game.db")
 
 def init_db():
     conn = get_db()
@@ -172,10 +177,7 @@ def log_user_action(user_id, username, action_type, details):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO user_logs (user_id, username, action_type, action_details) VALUES (?, ?, ?, ?)",
-            (user_id, username, action_type, details)
-        )
+        cursor.execute("INSERT INTO user_logs (user_id, username, action_type, action_details) VALUES (?, ?, ?, ?)", (user_id, username, action_type, details))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -189,15 +191,13 @@ def get_current_quest_day():
 def update_quest_progress(user_id, quest_type, amount=1):
     day_num = get_current_quest_day()
     today_str = datetime.now().strftime("%Y-%m-%d")
-    
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT progress, completed FROM user_quests WHERE user_id = ? AND day_num = ? AND quest_id = ?", (user_id, day_num, quest_type))
     row = cursor.fetchone()
     
     if not row:
-        cursor.execute("INSERT INTO user_quests (user_id, day_num, quest_id, progress, completed, last_reset_date) VALUES (?, ?, ?, 0, 0, ?)", 
-                       (user_id, day_num, quest_type, today_str))
+        cursor.execute("INSERT INTO user_quests (user_id, day_num, quest_id, progress, completed, last_reset_date) VALUES (?, ?, ?, 0, 0, ?)", (user_id, day_num, quest_type, today_str))
         progress, completed = 0, 0
     else:
         progress, completed = row
@@ -207,46 +207,32 @@ def update_quest_progress(user_id, quest_type, amount=1):
         return
 
     new_progress = progress + amount
-    reward = 0
-    is_done = 0
+    reward, is_done = 0, 0
 
     if day_num == 1:
-        if quest_type == 1 and new_progress >= 1_000_000:
-            reward, is_done = 1_500_000, 1
-        elif quest_type == 2 and new_progress >= 2_000_000:
-            reward, is_done = 3_000_000, 1
-        elif quest_type == 3 and new_progress >= 1:
-            reward, is_done = 1_000_000, 1
+        if quest_type == 1 and new_progress >= 1_000_000: reward, is_done = 1_500_000, 1
+        elif quest_type == 2 and new_progress >= 2_000_000: reward, is_done = 3_000_000, 1
+        elif quest_type == 3 and new_progress >= 1: reward, is_done = 1_000_000, 1
     elif day_num == 2:
-        if quest_type == 1 and new_progress >= 1:
-            reward, is_done = 1_000_000, 1
-        elif quest_type == 2 and new_progress >= 2_000_000:
-            reward, is_done = 3_000_000, 1
-        elif quest_type == 3 and new_progress >= 1:
-            reward, is_done = 1_000_000, 1
+        if quest_type == 1 and new_progress >= 1: reward, is_done = 1_000_000, 1 # Ограбление банка
+        elif quest_type == 2 and new_progress >= 2_000_000: reward, is_done = 3_000_000, 1
+        elif quest_type == 3 and new_progress >= 1: reward, is_done = 1_000_000, 1
     elif day_num == 3:
-        if quest_type == 1 and new_progress >= 5:
-            reward, is_done = 1_000_000, 1
-        elif quest_type == 2 and new_progress >= 5:
-            reward, is_done = 1_000_000, 1
-        elif quest_type == 3 and new_progress >= 1_000_000:
-            reward, is_done = 1_500_000, 1
+        if quest_type == 1 and new_progress >= 5: reward, is_done = 1_000_000, 1
+        elif quest_type == 2 and new_progress >= 5: reward, is_done = 1_000_000, 1
+        elif quest_type == 3 and new_progress >= 1_000_000: reward, is_done = 1_500_000, 1
 
     if is_done == 1 and completed == 0:
         cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
-        cursor.execute("UPDATE user_quests SET progress = ?, completed = 1 WHERE user_id = ? AND day_num = ? AND quest_id = ?", 
-                       (new_progress, user_id, day_num, quest_type))
+        cursor.execute("UPDATE user_quests SET progress = ?, completed = 1 WHERE user_id = ? AND day_num = ? AND quest_id = ?", (new_progress, user_id, day_num, quest_type))
     else:
-        cursor.execute("UPDATE user_quests SET progress = ? WHERE user_id = ? AND day_num = ? AND quest_id = ?", 
-                       (new_progress, user_id, day_num, quest_type))
+        cursor.execute("UPDATE user_quests SET progress = ? WHERE user_id = ? AND day_num = ? AND quest_id = ?", (new_progress, user_id, day_num, quest_type))
     conn.commit()
     conn.close()
 
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
-    user_id = user.id
-    username = user.username or user.first_name
-
+    user_id, username = user.id, user.username or user.first_name
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
@@ -259,23 +245,14 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
                 potential_ref = int(command.args.replace("ref_", ""))
                 if potential_ref != user_id:
                     cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
-                    if cursor.fetchone():
-                        ref_id = potential_ref
-            except:
-                pass
+                    if cursor.fetchone(): ref_id = potential_ref
+            except: pass
 
-        cursor.execute("""
-            INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) 
-            VALUES (?, ?, 10000, ?, ?)
-        """, (user_id, username, time.time(), ref_id))
-        
+        cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
         if ref_id != 0:
             cursor.execute("UPDATE users SET balance = balance + 100000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
-            try:
-                await bot.send_message(ref_id, "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 100 000 ¢.")
-            except:
-                pass
-
+            try: await bot.send_message(ref_id, "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 100 000 ¢.")
+            except: pass
         conn.commit()
     elif res[0] == 1:
         conn.close()
@@ -288,8 +265,7 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
     return True
 
 async def is_creator(user_id: int) -> bool:
-    if user_id in ADMIN_IDS:
-        return True
+    if user_id in ADMIN_IDS: return True
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT is_creator FROM users WHERE user_id = ?", (user_id,))
@@ -308,50 +284,33 @@ async def smart_answer(message: Message, text: str, reply_markup=None, parse_mod
 
 async def send_result_media(message: Message, is_win: bool, text: str):
     folder = "win" if is_win else "lose"
-    files = []
-    if os.path.exists(folder):
-        files = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.mp4', '.gif'))]
+    files = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.mp4', '.gif'))] if os.path.exists(folder) else []
     if files:
         chosen_file = random.choice(files)
         path = os.path.join(folder, chosen_file)
         input_file = FSInputFile(path)
         try:
-            if chosen_file.lower().endswith(('.mp4', '.gif')):
-                await message.answer_animation(input_file, caption=text, parse_mode="MARKDOWN")
-            else:
-                await message.answer_photo(input_file, caption=text, parse_mode="MARKDOWN")
+            if chosen_file.lower().endswith(('.mp4', '.gif')): await message.answer_animation(input_file, caption=text, parse_mode="MARKDOWN")
+            else: await message.answer_photo(input_file, caption=text, parse_mode="MARKDOWN")
             return
-        except Exception:
-            pass
+        except: pass
     await message.answer(text, parse_mode="MARKDOWN")
 
 def parse_sum(text_val):
-    if not text_val:
-        return None
+    if not text_val: return None
     text_val = str(text_val).lower().strip().replace(" ", "")
     multiplier = 1
-    if "кккк" in text_val or "tr" in text_val:
-        multiplier = 1_000_000_000_000
-        text_val = text_val.replace("кккк", "").replace("tr", "")
-    elif "ккк" in text_val or "b" in text_val:
-        multiplier = 1_000_000_000
-        text_val = text_val.replace("ккк", "").replace("b", "")
-    elif "кк" in text_val or "м" in text_val or "m" in text_val:
-        multiplier = 1_000_000
-        text_val = text_val.replace("кк", "").replace("м", "").replace("m", "")
-    elif "к" in text_val or "k" in text_val:
-        multiplier = 1_000
-        text_val = text_val.replace("к", "").replace("k", "")
-    try:
-        return int(float(text_val) * multiplier)
-    except:
-        return None
+    if "кккк" in text_val or "tr" in text_val: multiplier, text_val = 1_000_000_000_000, text_val.replace("кккк", "").replace("tr", "")
+    elif "ккк" in text_val or "b" in text_val: multiplier, text_val = 1_000_000_000, text_val.replace("ккк", "").replace("b", "")
+    elif "кк" in text_val or "м" in text_val or "m" in text_val: multiplier, text_val = 1_000_000, text_val.replace("кк", "").replace("м", "").replace("m", "")
+    elif "к" in text_val or "k" in text_val: multiplier, text_val = 1_000, text_val.replace("к", "").replace("k", "")
+    try: return int(float(text_val) * multiplier)
+    except: return None
 
 # --- СТАРТ И МЕНЮ ---
 @router.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject):
     if not await check_ban_and_register(message, command): return
-    log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КОМАНДА", "/start")
     await smart_answer(message, "🏠 Главное меню игры:\nДобро пожаловать! Используйте кнопки меню или команды.")
 
 @router.message(F.text.casefold().in_(["главное меню", "меню"]))
@@ -360,11 +319,17 @@ async def text_main_menu(message: Message):
     await smart_answer(message, "🏠 Главное меню игры:")
 
 HELP_TEXT = (
-    "🎰 Казино: рул кра/чер/чет/нечет/мал/бол/ряд 1-3/число [ставка]\n"
-    "💰 Переводы: пер @юз сумма ИЛИ пер вб (в ответ на сообщение или с юзером)\n"
-    "🥷 Нычка: спрячь деньги, чтобы их не было видно в топе\n"
-    "📜 Квесты: выполняй ежедневные задания и получай награды\n"
-    "🔫 Банда: вступай в банду и грабь банк каждый час"
+    "🎰 Казино:\n"
+    "• рул кра / чер / чет / нечет / мал / бол / ряд 1-3 / [число 0-36] [ставка]\n\n"
+    "🃏 Другие игры:\n"
+    "• покер [ставка]\n"
+    "• фортуна [ставка]\n"
+    "• дартс [ставка] центр (или мимо)\n"
+    "• баскет [ставка]\n\n"
+    "💰 Переводы: пер @юз сумма ИЛИ пер вб\n"
+    "🥷 Нычка: нычка положить / взять [сумма]\n"
+    "📜 Квесты: выполняй ежедневные задания\n"
+    "🔫 Банда: грабь банк каждый час"
 )
 
 @router.message(F.text.casefold().in_(["помощь", "📖 помощь"]))
@@ -378,31 +343,20 @@ async def text_quests(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
     day_num = get_current_quest_day()
-    
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT quest_id, progress, completed FROM user_quests WHERE user_id = ? AND day_num = ?", (user_id, day_num))
     rows = {r[0]: (r[1], r[2]) for r in cursor.fetchall()}
     conn.close()
 
-    if day_num == 1:
-        q1, q2, q3 = "Сыграй в казино на 1 000 000 ¢ (Награда: 1.5 млн)", "Сыграй в баскетбол на 2 000 000 ¢ (Награда: 3 млн)", "Введи любой промокод (Награда: 1 млн)"
-    elif day_num == 2:
-        q1, q2, q3 = "Сделай ограбление в банке (Награда: 1 млн)", "Сыграй в дартс на 2 000 000 ¢ (Награда: 3 млн)", "Закинь деньги в заначку (Награда: 1 млн)"
-    else:
-        q1, q2, q3 = "Собери металл на работе 5 раз и продай (Награда: 1 млн)", "Собери бутылки 5 раз и продай (Награда: 1 млн)", "Сыграй в покер на 1 000 000 ¢ (Награда: 1.5 млн)"
+    if day_num == 1: q1, q2, q3 = "Сыграй в казино на 1кк", "Сыграй в баскетбол на 2кк", "Введи промокод"
+    elif day_num == 2: q1, q2, q3 = "Ограбь банк в банде", "Сыграй в дартс на 2кк", "Закинь в заначку"
+    else: q1, q2, q3 = "Собери металл 5 раз", "Собери бутылки 5 раз", "Сыграй в покер на 1кк"
 
-    def get_mark(qid):
-        return "✅" if qid in rows and rows[qid][1] == 1 else "❌"
-
-    text = (
-        f"📜 Ежедневные квесты (День {day_num} из 3):\n\n"
-        f"1. {q1} — {get_mark(1)}\n"
-        f"2. {q2} — {get_mark(2)}\n"
-        f"3. {q3} — {get_mark(3)}\n\n"
-        "Задания обновляются каждый день по кругу!"
-    )
+    def mark(qid): return "✅" if qid in rows and rows[qid][1] == 1 else "❌"
+    text = f"📜 Ежедневные квесты (День {day_num}/3):\n\n1. {q1} — {mark(1)}\n2. {q2} — {mark(2)}\n3. {q3} — {mark(3)}"
     await message.answer(text, parse_mode="MARKDOWN")
+
 # --- НЫЧКА ---
 @router.message(F.text.casefold().in_(["🥷 нычка", "нычка", "заначка"]))
 async def text_nyachka_menu(message: Message):
@@ -413,15 +367,7 @@ async def text_nyachka_menu(message: Message):
     cursor.execute("SELECT nyachka FROM users WHERE user_id = ?", (user_id,))
     nyachka = cursor.fetchone()[0] or 0
     conn.close()
-
-    text = (
-        f"🥷 Секретная нычка:\n\n"
-        f"💰 В нычке спрятано: {nyachka:,} ¢\n"
-        f"*(Эти деньги не видны никому в топе)*\n\n"
-        "Команды:\n"
-        "• нычка положить [сумма]\n"
-        "• нычка снять [сумма]"
-    ).replace(",", " ")
+    text = f"🥷 Секретная нычка:\n💰 В нычке: {nyachka:,} ¢ (скрыто от топа)\n\nКоманды:\n• нычка положить [сумма]\n• нычка снять [сумма]".replace(",", " ")
     await message.answer(text, parse_mode="MARKDOWN")
 
 @router.message(F.text.regexp(r"(?i)^нычка\s+(положить|взять|снять)\s+(.+)"))
@@ -429,38 +375,33 @@ async def nyachka_actions(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
     parts = message.text.split()
-    action = parts[1].lower()
-    amount = parse_sum(parts[2])
-
+    action, amount = parts[1].lower(), parse_sum(parts[2])
     if not amount or amount <= 0:
         await message.answer("❌ Неверная сумма!")
         return
-
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance, nyachka FROM users WHERE user_id = ?", (user_id,))
-    u = cursor.fetchone()
-    bal, nyach = u[0], u[1] or 0
-
-    if action in ["положить"]:
+    bal, nyach = cursor.fetchone()
+    if action == "положить":
         if bal < amount:
-            await message.answer("❌ У вас нет столько наличных!")
+            await message.answer("❌ Недостаточно наличных!")
             conn.close()
             return
         cursor.execute("UPDATE users SET balance = balance - ?, nyachka = nyachka + ? WHERE user_id = ?", (amount, amount, user_id))
         conn.commit()
         conn.close()
         update_quest_progress(user_id, 3, amount if get_current_quest_day() == 2 else 1)
-        await message.answer(f"🥷 Успешно спрятано в нычку: {amount:,} ¢".replace(",", " "))
+        await message.answer(f"🥷 Спрятано в нычку: {amount:,} ¢".replace(",", " "))
     else:
         if nyach < amount:
-            await message.answer("❌ В нычке нет столько денег!")
+            await message.answer("❌ В нычке нет столько!")
             conn.close()
             return
         cursor.execute("UPDATE users SET nyachka = nyachka - ?, balance = balance + ? WHERE user_id = ?", (amount, amount, user_id))
         conn.commit()
         conn.close()
-        await message.answer(f"🥷 Успешно забрано из нычки: {amount:,} ¢".replace(",", " "))
+        await message.answer(f"🥷 Забрано из нычки: {amount:,} ¢".replace(",", " "))
 
 # --- БАНДА ---
 @router.message(F.text.casefold().in_(["🔫 банда", "банда"]))
@@ -472,33 +413,28 @@ async def text_gang_menu(message: Message):
     cursor.execute("SELECT gang_name FROM users WHERE user_id = ?", (user_id,))
     gang = cursor.fetchone()[0]
     conn.close()
-
-    gang_text = f"Ваша банда: {gang}" if gang else "Вы не состоите в банде."
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    gang_text = f"Ваша банда: {gang}" if gang else "Вы без банда."
+    kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔫 Вступить в банду", callback_data="join_gang")],
         [InlineKeyboardButton(text="🏦 Ограбить банк (КД 1ч)", callback_data="gang_rob_bank")]
     ])
-    text = f"🔫 Система банд:\n\n{gang_text}\n\nУчастники банды могут грабить банк раз в час! Шанс успеха 80% (награда 1.5 млн ¢)."
-    await message.answer(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+    await message.answer(f"🔫 Бандитская система:\n\n{gang_text}\n\nОграбление банка доступно раз в час. Шанс успеха 80% (награда 1.5 млн ¢).", reply_markup=kb)
 
 @router.callback_query(F.data == "join_gang")
 async def callback_join_gang(callback: CallbackQuery):
-    user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET gang_name = 'Уличные волки' WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET gang_name = 'Уличные волки' WHERE user_id = ?", (callback.from_user.id,))
     conn.commit()
     conn.close()
-    await callback.answer("🔫 Вы успешно вступили в банду 'Уличные волки'!", show_alert=True)
+    await callback.answer("🔫 Вы в банде 'Уличные волки'!", show_alert=True)
 
 @router.callback_query(F.data == "gang_rob_bank")
 async def callback_gang_rob(callback: CallbackQuery):
     user_id = callback.from_user.id
     now = time.time()
-    last = gang_rob_cooldowns.get(user_id, 0)
-    if now - last < 3600:
-        left = int(3600 - (now - last))
-        await callback.answer(f"⏳ Банду можно грабить раз в час! Осталось {left // 60} мин.", show_alert=True)
+    if now - gang_rob_cooldowns.get(user_id, 0) < 3600:
+        await callback.answer("⏳ Банк можно грабить раз в час!", show_alert=True)
         return
     gang_rob_cooldowns[user_id] = now
     success = random.random() < 0.8
@@ -509,11 +445,11 @@ async def callback_gang_rob(callback: CallbackQuery):
         cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (payout, user_id))
         conn.commit()
         conn.close()
-        update_quest_progress(user_id, 1, 1)
-        await callback.answer(f"🎉 Успех! Вы ограбили банк и украли {payout:,} ¢!".replace(","," "), show_alert=True)
+        update_quest_progress(user_id, 1, 1) # Квест банк день 2
+        await callback.answer(f"🎉 Успех! Украдено {payout:,} ¢!".replace(",", " "), show_alert=True)
     else:
         conn.close()
-        await callback.answer("🚨 Вас поймала полиция! Ничего не удалось украсть.", show_alert=True)
+        await callback.answer("🚨 Вас поймала полиция!", show_alert=True)
 
 # --- ПРОФИЛЬ И ТОП ---
 def format_profile(user_data):
@@ -538,12 +474,10 @@ async def msg_profile(message: Message):
     u = cursor.fetchone()
     custom_name, uname, balance, bank_balance, invested, is_creat = u if u else (None, "user", 10000, 0, 0, 0)
     display_name = custom_name if custom_name else (uname if uname else message.from_user.first_name)
-
     cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
     apt_count = cursor.fetchone()[0]
     cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
-    ref_res = cursor.fetchone()
-    ref_count = ref_res[0] if ref_res and ref_res[0] is not None else 0
+    ref_count = cursor.fetchone()[0] or 0
     conn.close()
     await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat)))
 
@@ -551,7 +485,7 @@ async def msg_profile(message: Message):
 async def msg_check_profile(message: Message):
     if not await check_ban_and_register(message): return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте этой командой («чекнуть») на сообщение пользователя.")
+        await message.answer("❌ Ответьте этой командой на сообщение игрока.")
         return
     target_id = message.reply_to_message.from_user.id
     conn = get_db()
@@ -559,7 +493,7 @@ async def msg_check_profile(message: Message):
     cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator FROM users WHERE user_id = ?", (target_id,))
     u = cursor.fetchone()
     if not u:
-        await message.answer("❌ Пользователь не найден.")
+        await message.answer("❌ Игрок не найден.")
         conn.close()
         return
     custom_name, uname, balance, bank_balance, invested, is_creat = u
@@ -577,25 +511,18 @@ async def text_top(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     placeholders = ','.join(['?'] * len(ADMIN_IDS)) if ADMIN_IDS else '0'
-    query = f"""
-        SELECT custom_name, username, (balance + bank_balance + invested) as total, is_creator 
-        FROM users 
-        WHERE user_id NOT IN ({placeholders}) 
-        ORDER BY total DESC 
-        LIMIT 10
-    """
-    cursor.execute(query, tuple(ADMIN_IDS))
+    cursor.execute(f"SELECT custom_name, username, (balance + bank_balance + invested) as total, is_creator FROM users WHERE user_id NOT IN ({placeholders}) ORDER BY total DESC LIMIT 10", tuple(ADMIN_IDS))
     top_list = cursor.fetchall()
     conn.close()
-
-    text = "🏆 Топ-10 самых богатых игроков (без учета нычки):\n\n"
+    text = "🏆 Топ-10 богатейших игроков:\n\n"
     for idx, (custom_name, uname, total, is_creat) in enumerate(top_list, 1):
         display_name = custom_name if custom_name else (uname if uname else "Игрок")
         badge = " 🎬" if is_creat == 1 else ""
         text += f"{idx}. {display_name}{badge} — {total:,} ¢\n".replace(",", " ")
     await smart_answer(message, text)
-# --- РАБОТА И РЕСУРСЫ ---
-@router.message(F.text.casefold().in_(["👷 работа", "работа", "ферма", "болото"]))
+
+# --- РАБОТА С МГНОВЕННЫМ ОБНОВЛЕНИЕМ ---
+@router.message(F.text.casefold().in_(["👷 работа", "работа", "ферма"]))
 async def text_work(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
@@ -605,11 +532,11 @@ async def text_work(message: Message):
     u = cursor.fetchone()
     conn.close()
     balance, bottles, metal = (u[0], u[1], u[2]) if u else (10000, 0, 0)
-
+    
     text = f"👷 Центр сбора ресурсов:\n\n🍾 Бутылок: {bottles} шт.\n⚙️ Металла: {metal} шт.\n💰 Наличные: {balance:,} ¢".replace(",", " ")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🍾 Собирать бутылки (КД 2с)", callback_data="work_bottles")],
-        [InlineKeyboardButton(text="⚙ Собирать металл (КД 4с)", callback_data="work_metal")],
+        [InlineKeyboardButton(text="🍾 Собирать бутылки", callback_data="work_bottles")],
+        [InlineKeyboardButton(text="⚙ Собирать металл", callback_data="work_metal")],
         [InlineKeyboardButton(text="💰 Продать ресурсы", callback_data="sell_resources")]
     ])
     await message.answer(text, reply_markup=keyboard, parse_mode="MARKDOWN")
@@ -617,34 +544,46 @@ async def text_work(message: Message):
 @router.callback_query(F.data == "work_bottles")
 async def work_bottles(callback: CallbackQuery):
     user_id = callback.from_user.id
-    now = time.time()
-    if now - work_cooldowns.get(f"b_{user_id}", 0) < 2:
-        await callback.answer("⏳ Подождите!", show_alert=True)
-        return
-    work_cooldowns[f"b_{user_id}"] = now
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET bottles = bottles + 1 WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal FROM users WHERE user_id = ?", (user_id,))
+    bal, b, m = cursor.fetchone()
     conn.commit()
     conn.close()
-    update_quest_progress(user_id, 2, 1)
-    await callback.answer("🍾 Вы нашли бутылку!")
+    update_quest_progress(user_id, 2, 1) # Квест бутылки день 3
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🍾 Собирать бутылки", callback_data="work_bottles")],
+        [InlineKeyboardButton(text="⚙ Собирать металл", callback_data="work_metal")],
+        [InlineKeyboardButton(text="💰 Продать ресурсы", callback_data="sell_resources")]
+    ])
+    try:
+        await callback.message.edit_text(f"👷 Центр сбора ресурсов:\n\n🍾 Бутылок: {b} шт.\n⚙️ Металла: {m} шт.\n💰 Наличные: {bal:,} ¢".replace(",", " "), reply_markup=keyboard, parse_mode="MARKDOWN")
+    except: pass
+    await callback.answer("🍾 Бутылка найдена!")
 
 @router.callback_query(F.data == "work_metal")
 async def work_metal(callback: CallbackQuery):
     user_id = callback.from_user.id
-    now = time.time()
-    if now - work_cooldowns.get(f"m_{user_id}", 0) < 4:
-        await callback.answer("⏳ Подождите!", show_alert=True)
-        return
-    work_cooldowns[f"m_{user_id}"] = now
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET metal = metal + 1 WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal FROM users WHERE user_id = ?", (user_id,))
+    bal, b, m = cursor.fetchone()
     conn.commit()
     conn.close()
-    update_quest_progress(user_id, 1, 1)
-    await callback.answer("⚙️ Вы нашли металлолом!")
+    update_quest_progress(user_id, 1, 1) # Квест металл день 3
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🍾 Собирать бутылки", callback_data="work_bottles")],
+        [InlineKeyboardButton(text="⚙ Собирать металл", callback_data="work_metal")],
+        [InlineKeyboardButton(text="💰 Продать ресурсы", callback_data="sell_resources")]
+    ])
+    try:
+        await callback.message.edit_text(f"👷 Центр сбора ресурсов:\n\n🍾 Бутылок: {b} шт.\n⚙️ Металла: {m} шт.\n💰 Наличные: {bal:,} ¢".replace(",", " "), reply_markup=keyboard, parse_mode="MARKDOWN")
+    except: pass
+    await callback.answer("⚙️ Металл найден!")
 
 @router.callback_query(F.data == "sell_resources")
 async def sell_resources(callback: CallbackQuery):
@@ -652,106 +591,46 @@ async def sell_resources(callback: CallbackQuery):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance, bottles, metal FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
-    bal, b, m = res
+    bal, b, m = cursor.fetchone()
     if b == 0 and m == 0:
-        await callback.answer("❌ У вас нет ресурсов!", show_alert=True)
+        await callback.answer("❌ Нет ресурсов для продажи!", show_alert=True)
         conn.close()
         return
     payout = (b * 1000) + (m * 5000)
     cursor.execute("UPDATE users SET balance = balance + ?, bottles = 0, metal = 0 WHERE user_id = ?", (payout, user_id))
+    cursor.execute("SELECT balance, bottles, metal FROM users WHERE user_id = ?", (user_id,))
+    new_bal, nb, nm = cursor.fetchone()
     conn.commit()
     conn.close()
-    await callback.answer(f"💰 Продано ресурсов на {payout:,} ¢!".replace(",", " "), show_alert=True)
-
-# --- КОМПАНИИ ПО ФЛИПИНГУ ---
-COMPANY_LEVELS = {
-    1: {"name": "Стартовое агентство", "cost": 100_000_000, "income": 2_500_000},
-    2: {"name": "Районная сеть филиалов", "cost": 250_000_000, "income": 10_000_000},
-    3: {"name": "Корпорация недвижимости", "cost": 500_000_000, "income": 25_000_000},
-    4: {"name": "Империя застройки города", "cost": 1_000_000_000, "income": 50_000_000},
-    5: {"name": "Международный холдинг", "cost": 2_500_000_000, "income": 125_000_000}
-}
-
-def get_company_data_and_keyboard(user_id):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
-    comp = cursor.fetchone()
-    conn.close()
-    if not comp:
-        text = "🏢 Компания по флипингу 💸\n\nУ вас нет компании.\n💰 Стоимость: 100 000 000 ¢"
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛒 Купить компанию (100 млн)", callback_data="buy_company")]])
-        return text, kb
-    level, last_claim, earned_bal = comp
-    hours = min(24, (time.time() - last_claim) / 3600)
-    total = earned_bal + int(hours * COMPANY_LEVELS[level]["income"])
-    text = f"🏢 Компания ({COMPANY_LEVELS[level]['name']} Ур.{level}/5)\nНакоплено: {total:,} ¢".replace(",", " ")
-    kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="claim_company_profit")]]
-    if level < 5:
-        kb_rows.append([InlineKeyboardButton(text="📈 Прокачать", callback_data="upgrade_company")])
-    return text, InlineKeyboardMarkup(inline_keyboard=kb_rows)
-
-@router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
-async def text_company_menu(message: Message):
-    if not await check_ban_and_register(message): return
-    text, keyboard = get_company_data_and_keyboard(message.from_user.id)
-    await message.answer(text, reply_markup=keyboard, parse_mode="MARKDOWN")
-
-@router.callback_query(F.data == "buy_company")
-async def callback_buy_company(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    bal = cursor.fetchone()[0]
-    if bal < 100_000_000:
-        await callback.answer("❌ Нужно 100 млн ¢!", show_alert=True)
-        conn.close()
-        return
-    cursor.execute("UPDATE users SET balance = balance - 100000000 WHERE user_id = ?", (user_id,))
-    cursor.execute("INSERT OR REPLACE INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, 1, ?, 0)", (user_id, time.time()))
-    conn.commit()
-    conn.close()
-    await callback.answer("🎉 Компания куплена!", show_alert=True)
-    text, kb = get_company_data_and_keyboard(user_id)
-    try: await callback.message.edit_text(text, reply_markup=kb, parse_mode="MARKDOWN")
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🍾 Собирать бутылки", callback_data="work_bottles")],
+        [InlineKeyboardButton(text="⚙ Собирать металл", callback_data="work_metal")],
+        [InlineKeyboardButton(text="💰 Продать ресурсы", callback_data="sell_resources")]
+    ])
+    try:
+        await callback.message.edit_text(f"👷 Центр сбора ресурсов:\n\n🍾 Бутылок: {nb} шт.\n⚙️ Металла: {nm} шт.\n💰 Наличные: {new_bal:,} ¢".replace(",", " "), reply_markup=keyboard, parse_mode="MARKDOWN")
     except: pass
+    await callback.answer(f"💰 Продано на {payout:,} ¢!".replace(",", " "), show_alert=True)
 
-@router.callback_query(F.data == "claim_company_profit")
-async def callback_claim_company(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
-    comp = cursor.fetchone()
-    if not comp:
-        await callback.answer("❌ У вас нет компании.", show_alert=True)
-        conn.close()
-        return
-    level, last_claim, earned_bal = comp
-    hours = min(24, (time.time() - last_claim) / 3600)
-    total = earned_bal + int(hours * COMPANY_LEVELS[level]["income"])
-    if total <= 0:
-        await callback.answer("❌ Еще ничего не накопилось!", show_alert=True)
-        conn.close()
-        return
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (total, user_id))
-    cursor.execute("UPDATE user_companies SET last_claim = ?, earned_balance = 0 WHERE user_id = ?", (time.time(), user_id))
-    conn.commit()
-    conn.close()
-    await callback.answer(f"💶 Забрано: +{total:,} ¢!".replace(",", " "), show_alert=True)
-
-# --- КАЗИНО И ОБНОВЛЕННАЯ РУЛЕТКА ---
+# --- КАЗИНО (СО СТРОГОЙ ПРОВЕРКОЙ СЛОВ) ---
 @router.message(F.text.casefold().in_(["🎰 казино", "казино"]))
 async def text_casino(message: Message):
     if not await check_ban_and_register(message): return
     text = (
-        "🎰 Казино:\n\n"
-        "• рул кра / чер / чет / нечет [ставка] (х2)\n"
-        "• рул мал (1-18) / рул бол (19-36) [ставка] (х2)\n"
+        "🎰 Казино — точный синтаксис ставок:\n\n"
+        "• рул кра [ставка] (х2)\n"
+        "• рул чер [ставка] (х2)\n"
+        "• рул чет [ставка] (х2)\n"
+        "• рул нечет [ставка] (х2)\n"
+        "• рул мал [ставка] (1-18, х2)\n"
+        "• рул бол [ставка] (19-36, х2)\n"
         "• рул ряд 1 / ряд 2 / ряд 3 [ставка] (х3)\n"
-        "• покер / фортуна / дартс / баскет"
+        "• [число 0-36] [ставка] (х36)\n\n"
+        "• покер [ставка]\n"
+        "• фортуна [ставка]\n"
+        "• дартс [ставка] центр (или мимо)\n"
+        "• баскет [ставка]"
     )
     await smart_answer(message, text)
 
@@ -760,15 +639,30 @@ async def casino_roulette(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
     args = message.text.split()
+    
+    # Строгий парсинг рулетки без возможности опечаток
     if len(args) < 3:
-        await message.answer("❌ Формат: рул кра 10к ИЛИ рул ряд 1 10к ИЛИ рул мал 10к")
+        await message.answer("❌ Ошибка формата! Пример: рул кра 10к или рул ряд 1 10к")
         return
-    if args[1].lower() in ["ряд"] and len(args) >= 4:
+
+    if args[1].lower() == "ряд" and len(args) >= 4:
         target_str = f"ряд {args[2]}"
         raw_amount_str = args[3].lower()
     else:
         target_str = args[1].lower()
         raw_amount_str = args[2].lower()
+
+    valid_exact_targets = ["кра", "чер", "чет", "нечет", "мал", "бол", "ряд 1", "ряд 2", "ряд 3"]
+    is_valid = target_str in valid_exact_targets
+    if not is_valid:
+        try:
+            num_val = int(target_str)
+            if 0 <= num_val <= 36: is_valid = True
+        except: pass
+
+    if not is_valid:
+        await message.answer("❌ Неверная ставка! Пишите строго: рул кра, рул чер, рул мал, рул бол, рул ряд 1 (2 или 3) или число от 0 до 36.")
+        return
 
     conn = get_db()
     cursor = conn.cursor()
@@ -789,28 +683,23 @@ async def casino_roulette(message: Message):
     row_2 = {2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35}
     row_3 = {3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36}
 
-    if target_str in ["кра", "красное"] and rolled_num != 0 and rolled_num in RED_NUMBERS:
-        won, payout = True, amount * 2
-    elif target_str in ["чер", "черное"] and rolled_num != 0 and rolled_num not in RED_NUMBERS:
-        won, payout = True, amount * 2
-    elif target_str == "чет" and rolled_num != 0 and rolled_num % 2 == 0:
-        won, payout = True, amount * 2
-    elif target_str == "нечет" and rolled_num != 0 and rolled_num % 2 != 0:
-        won, payout = True, amount * 2
-    elif target_str == "мал" and 1 <= rolled_num <= 18:
-        won, payout = True, amount * 2
-    elif target_str == "бол" and 19 <= rolled_num <= 36:
-        won, payout = True, amount * 2
-    elif target_str == "ряд 1" and rolled_num in row_1:
-        won, payout = True, amount * 3
-    elif target_str == "ряд 2" and rolled_num in row_2:
-        won, payout = True, amount * 3
-    elif target_str == "ряд 3" and rolled_num in row_3:
-        won, payout = True, amount * 3
+    if target_str == "кра" and rolled_num != 0 and rolled_num in RED_NUMBERS: won, payout = True, amount * 2
+    elif target_str == "чер" and rolled_num != 0 and rolled_num not in RED_NUMBERS: won, payout = True, amount * 2
+    elif target_str == "чет" and rolled_num != 0 and rolled_num % 2 == 0: won, payout = True, amount * 2
+    elif target_str == "нечет" and rolled_num != 0 and rolled_num % 2 != 0: won, payout = True, amount * 2
+    elif target_str == "мал" and 1 <= rolled_num <= 18: won, payout = True, amount * 2
+    elif target_str == "бол" and 19 <= rolled_num <= 36: won, payout = True, amount * 2
+    elif target_str == "ряд 1" and rolled_num in row_1: won, payout = True, amount * 3
+    elif target_str == "ряд 2" and rolled_num in row_2: won, payout = True, amount * 3
+    elif target_str == "ряд 3" and rolled_num in row_3: won, payout = True, amount * 3
+    else:
+        try:
+            if int(target_str) == rolled_num: won, payout = True, amount * 36
+        except: pass
 
     net_profit = payout - amount if won else -amount
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
-    conn.commit()
+    cursor.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
@@ -818,22 +707,23 @@ async def casino_roulette(message: Message):
     update_quest_progress(user_id, 1, amount if get_current_quest_day() == 1 else 0)
 
     if won:
-        await send_result_media(message, True, f"🎉 Выпало {rolled_num} {rolled_color}\nВы выиграли +{payout - amount:,} ¢!\nБаланс: {new_bal:,} ¢".replace(",", " "))
+        await send_result_media(message, True, f"🎉 Выпало {rolled_num} {rolled_color}\nВыигрыш: +{payout - amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
     else:
         await send_result_media(message, False, f"🫠 Выпало {rolled_num} {rolled_color}\nПроигрыш: -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
 
-# --- ПОКЕР ---
 @router.message(F.text.regexp(r"(?i)^покер\s+.+"))
-async def casino_poker_chat(message: Message):
+async def casino_poker(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
     args = message.text.split()
-    raw_amt = args[1].lower()
+    if len(args) < 2:
+        await message.answer("❌ Формат: покер 10к")
+        return
+    amount = parse_sum(args[1])
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     bal = cursor.fetchone()[0]
-    amount = bal if raw_amt in ["вб", "все", "all"] else parse_sum(raw_amt)
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Ошибка ставки.")
         conn.close()
@@ -842,35 +732,60 @@ async def casino_poker_chat(message: Message):
     won = random.choice([True, False])
     net = amount if won else -amount
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
-    conn.commit()
+    cursor.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
 
     update_quest_progress(user_id, 3, amount if get_current_quest_day() == 3 else 0)
+    if won: await message.answer(f"🎉 Победа в покере! +{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
+    else: await message.answer(f"😢 Проигрыш в покере. -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
 
-    if won:
-        await message.answer(f"🎉 Победа в покере! +{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
-    else:
-        await message.answer(f"😢 Проигрыш в покере. -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
-# --- ДАРТС (Х3 ЗА МИМО, Х2 ЗА ЦЕНТР) ---
-@router.message(F.text.regexp(r"(?i)^дартс\b"))
-async def game_darts(message: Message):
+@router.message(F.text.regexp(r"(?i)^фортуна\s+.+"))
+async def casino_wheel(message: Message):
     if not await check_ban_and_register(message): return
-    user_id = message.from_user.id
     args = message.text.split()
-    if len(args) < 3:
-        await message.answer("❌ Формат: дартс 10к центр / дартс 10к мимо")
+    if len(args) < 2:
+        await message.answer("❌ Формат: фортуна 10к")
         return
-    mode = "центр" if "центр" in message.text.lower() else "мимо"
-    
+    amount = parse_sum(args[1])
+    user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     bal = cursor.fetchone()[0]
-    
-    amount_str = args[2] if args[1].lower() in ["центр", "мимо"] else args[1]
-    amount = bal if amount_str.lower() in ["вб", "все", "all"] else parse_sum(amount_str)
+    if not amount or amount <= 0 or bal < amount:
+        await message.answer("❌ Ошибка ставки.")
+        conn.close()
+        return
+
+    mult = random.choice([-1.0, -0.5, 0.5, 1.0, 2.0, 5.0])
+    net = int(amount * mult)
+    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
+    cursor.commit()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    new_bal = cursor.fetchone()[0]
+    conn.close()
+
+    if net > 0: await message.answer(f"🎡 Фортуна: Выигрыш +{net:,} ¢ (x{mult})\nБаланс: {new_bal:,} ¢".replace(",", " "))
+    elif net < 0: await message.answer(f"🎡 Фортуна: Проигрыш {net:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
+    else: await message.answer(f"🎡 Фортуна: Ничья!\nБаланс: {new_bal:,} ¢".replace(",", " "))
+
+@router.message(F.text.regexp(r"(?i)^дартс\b"))
+async def game_darts(message: Message):
+    if not await check_ban_and_register(message): return
+    args = message.text.split()
+    if len(args) < 3 or args[2].lower() not in ["центр", "мимо"]:
+        await message.answer("❌ Строгий формат: дартс [ставка] центр ИЛИ дартс [ставка] мимо")
+        return
+
+    amount = parse_sum(args[1])
+    mode = args[2].lower()
+    user_id = message.from_user.id
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    bal = cursor.fetchone()[0]
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Неверная ставка.")
         conn.close()
@@ -885,32 +800,31 @@ async def game_darts(message: Message):
     net = (amount * mult) - amount if won else -amount
 
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
-    conn.commit()
+    cursor.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
 
     update_quest_progress(user_id, 2, amount if get_current_quest_day() == 2 else 0)
+    if won: await message.answer(f"🎯 Дартс успех! Выигрыш: +{net:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
+    else: await message.answer(f"🎯 Дартс мимо! Потеряно: -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
 
-    if won:
-        await message.answer(f"🎯 Дартс успех! Выигрыш: +{net:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
-    else:
-        await message.answer(f"🎯 Дартс мимо! Потеряно: -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
-
-# --- БАСКЕТБОЛ ---
 @router.message(F.text.regexp(r"(?i)^баскет\b"))
 async def game_basketball(message: Message):
     if not await check_ban_and_register(message): return
-    user_id = message.from_user.id
     args = message.text.split()
-    if len(args) < 2: return
+    if len(args) < 2:
+        await message.answer("❌ Строгий формат: баскет [ставка]")
+        return
+
+    amount = parse_sum(args[1])
+    user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     bal = cursor.fetchone()[0]
-    amount = bal if args[1].lower() in ["вб", "все", "all"] else parse_sum(args[1])
     if not amount or amount <= 0 or bal < amount:
-        await message.answer("❌ Ошибка ставки.")
+        await message.answer("❌ Неверная ставка.")
         conn.close()
         return
 
@@ -920,19 +834,16 @@ async def game_basketball(message: Message):
     net = amount if won else -amount
 
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
-    conn.commit()
+    cursor.commit()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
 
     update_quest_progress(user_id, 2, amount if get_current_quest_day() == 1 else 0)
+    if won: await message.answer(f"🏀 Гол! +{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
+    else: await message.answer(f"🏀 Мимо! -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
 
-    if won:
-        await message.answer(f"🏀 Гол! +{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
-    else:
-        await message.answer(f"🏀 Мимо! -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
-
-# --- БАНК И ПЕРЕВОДЫ (ПЕР ВБ) ---
+# --- БАНК И ПЕРЕВОДЫ ---
 @router.message(F.text.casefold().in_(["🏦 банк", "баланс"]))
 async def text_bank(message: Message):
     if not await check_ban_and_register(message): return
@@ -943,8 +854,7 @@ async def text_bank(message: Message):
     u = cursor.fetchone()
     conn.close()
     balance, bank_balance = (u[0], u[1]) if u else (10000, 0)
-    text = f"🏦 Центральный Банк:\n\n💰 Наличные: {balance:,} ¢\n🏛 В банке: {bank_balance:,} ¢\n\nКоманды:\n• вложить сумма\n• снять сумма".replace(",", " ")
-    await smart_answer(message, text)
+    await smart_answer(message, f"🏦 Банк:\n💰 Наличные: {balance:,} ¢\n🏛 В банке: {bank_balance:,} ¢\n\n• вложить [сумма]\n• снять [сумма]".replace(",", " "))
 
 @router.message(F.text.regexp(r"(?i)^(вложить|вл)\s+.+"))
 async def bank_deposit(message: Message):
@@ -954,9 +864,9 @@ async def bank_deposit(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SEL[08.10.2026 19:52] Chapter: ECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
     if cursor.fetchone()[0] < amount:
-        await message.answer("❌ Недостаточно средств.")
+        await message.answer("❌ Недостаточно налички.")
         conn.close()
         return
     cursor.execute("UPDATE users SET balance = balance - ?, bank_balance = bank_balance + ? WHERE user_id = ?", (amount, amount, user_id))
@@ -994,25 +904,22 @@ async def transfer_money(message: Message):
 
     if message.reply_to_message and message.reply_to_message.from_user:
         target_id = message.reply_to_message.from_user.id
-        target_display_name = message.reply_to_message.from_user.first_name
-        amount_raw = args[1].lower()
-        amount = sender_bal if amount_raw in ["вб", "все", "all"] else parse_sum(amount_raw)
+        target_name = message.reply_to_message.from_user.first_name
+        amount = sender_bal if args[1].lower() in ["вб", "все", "all"] else parse_sum(args[1])
     else:
         if len(args) < 3:
             await message.answer("❌ Формат: пер @юз сумма ИЛИ пер вб (в ответ)")
             conn.close()
             return
         target_username = args[1].replace("@", "").lower()
-        amount_raw = args[2].lower()
-        amount = sender_bal if amount_raw in ["вб", "все", "all"] else parse_sum(amount_raw)
-        
+        amount = sender_bal if args[2].lower() in ["вб", "все", "all"] else parse_sum(args[2])
         cursor.execute("SELECT user_id, custom_name, username FROM users WHERE LOWER(username) = ?", (target_username,))
         t_row = cursor.fetchone()
         if not t_row:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ Игрок не найден.")
             conn.close()
             return
-        target_id, target_display_name = t_row[0], t_row[1] or t_row[2]
+        target_id, target_name = t_row[0], t_row[1] or t_row[2]
 
     if not amount or amount <= 0 or sender_bal < amount:
         await message.answer("❌ Недостаточно средств.")
@@ -1023,7 +930,7 @@ async def transfer_money(message: Message):
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_id))
     conn.commit()
     conn.close()
-    await message.answer(f"✅ Успешно переведено {amount:,} ¢ пользователю {target_display_name}!".replace(",", " "))
+    await message.answer(f"✅ Успешно переведено {amount:,} ¢ игроку {target_name}!".replace(",", " "))
 
 # --- ФЛИПИНГ ---
 @router.message(F.text.casefold().in_(["💸 флипинг", "флипинг"]))
@@ -1040,31 +947,29 @@ async def text_flipping(message: Message):
     text = f"🏢 Рынок недвижимости:\n• {apt_name}\n💰 Цена: {price:,} ¢\n📊 У вас: {apt_count}/10".replace(",", " ")
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy_apt_{price}_{apt_name[:12]}"), InlineKeyboardButton(text="⏭ Другой", callback_data="refresh_flip")]])
     await message.answer(text, reply_markup=kb, parse_mode="MARKDOWN")
+
 @router.callback_query(F.data == "refresh_flip")
 async def refresh_flipping(callback: CallbackQuery):
-    price = random.randint(1_000_000, 100_000_000)
-    apt_name = random.choice(APARTMENT_NAMES)
-    user_id = callback.from_user.id
+    price, apt_name = random.randint(1_000_000, 100_000_000), random.choice(APARTMENT_NAMES)
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (callback.from_user.id,))
     apt_count = cursor.fetchone()[0]
     conn.close()
     text = f"🏢 Рынок недвижимости:\n• {apt_name}\n💰 Цена: {price:,} ¢\n📊 У вас: {apt_count}/10".replace(",", " ")
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy_apt_{price}_{apt_name[:12]}"), InlineKeyboardButton(text="⏭ Другой", callback_data="refresh_flip")]])
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="MARKDOWN")
+    try: await callback.message.edit_text(text, reply_markup=kb, parse_mode="MARKDOWN")
+    except: pass
 
 @router.callback_query(F.data.startswith("buy_apt_"))
 async def buy_apartment(callback: CallbackQuery):
     user_id = callback.from_user.id
     parts = callback.data.split("_")
-    price = int(parts[2])
-    apt_name = " ".join(parts[3:]) if len(parts) > 3 else "Квартира"
+    price, apt_name = int(parts[2]), " ".join(parts[3:]) if len(parts) > 3 else "Квартира"
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    bal = cursor.fetchone()[0]
-    if bal < price:
+    if cursor.fetchone()[0] < price:
         await callback.answer("❌ Недостаточно средств!", show_alert=True)
         conn.close()
         return
@@ -1082,26 +987,21 @@ async def buy_apartment(callback: CallbackQuery):
 @router.message(F.text.casefold().in_(["🏠 квартиры", "мои квартиры", "квартиры"]))
 async def text_my_apartments(message: Message):
     if not await check_ban_and_register(message): return
-    user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = ?", (message.from_user.id,))
     apartments = cursor.fetchall()
     conn.close()
     if not apartments:
         await message.answer("📦 У вас нет недвижимости.")
         return
     text = f"📦 Ваша недвижимость ({len(apartments)}/10):\n\n"
-    keyboard = []
-    for apt_id, name, price in apartments:
-        text += f"• {name} | Цена: {price:,} ¢\n"
-        keyboard.append([InlineKeyboardButton(text=f"💰 Продать «{name[:10]}»", callback_data=f"sell_apt_{apt_id}")])
+    keyboard = [[InlineKeyboardButton(text=f"💰 Продать «{name[:10]}»", callback_data=f"sell_apt_{apt_id}")] for apt_id, name, price in apartments]
     await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode="MARKDOWN")
 
 @router.callback_query(F.data.startswith("sell_apt_"))
 async def sell_apartment(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    apt_id = int(callback.data.split("_")[2])
+    user_id, apt_id = callback.from_user.id, int(callback.data.split("_")[2])
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT price FROM user_apartments WHERE id = ? AND user_id = ?", (apt_id, user_id))
@@ -1110,14 +1010,14 @@ async def sell_apartment(callback: CallbackQuery):
         await callback.answer("❌ Не найдено.", show_alert=True)
         conn.close()
         return
-    price = apt[0]
-    sell_price = int(price * random.uniform(0.95, 1.05))
+    sell_price = int(apt[0] * random.uniform(0.95, 1.05))
     cursor.execute("DELETE FROM user_apartments WHERE id = ?", (apt_id,))
-    cursor.execute("UPDATE users SET balance = balance + ?, invested = invested - ? WHERE user_id = ?", (sell_price, price, user_id))
+    cursor.execute("UPDATE users SET balance = balance + ?, invested = invested - ? WHERE user_id = ?", (sell_price, apt[0], user_id))
     conn.commit()
     conn.close()
     await callback.answer(f"💰 Продано за {sell_price:,} ¢!".replace(",", " "), show_alert=True)
-# --- БОНУС И РЕФЕРАЛЫ ---
+
+# --- БОНУС И РЕФЕРАЛЫ (С КНОПКОЙ ПОДЕЛИТЬСЯ) ---
 @router.message(F.text.casefold().in_(["🎁 бонус", "бонус"]))
 async def text_bonus(message: Message):
     if not await check_ban_and_register(message): return
@@ -1145,7 +1045,8 @@ async def text_referral(message: Message):
     ref_count = cursor.fetchone()[0] or 0
     conn.close()
     ref_link = f"https://t.me/Flippincv_bot?start=ref_{user_id}"
-    await message.answer(f"👥 Реферальная ссылка:\n{ref_link}\n\nЗаработано: {ref_count * 100000:,} ¢".replace(",", " "))
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📤 Поделиться", url=f"https://t.me/share/url?url={ref_link}&text=Заходи в крутого бота по флипингу и заработку!")]])
+    await message.answer(f"👥 Реферальная система:\n\n{ref_link}\n\nПриглашено: {ref_count}\nЗаработано: {ref_count * 100000:,} ¢".replace(",", " "), reply_markup=kb)
 
 # --- ПРОМОКОДЫ И КРЕАТОРЫ ---
 @router.message(F.text.regexp(r"(?i)^промокод\s+\w+$"))
@@ -1167,14 +1068,14 @@ async def activate_promo_code(message: Message):
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
     conn.commit()
     conn.close()
-    update_quest_progress(user_id, 3, 1)
+    update_quest_progress(user_id, 3, 1) # Квест промокод день 1
     await message.answer(f"🎉 Промокод активирован! Получено: +{reward:,} ¢".replace(",", " "))
 
 @router.message(F.text.casefold().in_(["🎬 креатор"]))
 async def text_creator_command(message: Message):
     if not await is_creator(message.from_user.id): return
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💵 Забрать ЗП (7.5 млн)", callback_data="creator_claim_salary")]])
-    await message.answer("🎬 Меню креатора:\n• Зарплата: 7.5 млн ¢ в сутки\n• Создание промокодов: промо [код] [сумма] [активации]", reply_markup=kb)
+    await message.answer("🎬 Меню креатора:\n• Зарплата: 7.5 млн ¢\n• Промокоды (от 1кк до 10кк): промо [код] [сумма] [активации]", reply_markup=kb)
 
 @router.callback_query(F.data == "creator_claim_salary")
 async def callback_creator_salary(callback: CallbackQuery):
@@ -1190,14 +1091,25 @@ async def callback_creator_salary(callback: CallbackQuery):
     cursor.execute("UPDATE users SET balance = balance + 7500000 WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
-    await callback.answer("💼 Зарплата получена: +7.5 млн ¢!", show_alert=True)
+    await callback.answer("💼 ЗП получена: +7.5 млн ¢!", show_alert=True)
 
 @router.message(F.text.regexp(r"(?i)^промо\s+\w+\s+.+\s+\d+$"))
 async def create_promo_universal(message: Message):
     user_id = message.from_user.id
-    if user_id not in ADMIN_IDS and not await is_creator(user_id): return
+    is_adm = user_id in ADMIN_IDS
+    creatr = await is_creator(user_id)
+    if not is_adm and not creatr: return
+
     args = message.text.split()
     code, reward, activations = args[1].upper(), parse_sum(args[2]), int(args[3])
+    if not reward or reward <= 0:
+        await message.answer("❌ Ошибка суммы.")
+        return
+
+    if not is_adm and creatr and not (1_000_000 <= reward <= 10_000_000):
+        await message.answer("❌ Креаторы могут ставить награду только от 1 000 000 до 10 000 000 ¢.")
+        return
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("INSERT OR REPLACE INTO promo_codes (code, reward, activations_left) VALUES (?, ?, ?)", (code, reward, activations))
@@ -1205,17 +1117,11 @@ async def create_promo_universal(message: Message):
     conn.close()
     await message.answer(f"✅ Промокод {code} создан на {reward:,} ¢!".replace(",", " "))
 
-# --- АДМИН ПАНЕЛЬ ---
+# --- ИСПРАВЛЕННАЯ АДМИН-ПАНЕЛЬ (КНОПКИ И СОСТОЯНИЯ) ---
 @router.message(F.text.casefold().in_(["админ", "/admin"]))
 async def cmd_admin_panel(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
-        [InlineKeyboardButton(text="🚫 Баны / Креаторы", callback_data="admin_ban_menu")]
-    ])
-    await message.answer("🛠 Панель администратора:", reply_markup=kb)
+    await message.answer("🛠 Панель администратора:", reply_markup=get_admin_keyboard())
 
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats_callback(callback: CallbackQuery):
@@ -1231,13 +1137,73 @@ async def admin_stats_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "admin_back")
 async def admin_back_callback(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
-        [InlineKeyboardButton(text="🚫 Баны / Креаторы", callback_data="admin_ban_menu")]
-    ])
-    await callback.message.edit_text("🛠 Панель администратора:", reply_markup=kb)
+    await callback.message.edit_text("🛠 Панель администратора:", reply_markup=get_admin_keyboard())
+
+@router.callback_query(F.data == "admin_broadcast")
+async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS: return
+    await callback.message.answer("📢 Введите текст для рассылки игрокам (или /cancel):")
+    await state.set_state(AdminStates.waiting_for_broadcast)
+    await callback.answer()
+
+@router.message(AdminStates.waiting_for_broadcast)
+async def admin_broadcast_process(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS: return
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отменено.")
+        return
+    text = message.text
+    await state.clear()
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users WHERE banned = 0")
+    users = cursor.fetchall()
+    conn.close()
+    success = 0
+    for u in users:
+        try:
+            await bot.send_message(u[0], text)
+            success += 1
+            await asyncio.sleep(0.05)
+        except: pass
+    await message.answer(f"✅ Рассылка завершена! Получили: {success} игроков.")
+
+@router.callback_query(F.data == "admin_balance")
+async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS: return
+    await callback.message.answer("💰 Введите юзернейм/ID и сумму (например: `@username 5кк` или `123456 1ккк`):")
+    await state.set_state(AdminStates.waiting_for_balance_change)
+    await callback.answer()
+
+@router.message(AdminStates.waiting_for_balance_change)
+async def admin_balance_process(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS: return
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отменено.")
+        return
+    try:
+        parts = message.text.split(maxsplit=1)
+        target_raw, amount = parts[0].strip(), parse_sum(parts[1])
+        conn = get_db()
+        cursor = conn.cursor()
+        uid = int(target_raw) if target_raw.isdigit() else None
+        if not uid:
+            cursor.execute("SELECT user_id FROM users WHERE username = ?", (target_raw.replace("@", ""),))
+            res = cursor.fetchone()
+            if res: uid = res[0]
+        if not uid:
+            await message.answer("❌ Игрок не найден.")
+            conn.close()
+            return
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, uid))
+        conn.commit()
+        conn.close()
+        await state.clear()
+        await message.answer(f"✅ Баланс игроку {target_raw} успешно изменен на {amount:,} ¢!".replace(",", " "))
+    except:
+        await message.answer("❌ Ошибка формата! Пример: `@user 1кк`")
 
 @router.callback_query(F.data == "admin_ban_menu")
 async def admin_ban_menu_callback(callback: CallbackQuery):
@@ -1255,7 +1221,7 @@ async def admin_ban_user(message: Message):
     cursor.execute("UPDATE users SET banned = 1 WHERE username = ?", (uname,))
     conn.commit()
     conn.close()
-    await message.answer(f"🚫 Пользователь @{uname} забанен.")
+    await message.answer(f"🚫 Игрок @{uname} забанен.")
 
 @router.message(F.text.lower().startswith("разбан "))
 async def admin_unban_user(message: Message):
@@ -1266,7 +1232,7 @@ async def admin_unban_user(message: Message):
     cursor.execute("UPDATE users SET banned = 0 WHERE username = ?", (uname,))
     conn.commit()
     conn.close()
-    await message.answer(f"✅ Пользователь @{uname} разбанен.")
+    await message.answer(f"✅ Игрок @{uname} разбанен.")
 
 @router.message(F.text.casefold().regexp(r"^выдавать\s+креатора\s+"))
 async def admin_give_creator(message: Message):
@@ -1277,7 +1243,8 @@ async def admin_give_creator(message: Message):
     cursor.execute("UPDATE users SET is_creator = 1 WHERE username = ?", (uname,))
     conn.commit()
     conn.close()
-    await message.answer(f"🎬 Пользователь @{uname} назначен креатором.")
+    await message.answer(f"🎬 @{uname} назначен креатором.")
+
 @router.message(F.text.casefold().regexp(r"^забрать\s+креатора\s+"))
 async def admin_take_creator(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
@@ -1287,7 +1254,7 @@ async def admin_take_creator(message: Message):
     cursor.execute("UPDATE users SET is_creator = 0 WHERE username = ?", (uname,))
     conn.commit()
     conn.close()
-    await message.answer(f"❌ У @{uname} забран статус креатора.")
+    await message.answer(f"❌ У @{uname} забран креатор.")
 
 @router.message(F.text.casefold().startswith("обнулить "))
 async def admin_reset_user(message: Message):
