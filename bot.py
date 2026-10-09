@@ -1905,6 +1905,74 @@ async def api_sell_item(request):
 
     return web.json_response({"success": True, "new_balance": new_bal})
 
+async def api_sell_item(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    item_id = data.get("item_id")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT price FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (item_id, user_id))
+    item = cursor.fetchone()
+    if not item:
+        conn.close()
+        return web.json_response({"success": False})
+
+    price = item[0]
+    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (item_id,))
+    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    new_bal = cursor.fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    return web.json_response({"success": True, "new_balance": new_bal})
+
+# --- НОВАЯ ФУНКЦИЯ ДЛЯ КАЗИНО (Шаг 1) ---
+async def api_casino_spin(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    bet = int(data.get("bet", 0))
+
+    if bet <= 0:
+        return web.json_response({"error": "Неверная ставка"}, status=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row or row[0] < bet:
+        conn.close()
+        return web.json_response({"error": "Недостаточно средств"}, status=400)
+
+    balance = row[0] - bet
+    cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+
+    rand_val = random.random()
+    if rand_val < 0.15:  # 15% шанс на выигрыш
+        if random.random() < 0.2:  # Редкие 777
+            symbols = ["7️⃣", "7️⃣", "7️⃣"]
+            payout = bet * 3
+        else:
+            sym = random.choice([["🍋", "🍋", "🍋"], ["🍇", "🍇", "🍇"], ["🎁", "🎁", "🎁"]])
+            symbols = sym
+            payout = bet * 2
+        balance += payout
+        won = True
+    else:
+        all_syms = ["7️⃣", "🍋", "🍇", "🎁"]
+        symbols = [random.choice(all_syms), random.choice(all_syms), random.choice(all_syms)]
+        if symbols[0] == symbols[1] and symbols[1] == symbols[2]:
+            symbols[2] = "🍋" if symbols[0] != "🍋" else "🍇"
+        payout = 0
+        won = False
+
+    cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+    conn.commit()
+    conn.close()
+
+    return web.json_response({"new_balance": balance, "symbols": symbols, "won": won, "payout": payout})
+
 async def web_server():
     app = web.Application()
     app.router.add_get("/", index_handler)
@@ -1912,6 +1980,7 @@ async def web_server():
     app.router.add_get("/api/get_inventory", api_get_inventory)
     app.router.add_post("/api/open_case", api_open_case)
     app.router.add_post("/api/sell_item", api_sell_item)
+    app.router.add_post("/api/casino_spin", api_casino_spin)
     
     runner = web.AppRunner(app)
     await runner.setup()
