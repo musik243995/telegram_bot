@@ -3,45 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кейсы — Симулятор</title>
+    <title>Игры и Кейсы</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --bg: #0f1015; --card: #181b24; --accent: #3b82f6; --text: #ffffff; --muted: #94a3b8; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
         header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 12px 16px; border-radius: 12px; margin-bottom: 15px; }
         .balance { font-weight: bold; color: #22c55e; font-size: 1.1rem; }
+        
+        /* Верхние вкладки */
         .tabs { display: flex; gap: 10px; margin-bottom: 15px; }
-        .tab-btn { flex: 1; padding: 10px; background: var(--card); border: none; color: var(--text); border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .tab-btn { flex: 1; padding: 12px; background: var(--card); border: none; color: var(--text); border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1rem; }
         .tab-btn.active { background: var(--accent); }
+        
         .view-section { display: none; }
         .view-section.active { display: block; }
+        
+        /* Кейсы */
         .cases-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
         .case-card { background: var(--card); border-radius: 12px; padding: 15px; border: 1px solid #262b36; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-        .case-card:active { transform: scale(0.98); }
         .case-info h3 { margin: 0 0 5px 0; font-size: 1.1rem; }
         .case-info p { margin: 0; color: #f59e0b; font-weight: bold; font-size: 0.9rem; }
         .enter-arrow { font-size: 1.2rem; color: var(--muted); }
 
-        /* Шапка конкретного кейса с кнопкой назад */
         .case-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
         .back-btn { background: var(--card); border: 1px solid #262b36; color: var(--text); padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; }
-        .back-btn:active { background: #262b36; }
-
+        
         .drop-list { font-size: 0.85rem; color: var(--muted); margin: 15px 0; line-height: 1.5; background: var(--card); padding: 12px; border-radius: 10px; border: 1px solid #262b36; }
         .open-btn { width: 100%; padding: 12px; background: #22c55e; border: none; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; }
-        .open-btn:active { transform: scale(0.98); }
 
-        /* Рулетка */
         .roulette-container { position: relative; width: 100%; height: 120px; background: #12141c; border-radius: 12px; overflow: hidden; margin: 15px 0; display: flex; align-items: center; border: 2px solid #262b36; }
         .roulette-pointer { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: #ef4444; z-index: 10; transform: translateX(-50%); }
         .roulette-track { display: flex; gap: 10px; position: absolute; left: 0; transition: transform 4s cubic-bezier(0.15, 0.85, 0.35, 1); }
         .roulette-item { min-width: 90px; height: 90px; background: #1e222d; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #333947; }
         .roulette-item span { font-size: 0.7rem; margin-top: 5px; color: var(--muted); text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 80px; }
 
+        /* Игровой автомат (Казино) */
+        .slot-machine-wrapper { display: flex; justify-content: center; align-items: center; gap: 15px; margin: 30px 0; }
+        .slot-machine { background: linear-gradient(135deg, #1e222d, #12141c); border: 4px solid #f59e0b; border-radius: 20px; padding: 25px; text-align: center; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .slots-display { display: flex; justify-content: center; gap: 10px; background: #0b0c10; padding: 15px; border-radius: 12px; border: 2px solid #333947; margin-bottom: 20px; }
+        .slot-reel { font-size: 2.5rem; width: 55px; height: 70px; background: #181b24; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #262b36; }
+        
+        /* Рычаг казино */
+        .slot-lever { display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none; }
+        .lever-stick { width: 10px; height: 90px; background: #94a3b8; border-radius: 5px; position: relative; transition: transform 0.2s; }
+        .lever-knob { width: 30px; height: 30px; background: #ef4444; border-radius: 50%; position: absolute; top: -15px; left: -10px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        .slot-lever.pulled .lever-stick { transform: rotateX(45deg); }
+
+        .slot-input { width: 100%; padding: 12px; background: #0b0c10; border: 1px solid #333947; color: white; border-radius: 8px; font-size: 1rem; text-align: center; margin-bottom: 10px; box-sizing: border-box; }
+        .spin-btn { width: 100%; padding: 12px; background: #f59e0b; border: none; color: #000; font-weight: bold; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
+        .spin-btn:active { transform: scale(0.98); }
+
         /* Инвентарь */
         .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
         .inv-item { background: var(--card); border-radius: 10px; padding: 12px; text-align: center; border: 1px solid #262b36; cursor: pointer; }
-        .inv-item:active { transform: scale(0.98); }
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
         .modal-content { background: var(--card); padding: 20px; border-radius: 14px; width: 85%; max-width: 320px; text-align: center; border: 1px solid #333947; }
         .modal-btns { display: flex; gap: 10px; margin-top: 15px; }
@@ -53,40 +68,63 @@
 <body>
 
     <header>
-        <div>📦 Кейсы & Рулетка</div>
+        <div>🎲 Игровой Центр</div>
         <div class="balance" id="user-balance">0 ¢</div>
     </header>
 
+    <!-- ВХОДНЫЕ ВКЛАДКИ СВЕРХУ -->
     <div class="tabs">
-        <button class="tab-btn active" id="main-tab-btn" onclick="switchMainTab('cases')">🎁 Кейсы</button>
-        <button class="tab-btn" id="inv-tab-btn" onclick="switchMainTab('inventory')">🎒 Инвентарь</button>
+        <button class="tab-btn active" id="tab-cases-btn" onclick="switchTopTab('cases')">🎁 Кейсы</button>
+        <button class="tab-btn" id="tab-casino-btn" onclick="switchTopTab('casino')">🎰 Казино</button>
+        <button class="tab-btn" id="tab-inv-btn" onclick="switchTopTab('inventory')">🎒 Инвентарь</button>
     </div>
 
-    <!-- ГЛАВНАЯ СТРАНИЦА СО СПИСКОМ КЕЙСОВ -->
-    <div id="view-cases-list" class="view-section active">
-        <div class="cases-grid" id="cases-grid"></div>
-    </div>
-
-    <!-- СТРАНИЦА КОНКРЕТНОГО КЕЙСА (РУЛЕТКА) -->
-    <div id="view-case-room" class="view-section">
-        <div class="case-header">
-            <button class="back-btn" onclick="goBackToList()">❮</button>
-            <h2 id="room-case-title" style="margin: 0; font-size: 1.2rem;">Кейс</h2>
+    <!-- РАЗДЕЛ КЕЙСОВ -->
+    <div id="section-cases" class="view-section active">
+        <div id="view-cases-list" class="view-section active">
+            <div class="cases-grid" id="cases-grid"></div>
         </div>
 
-        <div class="roulette-container">
-            <div class="roulette-pointer"></div>
-            <div class="roulette-track" id="roulette-track"></div>
+        <div id="view-case-room" class="view-section">
+            <div class="case-header">
+                <button class="back-btn" onclick="goBackToList()">❮</button>
+                <h2 id="room-case-title" style="margin: 0; font-size: 1.2rem;">Кейс</h2>
+            </div>
+            <div class="roulette-container">
+                <div class="roulette-pointer"></div>
+                <div class="roulette-track" id="roulette-track"></div>
+            </div>
+            <div id="win-notification" style="text-align: center; font-weight: bold; color: #f59e0b; margin-bottom: 10px; min-height: 24px;"></div>
+            <button class="open-btn" onclick="openCurrentCase()">Открыть кейс</button>
+            <div class="drop-list" id="room-drop-list"></div>
         </div>
-        <div id="win-notification" style="text-align: center; font-weight: bold; color: #f59e0b; margin-bottom: 10px; min-height: 24px;"></div>
-
-        <button class="open-btn" id="room-open-btn" onclick="openCurrentCase()">Открыть кейс</button>
-
-        <div class="drop-list" id="room-drop-list"></div>
     </div>
 
-    <!-- ВКЛАДКА ИНВЕНТАРЯ -->
-    <div id="view-inventory" class="view-section">
+    <!-- РАЗДЕЛ КАЗИНО (СЛОТЫ С РЫЧАГОМ) -->
+    <div id="section-casino" class="view-section">
+        <div style="text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 5px;">Комбинации: 🍋🍋🍋, 🍇🍇🍇, 🎁🎁🎁 (x2) | 7️⃣7️⃣7️⃣ (x3)</div>
+        
+        <div class="slot-machine-wrapper">
+            <div class="slot-machine">
+                <div class="slots-display">
+                    <div class="slot-reel" id="reel-1">7️⃣</div>
+                    <div class="slot-reel" id="reel-2">🍋</div>
+                    <div class="slot-reel" id="reel-3">🍇</div>
+                </div>
+                <input type="number" id="slot-bet-input" class="slot-input" placeholder="Сумма ставки" value="100000">
+                <button class="spin-btn" onclick="spinSlotMachine()">КРУТИТЬ</button>
+            </div>
+
+            <!-- Рычаг для красоты -->
+            <div class="slot-lever" id="slot-lever" onclick="spinSlotMachine()">
+                <div class="lever-stick"><div class="lever-knob"></div></div>
+            </div>
+        </div>
+        <div id="slot-notification" style="text-align: center; font-weight: bold; color: #f59e0b; margin-top: 10px; min-height: 24px;"></div>
+    </div>
+
+    <!-- РАЗДЕЛ ИНВЕНТАРЯ -->
+    <div id="section-inventory" class="view-section">
         <div class="inventory-grid" id="inventory-grid"></div>
     </div>
 
@@ -170,19 +208,25 @@
             `).join('');
         }
 
-        function switchMainTab(tab) {
-            document.getElementById('main-tab-btn').classList.remove('active');
-            document.getElementById('inv-tab-btn').classList.remove('active');
-            document.getElementById('view-cases-list').classList.remove('active');
-            document.getElementById('view-case-room').classList.remove('active');
-            document.getElementById('view-inventory').classList.remove('active');
+        function switchTopTab(tab) {
+            document.getElementById('tab-cases-btn').classList.remove('active');
+            document.getElementById('tab-casino-btn').classList.remove('active');
+            document.getElementById('tab-inv-btn').classList.remove('active');
+
+            document.getElementById('section-cases').classList.remove('active');
+            document.getElementById('section-casino').classList.remove('active');
+            document.getElementById('section-inventory').classList.remove('active');
 
             if(tab === 'cases') {
-                document.getElementById('main-tab-btn').classList.add('active');
-                document.getElementById('view-cases-list').classList.add('active');
+                document.getElementById('tab-cases-btn').classList.add('active');
+                document.getElementById('section-cases').classList.add('active');
+                goBackToList();
+            } else if(tab === 'casino') {
+                document.getElementById('tab-casino-btn').classList.add('active');
+                document.getElementById('section-casino').classList.add('active');
             } else {
-                document.getElementById('inv-tab-btn').classList.add('active');
-                document.getElementById('view-inventory').classList.add('active');
+                document.getElementById('tab-inv-btn').classList.add('active');
+                document.getElementById('section-inventory').classList.add('active');
                 loadInventory();
             }
         }
@@ -195,9 +239,7 @@
             document.getElementById('win-notification').innerText = '';
 
             document.getElementById('view-cases-list').classList.remove('active');
-            document.getElementById('view-inventory').classList.remove('active');
             document.getElementById('view-case-room').classList.add('active');
-
             createRouletteDummy(c);
         }
 
@@ -232,7 +274,7 @@
             if(!activeCaseId) return;
             const caseItem = casesData.find(c => c.id === activeCaseId);
             if(userBalance < caseItem.price) {
-                alert('❌ Недостаточно средств на балансе!');
+                alert('❌ Недостаточно средств!');
                 return;
             }
 
@@ -271,6 +313,54 @@
             setTimeout(() => {
                 document.getElementById('win-notification').innerText = `🎉 Вы выиграли: ${wonItem.emoji} ${wonItem.name} (${wonItem.price.toLocaleString()} ¢)!`;
             }, 4100);
+        }
+
+        // Логика слотов казино с рычагом
+        async function spinSlotMachine() {
+            const betInput = document.getElementById('slot-bet-input');
+            const bet = parseInt(betInput.value);
+            if(!bet || bet <= 0) { alert('❌ Введите корректную ставку!'); return; }
+            if(userBalance < bet) { alert('❌ Недостаточно средств!'); return; }
+
+            // Анимация рычага
+            const lever = document.getElementById('slot-lever');
+            lever.classList.add('pulled');
+            setTimeout(() => lever.classList.remove('pulled'), 300);
+
+            document.getElementById('slot-notification').innerText = '🎰 Крутим барабаны...';
+
+            // Быстрая анимация символов
+            const symbolsList = ["7️⃣", "🍋", "🍇", "🎁"];
+            const interval = setInterval(() => {
+                document.getElementById('reel-1').innerText = symbolsList[Math.floor(Math.random()*symbolsList.length)];
+                document.getElementById('reel-2').innerText = symbolsList[Math.floor(Math.random()*symbolsList.length)];
+                document.getElementById('reel-3').innerText = symbolsList[Math.floor(Math.random()*symbolsList.length)];
+            }, 80);
+
+            const res = await fetch('/api/casino_spin', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId, bet: bet})
+            });
+            const data = await res.json();
+
+            setTimeout(() => {
+                clearInterval(interval);
+                if(data.error) { alert(data.error); document.getElementById('slot-notification').innerText = ''; return; }
+
+                userBalance = data.new_balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                
+                document.getElementById('reel-1').innerText = data.symbols[0];
+                document.getElementById('reel-2').innerText = data.symbols[1];
+                document.getElementById('reel-3').innerText = data.symbols[2];
+
+                if(data.won) {
+                    document.getElementById('slot-notification').innerText = `🎉 Победа! Выигрыш: +${data.payout.toLocaleString()} ¢`;
+                } else {
+                    document.getElementById('slot-notification').innerText = `😢 Проигрыш! Потеряно: -${bet.toLocaleString()} ¢`;
+                }
+            }, 1500);
         }
 
         async function loadInventory() {
