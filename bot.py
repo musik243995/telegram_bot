@@ -180,6 +180,15 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_inventory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            item_name TEXT,
+            price INTEGER,
+            sold INTEGER DEFAULT 0
+        )
+    """)
     conn.commit()
     # Миграция для уже существующей базы: добавляем счётчик украденных вещей.
     try:
@@ -1796,13 +1805,114 @@ async def admin_reset_user(message: Message):
     conn.close()
     await message.answer(f"🔄 Игрок @{uname} обнулен.")
 
-# --- СЕРВЕР ---
-async def handle(request):
-    return web.Response(text="Бот работает 24/7! 🚀")
+# --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ ---
+async def index_handler(request):
+    return web.FileResponse("index.html")
+
+async def api_get_data(request):
+    user_id = int(request.query.get("user_id", 0))
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    balance = row[0] if row else 10000
+    conn.close()
+    return web.json_response({"balance": balance})
+
+async def api_get_inventory(request):
+    user_id = int(request.query.get("user_id", 0))
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, item_name, price FROM user_inventory WHERE user_id = ? AND sold = 0", (user_id,))
+    items = [{"id": r[0], "name": r[1], "price": r[2]} for r in cursor.fetchall()]
+    conn.close()
+    return web.json_response(items)
+
+async def api_open_case(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    case_id = data.get("case_id")
+
+    cases_config = {
+        1: {"price": 5000000, "items": [
+            ("Ключи от однушки", 500000, 45), ("Ключи от двушки", 2500000, 35),
+            ("Ключи от трешки", 7500000, 15), ("Ключи от 4комнатной", 10000000, 5)
+        ]},
+        2: {"price": 10000000, "items": [
+            ("Ключи от маленького домика", 3500000, 45), ("Средний домик", 6500000, 35),
+            ("Большой дом", 12500000, 15), ("Пин Хаус", 20000000, 5)
+        ]},
+        3: {"price": 15000000, "items": [
+            ("Жигуль", 5000000, 45), ("Камри", 10000000, 35),
+            ("БМВ", 20000000, 15), ("БУГАТИ", 25000000, 5)
+        ]},
+        4: {"price": 25000000, "items": [
+            ("Кп по кв", 15000000, 45), ("Кп по мш", 20000000, 35),
+            ("Кп по дм", 30000000, 15), ("Кп по флт", 40000000, 5)
+        ]}
+    }
+
+    if case_id not in cases_config:
+        return web.json_response({"error": "Кейс не найден"}, status=400)
+
+    case_info = cases_config[case_id]
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row or row[0] < case_info["price"]:
+        conn.close()
+        return web.json_response({"error": "Недостаточно средств"}, status=400)
+
+    new_balance = row[0] - case_info["price"]
+    cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
+
+    rand_val = random.randint(1, 100)
+    current_sum = 0
+    won_item_name, won_item_price = case_info["items"][0][0], case_info["items"][0][1]
+    for name, price, chance in case_info["items"]:
+        current_sum += chance
+        if rand_val <= current_sum:
+            won_item_name, won_item_price = name, price
+            break
+
+    cursor.execute("INSERT INTO user_inventory (user_id, item_name, price) VALUES (?, ?, ?)", (user_id, won_item_name, won_item_price))
+    conn.commit()
+    conn.close()
+
+    return web.json_response({"new_balance": new_balance, "item_name": won_item_name, "item_price": won_item_price})
+
+async def api_sell_item(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    item_id = data.get("item_id")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT price FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (item_id, user_id))
+    item = cursor.fetchone()
+    if not item:
+        conn.close()
+        return web.json_response({"success": False})
+
+    price = item[0]
+    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (item_id,))
+    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    new_bal = cursor.fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    return web.json_response({"success": True, "new_balance": new_bal})
 
 async def web_server():
     app = web.Application()
-    app.router.add_get("/", handle)
+    app.router.add_get("/", index_handler)
+    app.router.add_get("/api/get_data", api_get_data)
+    app.router.add_get("/api/get_inventory", api_get_inventory)
+    app.router.add_post("/api/open_case", api_open_case)
+    app.router.add_post("/api/sell_item", api_sell_item)
+    
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
@@ -1812,6 +1922,15 @@ async def web_server():
 async def main():
     init_db()
     await web_server()
+    
+    from aiogram.types import MenuButtonWebApp, WebAppInfo
+    await bot.set_chat_menu_button(
+        menu_button=MenuButtonWebApp(
+            text="🎰 Кейсы",
+            web_app=WebAppInfo(url="https://telegram-bot-tg9i.onrender.com")  # ЗАМЕНИТЕ НА ССЫЛКУ СВОЕГО СЕРВЕРА
+        )
+    )
+    
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кейсы — Симулятор</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root { --bg: #0f1015; --card: #181b24; --accent: #3b82f6; --text: #ffffff; --muted: #94a3b8; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 12px 16px; border-radius: 12px; margin-bottom: 15px; }
+        .balance { font-weight: bold; color: #22c55e; font-size: 1.1rem; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 10px; background: var(--card); border: none; color: var(--text); border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .tab-btn.active { background: var(--accent); }
+        .section { display: none; }
+        .section.active { display: block; }
+        .cases-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        .case-card { background: var(--card); border-radius: 12px; padding: 15px; border: 1px solid #262b36; }
+        .case-title { font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; }
+        .case-price { color: #f59e0b; margin-bottom: 10px; font-weight: bold; }
+        .drop-list { font-size: 0.85rem; color: var(--muted); margin-bottom: 12px; line-height: 1.4; }
+        .open-btn { width: 100%; padding: 10px; background: #22c55e; border: none; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        
+        /* Рулетка */
+        .roulette-container { position: relative; width: 100%; height: 120px; background: #12141c; border-radius: 12px; overflow: hidden; margin: 15px 0; display: flex; align-items: center; border: 2px solid #262b36; }
+        .roulette-pointer { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: #ef4444; z-index: 10; transform: translateX(-50%); }
+        .roulette-track { display: flex; gap: 10px; position: absolute; left: 0; transition: transform 4s cubic-bezier(0.15, 0.85, 0.35, 1); }
+        .roulette-item { min-width: 90px; height: 90px; background: #1e222d; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #333947; }
+        .roulette-item span { font-size: 0.7rem; margin-top: 5px; color: var(--muted); text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 80px; }
+
+        /* Инвентарь */
+        .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .inv-item { background: var(--card); border-radius: 10px; padding: 12px; text-align: center; border: 1px solid #262b36; cursor: pointer; }
+        .inv-item:active { transform: scale(0.98); }
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: var(--card); padding: 20px; border-radius: 14px; width: 85%; max-width: 320px; text-align: center; border: 1px solid #333947; }
+        .modal-btns { display: flex; gap: 10px; margin-top: 15px; }
+        .modal-btns button { flex: 1; padding: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+        .btn-yes { background: #ef4444; color: white; }
+        .btn-no { background: #333947; color: white; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>📦 Кейсы & Рулетка</div>
+        <div class="balance" id="user-balance">0 ¢</div>
+    </header>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('cases')">🎁 Кейсы</button>
+        <button class="tab-btn" onclick="switchTab('inventory')">🎒 Инвентарь</button>
+    </div>
+
+    <!-- ВКЛАДКА КЕЙСОВ -->
+    <div id="tab-cases" class="section active">
+        <div class="roulette-container">
+            <div class="roulette-pointer"></div>
+            <div class="roulette-track" id="roulette-track"></div>
+        </div>
+        <div id="win-notification" style="text-align: center; font-weight: bold; color: #f59e0b; margin-bottom: 10px; min-height: 24px;"></div>
+
+        <div class="cases-grid" id="cases-grid"></div>
+    </div>
+
+    <!-- ВКЛАДКА ИНВЕНТАРЯ -->
+    <div id="tab-inventory" class="section">
+        <div class="inventory-grid" id="inventory-grid"></div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ПРОДАЖИ -->
+    <div class="modal" id="sell-modal">
+        <div class="modal-content">
+            <h3>Продажа предмета</h3>
+            <p id="modal-item-name" style="margin: 10px 0; color: var(--muted);"></p>
+            <p style="font-weight: bold; color: #22c55e;" id="modal-item-price"></p>
+            <p>Вы точно хотите продать этот предмет?</p>
+            <div class="modal-btns">
+                <button class="btn-yes" onclick="confirmSell()">Да</button>
+                <button class="btn-no" onclick="closeModal()">Нет</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        const userId = tg.initDataUnsafe?.user?.id || 1222239198; // Тестовый ID, если запуск не из Telegram
+
+        let userBalance = 0;
+        let inventory = [];
+        let selectedItemForSell = null;
+
+        const casesData = [
+            {
+                id: 1, name: "🏠 Квартиры", price: 5000000,
+                items: [
+                    { name: "Ключи от однушки", price: 500000, chance: 45, emoji: "🔑" },
+                    { name: "Ключи от двушки", price: 2500000, chance: 35, emoji: "🚪" },
+                    { name: "Ключи от трешки", price: 7500000, chance: 15, emoji: "🏢" },
+                    { name: "Ключи от 4комнатной", price: 10000000, chance: 5, emoji: "🏰" }
+                ],
+                dropListText: "🔑 Однушка (500к - 45%)<br>🚪 Двушка (2.5м - 35%)<br>🏢 Трешка (7.5м - 15%)<br>🏰 4к кв (10м - 5%)"
+            },
+            {
+                id: 2, name: "🏡 Дома", price: 10000000,
+                items: [
+                    { name: "Ключи от маленького домика", price: 3500000, chance: 45, emoji: "🛖" },
+                    { name: "Средний домик", price: 6500000, chance: 35, emoji: "🏠" },
+                    { name: "Большой дом", price: 12500000, chance: 15, emoji: "🏡" },
+                    { name: "Пент Хаус", price: 20000000, chance: 5, emoji: "🌇" }
+                ],
+                dropListText: "🛖 Маленький дом (3.5м - 45%)<br>🏠 Средний дом (6.5м - 35%)<br>🏡 Большой дом (12.5м - 15%)<br>🌇 Пентхаус (20м - 5%)"
+            },
+            {
+                id: 3, name: "🚗 Машины", price: 15000000,
+                items: [
+                    { name: "Жигуль", price: 5000000, chance: 45, emoji: "🚙" },
+                    { name: "Камри", price: 10000000, chance: 35, emoji: "🚗" },
+                    { name: "БМВ", price: 20000000, chance: 15, emoji: "🏎️" },
+                    { name: "БУГАТИ", price: 25000000, chance: 5, emoji: "🚀" }
+                ],
+                dropListText: "🚙 Жигуль (5м - 45%)<br>🚗 Камри (10м - 35%)<br>🏎️ БМВ (20м - 15%)<br>🚀 Бугатти (25м - 5%)"
+            },
+            {
+                id: 4, name: "🏢 Компании", price: 25000000,
+                items: [
+                    { name: "Кп по кв", price: 15000000, chance: 45, emoji: "📊" },
+                    { name: "Кп по мш", price: 20000000, chance: 35, emoji: "📈" },
+                    { name: "Кп по дм", price: 30000000, chance: 15, emoji: "🏢" },
+                    { name: "Кп по флт", price: 40000000, chance: 5, emoji: "💎" }
+                ],
+                dropListText: "📊 Кп по кв (15м - 45%)<br>📈 Кп по мш (20м - 35%)<br>🏢 Кп по дм (30м - 15%)<br>💎 Кп по флт (40м - 5%)"
+            }
+        ];
+
+        function initCases() {
+            const grid = document.getElementById('cases-grid');
+            grid.innerHTML = casesData.map(c => `
+                <div class="case-card">
+                    <div class="case-title">${c.name}</div>
+                    <div class="case-price">Стоимость: ${c.price.toLocaleString()} ¢</div>
+                    <div class="drop-list">${c.dropListText}</div>
+                    <button class="open-btn" onclick="openCase(${c.id})">Открыть кейс</button>
+                </div>
+            `).join('');
+            createRouletteDummy();
+        }
+
+        function createRouletteDummy() {
+            const track = document.getElementById('roulette-track');
+            let html = '';
+            for(let i=0; i<30; i++) {
+                html += `<div class="roulette-item">❓<span>Приз</span></div>`;
+            }
+            track.innerHTML = html;
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            if(tab === 'cases') {
+                document.querySelector('.tabs button:nth-child(1)').classList.add('active');
+                document.getElementById('tab-cases').classList.add('active');
+            } else {
+                document.querySelector('.tabs button:nth-child(2)').classList.add('active');
+                document.getElementById('tab-inventory').classList.add('active');
+                loadInventory();
+            }
+        }
+
+        async function fetchData() {
+            try {
+                const res = await fetch(`/api/get_data?user_id=${userId}`);
+                const data = await res.json();
+                userBalance = data.balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+            } catch(e) { console.error(e); }
+        }
+
+        async function openCase(caseId) {
+            const caseItem = casesData.find(c => c.id === caseId);
+            if(userBalance < caseItem.price) {
+                alert('❌ Недостаточно средств на балансе!');
+                return;
+            }
+
+            // Запрос на сервер для списания и выигрыша
+            const res = await fetch('/api/open_case', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId, case_id: caseId})
+            });
+            const data = await res.json();
+            if(data.error) { alert(data.error); return; }
+
+            userBalance = data.new_balance;
+            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+
+            // Крутим рулетку
+            const track = document.getElementById('roulette-track');
+            const wonItem = caseItem.items.find(i => i.name === data.item_name) || caseItem.items[0];
+            
+            let itemsHtml = '';
+            let winningIndex = 25; // Выигрышный элемент ближе к концу
+            for(let i=0; i<35; i++) {
+                let item = (i === winningIndex) ? wonItem : caseItem.items[Math.floor(Math.random() * caseItem.items.length)];
+                itemsHtml += `<div class="roulette-item">${item.emoji}<span>${item.name}</span></div>`;
+            }
+            track.innerHTML = itemsHtml;
+            track.style.transition = 'none';
+            track.style.transform = 'translateX(0px)';
+
+            document.getElementById('win-notification').innerText = '🌀 Крутим рулетку...';
+
+            setTimeout(() => {
+                track.style.transition = 'transform 4s cubic-bezier(0.15, 0.85, 0.35, 1)';
+                // Центрируем выигрышную карточку под красным маркером (ширина карточки 90px + gap 10px = 100px)
+                const offset = (winningIndex * 100) - 120 + Math.random()*40;
+                track.style.transform = `translateX(-${offset}px)`;
+            }, 50);
+
+            setTimeout(() => {
+                document.getElementById('win-notification').innerText = `🎉 Вы выиграли: ${wonItem.emoji} ${wonItem.name} (${wonItem.price.toLocaleString()} ¢)!`;
+            }, 4100);
+        }
+
+        async function loadInventory() {
+            const res = await fetch(`/api/get_inventory?user_id=${userId}`);
+            inventory = await res.json();
+            const grid = document.getElementById('inventory-grid');
+            if(inventory.length === 0) {
+                grid.innerHTML = '<div style="grid-column: span 2; text-align: center; color: var(--muted); padding: 20px;">Инвентарь пуст</div>';
+                return;
+            }
+            grid.innerHTML = inventory.map((item, idx) => `
+                <div class="inv-item" onclick="openSellModal(${idx})">
+                    <div style="font-size: 2rem;">🎁</div>
+                    <div style="font-weight: bold; font-size: 0.9rem; margin: 5px 0;">${item.name}</div>
+                    <div style="color: #22c55e; font-size: 0.8rem;">${item.price.toLocaleString()} ¢</div>
+                </div>
+            `).join('');
+        }
+
+        function openSellModal(index) {
+            selectedItemForSell = inventory[index];
+            document.getElementById('modal-item-name').innerText = selectedItemForSell.name;
+            document.getElementById('modal-item-price').innerText = `Цена продажи: ${selectedItemForSell.price.toLocaleString()} ¢`;
+            document.getElementById('sell-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('sell-modal').style.display = 'none';
+            selectedItemForSell = null;
+        }
+
+        async function confirmSell() {
+            if(!selectedItemForSell) return;
+            const res = await fetch('/api/sell_item', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId, item_id: selectedItemForSell.id})
+            });
+            const data = await res.json();
+            if(data.success) {
+                userBalance = data.new_balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                closeModal();
+                loadInventory();
+            } else {
+                alert('Ошибка при продаже');
+            }
+        }
+
+        fetchData();
+        initCases();
+    </script>
+</body>
+</html>
