@@ -337,30 +337,43 @@
                 document.getElementById('reel-3').innerText = symbolsList[Math.floor(Math.random()*symbolsList.length)];
             }, 80);
 
-            const res = await fetch('/api/casino_spin', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, bet: bet})
-            });
-            const data = await res.json();
+            try {
+                const res = await fetch('/api/casino_spin', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, bet: bet})
+                });
+                const data = await res.json();
 
-            setTimeout(() => {
+                // Останавливаем барабаны через 1.5 секунды в любом случае
+                setTimeout(() => {
+                    clearInterval(interval);
+                    
+                    if(data.error) { 
+                        alert(data.error); 
+                        document.getElementById('slot-notification').innerText = ''; 
+                        return; 
+                    }
+
+                    userBalance = data.new_balance;
+                    document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+
+                    document.getElementById('reel-1').innerText = data.symbols[0];
+                    document.getElementById('reel-2').innerText = data.symbols[1];
+                    document.getElementById('reel-3').innerText = data.symbols[2];
+
+                    if(data.won) {
+                        document.getElementById('slot-notification').innerText = `🎉 Победа! Выигрыш: +${data.payout.toLocaleString()} ¢`;
+                    } else {
+                        document.getElementById('slot-notification').innerText = `😢 Проигрыш! Потеряно: -${bet.toLocaleString()} ¢`;
+                    }
+                }, 1500);
+
+            } catch (err) {
                 clearInterval(interval);
-                if(data.error) { alert(data.error); document.getElementById('slot-notification').innerText = ''; return; }
-
-                userBalance = data.new_balance;
-                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-                
-                document.getElementById('reel-1').innerText = data.symbols[0];
-                document.getElementById('reel-2').innerText = data.symbols[1];
-                document.getElementById('reel-3').innerText = data.symbols[2];
-
-                if(data.won) {
-                    document.getElementById('slot-notification').innerText = `🎉 Победа! Выигрыш: +${data.payout.toLocaleString()} ¢`;
-                } else {
-                    document.getElementById('slot-notification').innerText = `😢 Проигрыш! Потеряно: -${bet.toLocaleString()} ¢`;
-                }
-            }, 1500);
+                document.getElementById('slot-notification').innerText = '❌ Ошибка соединения с сервером';
+                console.error(err);
+            }
         }
 
         async function loadInventory() {
