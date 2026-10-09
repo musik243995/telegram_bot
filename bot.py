@@ -58,7 +58,7 @@ game_cooldowns = {}
 gang_rob_cooldowns = {}
 BIG_TRANSFER_THRESHOLD = 10_000_000
 
-ADMIN_IDS = [1222239198, 8390540110]
+ADMIN_IDS = [1222239198, 8390540110, 8565202662, 7145763697]
 RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
 
 # Названия квартир для флипинга
@@ -1952,11 +1952,11 @@ async def api_casino_spin(request):
     if rand_val < 0.15:  # 15% шанс на выигрыш
         if random.random() < 0.2:  # Редкие 777
             symbols = ["7️⃣", "7️⃣", "7️⃣"]
-            payout = bet * 10  # Изменили на x10
+            payout = bet * 6  # Изменили на x6
         else:
             sym = random.choice([["🍋", "🍋", "🍋"], ["🍇", "🍇", "🍇"], ["🎁", "🎁", "🎁"]])
             symbols = sym
-            payout = bet * 7   # Изменили на x7
+            payout = bet * 4   # Изменили на x4
         balance += payout
         won = True
     else:
