@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Игры и Кейсы</title>
+    <title>Игровой Центр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --bg: #0f1015; --card: #181b24; --accent: #3b82f6; --text: #ffffff; --muted: #94a3b8; }
@@ -102,7 +102,7 @@
 
     <!-- РАЗДЕЛ КАЗИНО (СЛОТЫ С РЫЧАГОМ) -->
     <div id="section-casino" class="view-section">
-        <div style="text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 5px;">Комбинации: 🍋🍋🍋, 🍇🍇🍇, 🎁🎁🎁 (x2) | 7️⃣7️⃣7️⃣ (x3)</div>
+        <div style="text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 5px;">Комбинации: 🍋🍋🍋, 🍇🍇🍇, 🎁🎁🎁 (x7) | 7️⃣7️⃣7️⃣ (x10)</div>
         
         <div class="slot-machine-wrapper">
             <div class="slot-machine">
@@ -315,21 +315,18 @@
             }, 4100);
         }
 
-        // Логика слотов казино с рычагом
         async function spinSlotMachine() {
             const betInput = document.getElementById('slot-bet-input');
             const bet = parseInt(betInput.value);
             if(!bet || bet <= 0) { alert('❌ Введите корректную ставку!'); return; }
             if(userBalance < bet) { alert('❌ Недостаточно средств!'); return; }
 
-            // Анимация рычага
             const lever = document.getElementById('slot-lever');
             lever.classList.add('pulled');
             setTimeout(() => lever.classList.remove('pulled'), 300);
 
             document.getElementById('slot-notification').innerText = '🎰 Крутим барабаны...';
 
-            // Быстрая анимация символов
             const symbolsList = ["7️⃣", "🍋", "🍇", "🎁"];
             const interval = setInterval(() => {
                 document.getElementById('reel-1').innerText = symbolsList[Math.floor(Math.random()*symbolsList.length)];
@@ -345,7 +342,6 @@
                 });
                 const data = await res.json();
 
-                // Останавливаем барабаны через 1.5 секунды в любом случае
                 setTimeout(() => {
                     clearInterval(interval);
                     
