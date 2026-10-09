@@ -1952,11 +1952,11 @@ async def api_casino_spin(request):
     if rand_val < 0.15:  # 15% шанс на выигрыш
         if random.random() < 0.2:  # Редкие 777
             symbols = ["7️⃣", "7️⃣", "7️⃣"]
-            payout = bet * 3
+            payout = bet * 10  # Изменили на x10
         else:
             sym = random.choice([["🍋", "🍋", "🍋"], ["🍇", "🍇", "🍇"], ["🎁", "🎁", "🎁"]])
             symbols = sym
-            payout = bet * 2
+            payout = bet * 7   # Изменили на x7
         balance += payout
         won = True
     else:
