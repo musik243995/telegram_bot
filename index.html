@@ -11,15 +11,14 @@
         header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 12px 16px; border-radius: 12px; margin-bottom: 15px; }
         .balance { font-weight: bold; color: #22c55e; font-size: 1.1rem; }
         
-        /* КРАСИВЫЕ ГРАФИЧЕСКИЕ КНОПКИ-БАННЕРЫ СВЕРХУ */
-        .image-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .image-tab-card { background: var(--card); border: 2px solid #262b36; border-radius: 14px; padding: 12px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        /* ГРАФИЧЕСКИЕ КНОПКИ СВЕРХУ */
+        .image-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+        .image-tab-card { background: var(--card); border: 2px solid #262b36; border-radius: 12px; padding: 10px 6px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .image-tab-card:active { transform: scale(0.96); }
         .image-tab-card.active { border-color: var(--accent); background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), var(--card)); }
-        .image-tab-card img { width: 48px; height: 48px; object-fit: contain; margin-bottom: 6px; }
-        .image-tab-card span { font-weight: bold; font-size: 0.95rem; color: var(--text); }
+        .image-tab-card img { width: 38px; height: 38px; object-fit: contain; margin-bottom: 4px; }
+        .image-tab-card span { font-weight: bold; font-size: 0.85rem; color: var(--text); }
 
-        /* Кнопка инвентаря отдельно снизу или сбоку компактно */
         .inv-tab-btn { width: 100%; background: var(--card); border: 2px solid #262b36; border-radius: 10px; padding: 10px; color: var(--text); font-weight: bold; cursor: pointer; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .inv-tab-btn.active { border-color: var(--accent); background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), var(--card)); }
 
@@ -60,6 +59,24 @@
         .spin-btn { width: 100%; padding: 12px; background: #f59e0b; border: none; color: #000; font-weight: bold; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
         .spin-btn:active { transform: scale(0.98); }
 
+        /* СТИЛИ ДЛЯ БЛЕКДЖЕКА */
+        .bj-container { background: var(--card); border: 2px solid #262b36; border-radius: 16px; padding: 20px; text-align: center; max-width: 360px; margin: 0 auto; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+        .bj-table-section { margin: 15px 0; background: #12141c; padding: 12px; border-radius: 12px; border: 1px solid #262b36; }
+        .bj-cards-row { display: flex; justify-content: center; gap: 8px; margin-top: 8px; min-height: 75px; align-items: center; }
+        
+        /* Дизайн игральной карты */
+        .playing-card { width: 48px; height: 72px; background: #ffffff; color: #000000; border-radius: 6px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-size: 0.9rem; box-shadow: 0 4px 8px rgba(0,0,0,0.3); animation: dealCard 0.3s ease-out; }
+        .playing-card.red { color: #dc2626; }
+        .playing-card.hidden { background: #3b82f6; color: white; justify-content: center; align-items: center; font-size: 1.4rem; }
+        @keyframes dealCard { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .bj-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .bj-btn { padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; color: white; }
+        .bj-btn-hit { background: #3b82f6; }
+        .bj-btn-stand { background: #ef4444; }
+        .bj-btn-double { background: #f59e0b; color: black; grid-column: span 2; }
+        .bj-start-btn { width: 100%; padding: 12px; background: #22c55e; border: none; color: white; font-weight: bold; border-radius: 8px; font-size: 1.1rem; cursor: pointer; margin-top: 10px; }
+
         /* Инвентарь */
         .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
         .inv-item { background: var(--card); border-radius: 10px; padding: 12px; text-align: center; border: 1px solid #262b36; cursor: pointer; }
@@ -78,7 +95,7 @@
         <div class="balance" id="user-balance">0 ¢</div>
     </header>
 
-    <!-- ГРАФИЧЕСКИЕ КНОПКИ СВЕРХУ (КАРТИНКИ + ТЕКСТ) -->
+    <!-- ВЕРХНИЕ ВКЛАДКИ С КАРТИНКАМИ -->
     <div class="image-tabs">
         <div class="image-tab-card active" id="tab-cases-btn" onclick="switchTopTab('cases')">
             <img src="https://cdn-icons-png.flaticon.com/512/4248/4248443.png" alt="Кейсы">
@@ -86,7 +103,11 @@
         </div>
         <div class="image-tab-card" id="tab-casino-btn" onclick="switchTopTab('casino')">
             <img src="https://cdn-icons-png.flaticon.com/512/2454/2454282.png" alt="Казино">
-            <span>🎰 Казино</span>
+            <span>🎰 Слоты</span>
+        </div>
+        <div class="image-tab-card" id="tab-bj-btn" onclick="switchTopTab('blackjack')">
+            <img src="https://cdn-icons-png.flaticon.com/512/3034/3034547.png" alt="Блекджек">
+            <span>🃏 Блекджек</span>
         </div>
     </div>
 
@@ -115,7 +136,7 @@
         </div>
     </div>
 
-    <!-- РАЗДЕЛ КАЗИНО -->
+    <!-- РАЗДЕЛ КАЗИНО (СЛОТЫ) -->
     <div id="section-casino" class="view-section">
         <div style="text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 5px;">Комбинации: 🍋🍋🍋, 🍇🍇🍇, 🎁🎁🎁 (x4) | 7️⃣7️⃣7️⃣ (x6)</div>
         
@@ -135,6 +156,40 @@
             </div>
         </div>
         <div id="slot-notification" style="text-align: center; font-weight: bold; color: #f59e0b; margin-top: 10px; min-height: 24px;"></div>
+    </div>
+
+    <!-- РАЗДЕЛ БЛЕКДЖЕКА -->
+    <div id="section-blackjack" class="view-section">
+        <div class="bj-container">
+            <h2 style="margin: 0 0 10px 0; font-size: 1.3rem;">🃏 Блекджек (21)</h2>
+            
+            <div id="bj-bet-area">
+                <input type="number" id="bj-bet-input" class="slot-input" placeholder="Сумма ставки" value="50000">
+                <button class="bj-start-btn" onclick="startBlackjack()">НАЧАТЬ ИГРУ</button>
+            </div>
+
+            <div id="bj-game-area" style="display: none;">
+                <div class="bj-table-section">
+                    <div style="font-size: 0.85rem; color: var(--muted);">Карты дилера (<span id="dealer-score">?</span>)</div>
+                    <div class="bj-cards-row" id="dealer-cards"></div>
+                </div>
+
+                <div class="bj-table-section">
+                    <div style="font-size: 0.85rem; color: var(--muted);">Ваши карты (<span id="player-score">0</span>)</div>
+                    <div class="bj-cards-row" id="player-cards"></div>
+                </div>
+
+                <div id="bj-message" style="font-weight: bold; color: #f59e0b; margin: 10px 0; min-height: 22px;"></div>
+
+                <div class="bj-controls" id="bj-action-buttons">
+                    <button class="bj-btn bj-btn-hit" onclick="bjAction('hit')">Взять еще</button>
+                    <button class="bj-btn bj-btn-stand" onclick="bjAction('stand')">Хватит</button>
+                    <button class="bj-btn bj-btn-double" onclick="bjAction('double')">Удвоить х2</button>
+                </div>
+
+                <button class="bj-start-btn" id="bj-restart-btn" style="display: none;" onclick="resetBjUI()">Новая игра</button>
+            </div>
+        </div>
     </div>
 
     <!-- РАЗДЕЛ ИНВЕНТАРЯ -->
@@ -165,6 +220,7 @@
         let inventory = [];
         let selectedItemForSell = null;
         let activeCaseId = null;
+        let bjGameState = null;
 
         const casesData = [
             {
@@ -225,10 +281,12 @@
         function switchTopTab(tab) {
             document.getElementById('tab-cases-btn').classList.remove('active');
             document.getElementById('tab-casino-btn').classList.remove('active');
+            document.getElementById('tab-bj-btn').classList.remove('active');
             document.getElementById('tab-inv-btn').classList.remove('active');
 
             document.getElementById('section-cases').classList.remove('active');
             document.getElementById('section-casino').classList.remove('active');
+            document.getElementById('section-blackjack').classList.remove('active');
             document.getElementById('section-inventory').classList.remove('active');
 
             if(tab === 'cases') {
@@ -238,6 +296,9 @@
             } else if(tab === 'casino') {
                 document.getElementById('tab-casino-btn').classList.add('active');
                 document.getElementById('section-casino').classList.add('active');
+            } else if(tab === 'blackjack') {
+                document.getElementById('tab-bj-btn').classList.add('active');
+                document.getElementById('section-blackjack').classList.add('active');
             } else {
                 document.getElementById('tab-inv-btn').classList.add('active');
                 document.getElementById('section-inventory').classList.add('active');
@@ -251,7 +312,7 @@
             document.getElementById('room-case-title').innerText = `${c.name} (${c.price.toLocaleString()} ¢)`;
             document.getElementById('room-drop-list').innerHTML = c.dropListText;
             document.getElementById('win-notification').innerText = '';
-
+ 
             document.getElementById('view-cases-list').classList.remove('active');
             document.getElementById('view-case-room').classList.add('active');
             createRouletteDummy(c);
@@ -287,10 +348,7 @@
         async function openCurrentCase() {
             if(!activeCaseId) return;
             const caseItem = casesData.find(c => c.id === activeCaseId);
-            if(userBalance < caseItem.price) {
-                alert('❌ Недостаточно средств!');
-                return;
-            }
+            if(userBalance < caseItem.price) { alert('❌ Недостаточно средств!'); return; }
 
             const res = await fetch('/api/open_case', {
                 method: 'POST',
@@ -358,12 +416,7 @@
 
                 setTimeout(() => {
                     clearInterval(interval);
-                    
-                    if(data.error) { 
-                        alert(data.error); 
-                        document.getElementById('slot-notification').innerText = ''; 
-                        return; 
-                    }
+                    if(data.error) { alert(data.error); document.getElementById('slot-notification').innerText = ''; return; }
 
                     userBalance = data.new_balance;
                     document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
@@ -378,12 +431,127 @@
                         document.getElementById('slot-notification').innerText = `😢 Проигрыш! Потеряно: -${bet.toLocaleString()} ¢`;
                     }
                 }, 1500);
-
             } catch (err) {
                 clearInterval(interval);
-                document.getElementById('slot-notification').innerText = '❌ Ошибка соединения с сервером';
-                console.error(err);
+                document.getElementById('slot-notification').innerText = '❌ Ошибка соединения';
             }
+        }
+
+        /* --- ЛОГИКА БЛЕКДЖЕКА НА ФРОНТЕНДЕ --- */
+        async function startBlackjack() {
+            const bet = parseInt(document.getElementById('bj-bet-input').value);
+            if(!bet || bet <= 0) { alert('❌ Введите ставку!'); return; }
+            if(userBalance < bet) { alert('❌ Недостаточно средств!'); return; }
+
+            try {
+                const res = await fetch('/api/blackjack', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, action: 'start', bet: bet})
+                });
+                const data = await res.json();
+                if(data.error) { alert(data.error); return; }
+
+                userBalance = data.balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                bjGameState = data;
+
+                document.getElementById('bj-bet-area').style.display = 'none';
+                document.getElementById('bj-game-area').style.display = 'block';
+                document.getElementById('bj-message').innerText = data.message || '';
+                
+                renderBjCards(data);
+
+                if(data.game_over) {
+                    endBjGame();
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function bjAction(actionType) {
+            if(!bjGameState) return;
+            try {
+                const res = await fetch('/api/blackjack', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, action: actionType, game_state: bjGameState})
+                });
+                const data = await res.json();
+                if(data.error) { alert(data.error); return; }
+
+                userBalance = data.balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                bjGameState = data;
+
+                document.getElementById('bj-message').innerText = data.message || '';
+                renderBjCards(data);
+
+                if(data.game_over) {
+                    endBjGame();
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        function renderBjCards(data) {
+            const dealerDiv = document.getElementById('dealer-cards');
+            dealerDiv.innerHTML = data.dealer_hand.map(card => createCardHtml(card)).join('');
+
+            const playerDiv = document.getElementById('player-cards');
+            playerDiv.innerHTML = data.player_hand.map(card => createCardHtml(card)).join('');
+
+            document.getElementById('player-score').innerText = calculateHandScore(data.player_hand);
+            
+            if(data.dealer_hand[1].suit !== 'hidden') {
+                document.getElementById('dealer-score').innerText = calculateHandScore(data.dealer_hand);
+            } else {
+                document.getElementById('dealer-score').innerText = calculateSingleCardScore(data.dealer_hand[0]);
+            }
+        }
+
+        function createCardHtml(card) {
+            if(card.suit === 'hidden') {
+                return `<div class="playing-card hidden">🂠</div>`;
+            }
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            return `
+                <div class="playing-card ${isRed ? 'red' : ''}">
+                    <div>${card.rank}</div>
+                    <div style="text-align: center; font-size: 1.2rem;">${card.suit}</div>
+                    <div style="text-align: right;">${card.rank}</div>
+                </div>
+            `;
+        }
+
+        function calculateHandScore(hand) {
+            let value = 0, aces = 0;
+            for(let card of hand) {
+                if(card.suit === 'hidden') continue;
+                if(['J', 'Q', 'K'].includes(card.rank)) value += 10;
+                else if(card.rank === 'A') { aces++; value += 11; }
+                else value += parseInt(card.rank);
+            }
+            while(value > 21 && aces > 0) { value -= 10; aces--; }
+            return value;
+        }
+
+        function calculateSingleCardScore(card) {
+            if(['J', 'Q', 'K'].includes(card.rank)) return 10;
+            if(card.rank === 'A') return 11;
+            return parseInt(card.rank);
+        }
+
+        function endBjGame() {
+            document.getElementById('bj-action-buttons').style.display = 'none';
+            document.getElementById('bj-restart-btn').style.display = 'block';
+        }
+
+        function resetBjUI() {
+            document.getElementById('bj-game-area').style.display = 'none';
+            document.getElementById('bj-bet-area').style.display = 'block';
+            document.getElementById('bj-action-buttons').style.display = 'grid';
+            document.getElementById('bj-restart-btn').style.display = 'none';
+            document.getElementById('bj-message').innerText = '';
+            bjGameState = null;
         }
 
         async function loadInventory() {
