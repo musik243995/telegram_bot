@@ -26,19 +26,16 @@
         #loader-screen {
     position: fixed;
     inset: 0;
-    background: #0c0914; /* Цвет фона под завязку с картинкой */
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    width: 100vw;
+    height: 100vh;
+    background-image: url('https://storage.yandexcloud.net/b.fotovssylku.ru/2026/10/10/photo_2026-10-10_17-54-17.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     z-index: 9999;
     transition: opacity 0.4s ease-out;
 }
 
-#loader-screen img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover; /* Растягивает фото на весь экран, сохраняя центр с надписью */
-}
         @keyframes pulseLogo {
             from { transform: scale(0.95); opacity: 0.85; }
             to { transform: scale(1.05); opacity: 1; }
@@ -163,9 +160,7 @@
 <body>
 
     <!-- Экран загрузки (заставка) -->
-<div id="loader-screen">
-    <img src="https://storage.yandexcloud.net/b.fotovssylku.ru/2026/10/10/photo_2026-10-10_17-18-08.jpg" alt="Loading...">
-</div>
+<div id="loader-screen"></div>
 
     <header>
         <div>🎲 Игровой Центр</div>
