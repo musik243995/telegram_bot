@@ -2226,18 +2226,15 @@ async def api_crash_bet(request):
         conn.commit()
         conn.close()
 
-        # Генерация коэффициента краша с максимальным пределом 15.0x
-        r = random.random()
-        if r < 0.05:
-            crash_point = 1.00  # Моментальный краш (5% шанс)
-        else:
-            crash_point = round(1.01 + (0.95 / (1.0 - random.random() * 0.95) - 0.95), 2)
-            if crash_point > 15.0:
-                crash_point = round(random.uniform(5.0, 15.0), 2)
-
-        return web.json_response({
-            "balance": balance,
-            "crash_point": crash_point
+        # Сбалансированная генерация: частые мелкие иксы, редкие крупные (максимум 15.0x)
+    r = random.random()
+    if r < 0.10:
+        crash_point = 1.00  # 10% шанс моментального краша
+    else:
+        raw_val = random.random() ** 3
+        crash_point = round(1.01 + raw_val * 14.0, 2)
+        if crash_point > 15.0:
+            crash_point = 15.0
         })
 
     elif action == "cashout":
