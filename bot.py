@@ -259,45 +259,44 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
     user = message.from_user
     user_id, username = user.id, user.username or user.first_name
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
+        res = cursor.fetchone()
 
-    if res is None:
-        ref_id = 0
-        if command and command.args and command.args.startswith("ref_"):
-            try:
-                potential_ref = int(command.args.replace("ref_", ""))
-                if potential_ref != user_id:
-                    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
-                    if cursor.fetchone(): ref_id = potential_ref
-            except: pass
+        if res is None:
+            ref_id = 0
+            if command and command.args and command.args.startswith("ref_"):
+                try:
+                    potential_ref = int(command.args.replace("ref_", ""))
+                    if potential_ref != user_id:
+                        cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
+                        if cursor.fetchone(): ref_id = potential_ref
+                except: pass
 
-        cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
-        if ref_id != 0:
-            cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
-        conn.commit()
-        conn.close()
+            cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
+            if ref_id != 0:
+                cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
+            conn.commit()
 
-        # Telegram API вызываем только после завершения транзакции SQLite.
-        if ref_id != 0:
-            try:
-                await bot.send_message(
-                    ref_id,
-                    "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢."
-                )
-            except Exception:
-                pass
+            if ref_id != 0:
+                try:
+                    await bot.send_message(
+                        ref_id,
+                        "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢."
+                    )
+                except Exception:
+                    pass
+            return True
+        elif res[0] == 1:
+            await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
+            return False
+        else:
+            cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+            conn.commit()
         return True
-    elif res[0] == 1:
+    finally:
         conn.close()
-        await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
-        return False
-    else:
-        cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-        conn.commit()
-    conn.close()
-    return True
 
 async def is_creator(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
@@ -1905,29 +1904,6 @@ async def api_sell_item(request):
 
     return web.json_response({"success": True, "new_balance": new_bal})
 
-async def api_sell_item(request):
-    data = await request.json()
-    user_id = data.get("user_id")
-    item_id = data.get("item_id")
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT price FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (item_id, user_id))
-    item = cursor.fetchone()
-    if not item:
-        conn.close()
-        return web.json_response({"success": False})
-
-    price = item[0]
-    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (item_id,))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    new_bal = cursor.fetchone()[0]
-    conn.commit()
-    conn.close()
-
-    return web.json_response({"success": True, "new_balance": new_bal})
-
 # --- НОВАЯ ФУНКЦИЯ ДЛЯ КАЗИНО (Шаг 1) ---
 async def api_casino_spin(request):
     data = await request.json()
@@ -1952,11 +1928,11 @@ async def api_casino_spin(request):
     if rand_val < 0.15:  # 15% шанс на выигрыш
         if random.random() < 0.2:  # Редкие 777
             symbols = ["7️⃣", "7️⃣", "7️⃣"]
-            payout = bet * 6  # Изменили на x6
+            payout = bet * 6  # x6
         else:
             sym = random.choice([["🍋", "🍋", "🍋"], ["🍇", "🍇", "🍇"], ["🎁", "🎁", "🎁"]])
             symbols = sym
-            payout = bet * 4   # Изменили на x4
+            payout = bet * 4   # x4
         balance += payout
         won = True
     else:
@@ -1970,6 +1946,9 @@ async def api_casino_spin(request):
     cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
     conn.commit()
     conn.close()
+
+    # Засчитываем прогресс квеста для первого дня (игра в казино)
+    update_quest_progress(int(user_id), 1, bet if get_current_quest_day() == 1 else 0)
 
     return web.json_response({"new_balance": balance, "symbols": symbols, "won": won, "payout": payout})
 
