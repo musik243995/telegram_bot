@@ -2197,7 +2197,6 @@ async def api_blackjack_action(request):
     return web.json_response({"error": "Неизвестное действие"}, status=400)
 
 # --- API ДЛЯ МИНИ-ИГРЫ КРАШ (РАКЕТА) ---
-# --- API ДЛЯ МИНИ-ИГРЫ КРАШ (РАКЕТА) ---
 async def api_crash_bet(request):
     data = await request.json()
     user_id = data.get("user_id")
@@ -2227,15 +2226,20 @@ async def api_crash_bet(request):
         conn.close()
 
         # Сбалансированная генерация: частые мелкие иксы, редкие крупные (максимум 15.0x)
-    r = random.random()
-    if r < 0.10:
-        crash_point = 1.00  # 10% шанс моментального краша
-    else:
-        raw_val = random.random() ** 3
-        crash_point = round(1.01 + raw_val * 14.0, 2)
-        if crash_point > 15.0:
-            crash_point = 15.0
-        
+        r = random.random()
+        if r < 0.10:
+            crash_point = 1.00  # 10% шанс моментального краша
+        else:
+            raw_val = random.random() ** 3
+            crash_point = round(1.01 + raw_val * 14.0, 2)
+            if crash_point > 15.0:
+                crash_point = 15.0
+
+        return web.json_response({
+            "balance": balance,
+            "crash_point": crash_point
+        })
+
     elif action == "cashout":
         win_amount = int(bet * cashout_multiplier)
         balance += win_amount
