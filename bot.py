@@ -2196,6 +2196,65 @@ async def api_blackjack_action(request):
     conn.close()
     return web.json_response({"error": "Неизвестное действие"}, status=400)
 
+# --- API ДЛЯ МИНИ-ИГРЫ КРАШ (РАКЕТА) ---
+# --- API ДЛЯ МИНИ-ИГРЫ КРАШ (РАКЕТА) ---
+async def api_crash_bet(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    bet = int(data.get("bet", 0))
+    action = data.get("action")  # "start" или "cashout"
+    cashout_multiplier = float(data.get("multiplier", 1.0))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return web.json_response({"error": "Пользователь не найден"}, status=400)
+    
+    balance = row[0]
+
+    if action == "start":
+        if bet <= 0 or balance < bet:
+            conn.close()
+            return web.json_response({"error": "Недостаточно средств или неверная ставка"}, status=400)
+        
+        # Списываем ставку
+        balance -= bet
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        # Генерация коэффициента краша с максимальным пределом 15.0x
+        r = random.random()
+        if r < 0.05:
+            crash_point = 1.00  # Моментальный краш (5% шанс)
+        else:
+            crash_point = round(1.01 + (0.95 / (1.0 - random.random() * 0.95) - 0.95), 2)
+            if crash_point > 15.0:
+                crash_point = round(random.uniform(5.0, 15.0), 2)
+
+        return web.json_response({
+            "balance": balance,
+            "crash_point": crash_point
+        })
+
+    elif action == "cashout":
+        win_amount = int(bet * cashout_multiplier)
+        balance += win_amount
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        return web.json_response({
+            "balance": balance,
+            "win_amount": win_amount
+        })
+
+    conn.close()
+    return web.json_response({"error": "Неверное действие"}, status=400)
+
 async def web_server():
     app = web.Application()
     app.router.add_get("/", index_handler)
@@ -2205,6 +2264,7 @@ async def web_server():
     app.router.add_post("/api/sell_item", api_sell_item)
     app.router.add_post("/api/casino_spin", api_casino_spin)
     app.router.add_post("/api/blackjack", api_blackjack_action)
+    app.router.add_post("/api/crash", api_crash_bet)
     
     runner = web.AppRunner(app)
     await runner.setup()
