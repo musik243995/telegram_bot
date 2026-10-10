@@ -6,111 +6,139 @@
     <title>Игровой Центр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --bg: #0f1015; --card: #181b24; --accent: #3b82f6; --text: #ffffff; --muted: #94a3b8; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
-        header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 12px 16px; border-radius: 12px; margin-bottom: 15px; }
-        .balance { font-weight: bold; color: #22c55e; font-size: 1.1rem; }
+        :root { 
+            --bg: #0c0914;         /* Глубокий темно-фиолетовый фон */
+            --card: #151022;       /* Карточки чуть светлее с фиолетовым отливом */
+            --accent: #8b5cf6;     /* Яркий фиолетово-неоновый акцент */
+            --text: #ffffff; 
+            --muted: #a78bfa;      /* Мягкий фиолетово-серый текст */
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: radial-gradient(circle at top, #1e1b4b, var(--bg)); 
+            color: var(--text); 
+            margin: 0; 
+            padding: 15px; 
+            min-height: 100vh;
+        }
+
+        header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: linear-gradient(135deg, #1e1b4b, var(--card)); 
+            padding: 12px 16px; 
+            border-radius: 14px; 
+            margin-bottom: 15px; 
+            border: 1px solid #312e81;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+        }
+
+        .balance { font-weight: bold; color: #4ade80; font-size: 1.1rem; text-shadow: 0 0 10px rgba(74, 222, 128, 0.4); }
         
         /* ВЕРХНИЕ ВКЛАДКИ С КАРТИНКАМИ */
         .image-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
-        .image-tab-card { background: var(--card); border: 2px solid #262b36; border-radius: 12px; padding: 10px 4px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .image-tab-card { background: var(--card); border: 2px solid #312e81; border-radius: 12px; padding: 10px 4px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .image-tab-card:active { transform: scale(0.96); }
-        .image-tab-card.active { border-color: var(--accent); background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), var(--card)); }
+        .image-tab-card.active { border-color: #a855f7; background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), var(--card)); box-shadow: 0 0 15px rgba(168, 85, 247, 0.3); }
         .image-tab-card img { width: 32px; height: 32px; object-fit: contain; margin-bottom: 4px; }
         .image-tab-card span { font-weight: bold; font-size: 0.75rem; color: var(--text); }
 
-        .inv-tab-btn { width: 100%; background: var(--card); border: 2px solid #262b36; border-radius: 10px; padding: 10px; color: var(--text); font-weight: bold; cursor: pointer; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .inv-tab-btn.active { border-color: var(--accent); background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), var(--card)); }
+        .inv-tab-btn { width: 100%; background: var(--card); border: 2px solid #312e81; border-radius: 12px; padding: 12px; color: var(--text); font-weight: bold; cursor: pointer; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; }
+        .inv-tab-btn.active { border-color: #a855f7; background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), var(--card)); box-shadow: 0 0 15px rgba(168, 85, 247, 0.3); }
 
         .view-section { display: none; }
         .view-section.active { display: block; }
         
         /* Кейсы */
         .cases-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-        .case-card { background: var(--card); border-radius: 12px; padding: 15px; border: 1px solid #262b36; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .case-card { background: var(--card); border-radius: 14px; padding: 15px; border: 1px solid #312e81; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; }
+        .case-card:hover { border-color: #8b5cf6; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); }
         .case-info h3 { margin: 0 0 5px 0; font-size: 1.1rem; }
-        .case-info p { margin: 0; color: #f59e0b; font-weight: bold; font-size: 0.9rem; }
+        .case-info p { margin: 0; color: #fbbf24; font-weight: bold; font-size: 0.9rem; }
         .enter-arrow { font-size: 1.2rem; color: var(--muted); }
 
         .case-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-        .back-btn { background: var(--card); border: 1px solid #262b36; color: var(--text); padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        .back-btn { background: var(--card); border: 1px solid #312e81; color: var(--text); padding: 8px 14px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1rem; }
         
-        .drop-list { font-size: 0.85rem; color: var(--muted); margin: 15px 0; line-height: 1.5; background: var(--card); padding: 12px; border-radius: 10px; border: 1px solid #262b36; }
-        .open-btn { width: 100%; padding: 12px; background: #22c55e; border: none; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        .drop-list { font-size: 0.85rem; color: var(--muted); margin: 15px 0; line-height: 1.5; background: var(--card); padding: 12px; border-radius: 12px; border: 1px solid #312e81; }
+        .open-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
 
-        .roulette-container { position: relative; width: 100%; height: 120px; background: #12141c; border-radius: 12px; overflow: hidden; margin: 15px 0; display: flex; align-items: center; border: 2px solid #262b36; }
-        .roulette-pointer { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: #ef4444; z-index: 10; transform: translateX(-50%); }
+        .roulette-container { position: relative; width: 100%; height: 120px; background: #09070f; border-radius: 14px; overflow: hidden; margin: 15px 0; display: flex; align-items: center; border: 2px solid #312e81; }
+        .roulette-pointer { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: #ef4444; z-index: 10; transform: translateX(-50%); box-shadow: 0 0 8px #ef4444; }
         .roulette-track { display: flex; gap: 10px; position: absolute; left: 0; transition: transform 4s cubic-bezier(0.15, 0.85, 0.35, 1); }
-        .roulette-item { min-width: 90px; height: 90px; background: #1e222d; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #333947; }
+        .roulette-item { min-width: 90px; height: 90px; background: #1a1528; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #3b3363; }
         .roulette-item span { font-size: 0.7rem; margin-top: 5px; color: var(--muted); text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 80px; }
 
         /* Слоты */
         .slot-machine-wrapper { display: flex; justify-content: center; align-items: center; gap: 15px; margin: 20px 0; }
-        .slot-machine { background: linear-gradient(135deg, #1e222d, #12141c); border: 4px solid #f59e0b; border-radius: 20px; padding: 25px; text-align: center; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        .slots-display { display: flex; justify-content: center; gap: 10px; background: #0b0c10; padding: 15px; border-radius: 12px; border: 2px solid #333947; margin-bottom: 20px; }
-        .slot-reel { font-size: 2.5rem; width: 55px; height: 70px; background: #181b24; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #262b36; }
+        .slot-machine { background: linear-gradient(135deg, #1e1536, #0c0914); border: 4px solid #a855f7; border-radius: 20px; padding: 25px; text-align: center; width: 280px; box-shadow: 0 10px 30px rgba(168, 85, 247, 0.3); }
+        .slots-display { display: flex; justify-content: center; gap: 10px; background: #09070f; padding: 15px; border-radius: 12px; border: 2px solid #3b3363; margin-bottom: 20px; }
+        .slot-reel { font-size: 2.5rem; width: 55px; height: 70px; background: #151022; display: flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid #312e81; }
         .slot-lever { display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none; }
-        .lever-stick { width: 10px; height: 90px; background: #94a3b8; border-radius: 5px; position: relative; transition: transform 0.2s; }
-        .lever-knob { width: 30px; height: 30px; background: #ef4444; border-radius: 50%; position: absolute; top: -15px; left: -10px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        .lever-stick { width: 10px; height: 90px; background: #a78bfa; border-radius: 5px; position: relative; transition: transform 0.2s; }
+        .lever-knob { width: 30px; height: 30px; background: #ec4899; border-radius: 50%; position: absolute; top: -15px; left: -10px; box-shadow: 0 4px 15px rgba(236, 72, 153, 0.6); }
         .slot-lever.pulled .lever-stick { transform: rotateX(45deg); }
-        .slot-input { width: 100%; padding: 12px; background: #0b0c10; border: 1px solid #333947; color: white; border-radius: 8px; font-size: 1rem; text-align: center; margin-bottom: 10px; box-sizing: border-box; }
-        .spin-btn { width: 100%; padding: 12px; background: #f59e0b; border: none; color: #000; font-weight: bold; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
+        .slot-input { width: 100%; padding: 12px; background: #09070f; border: 1px solid #3b3363; color: white; border-radius: 10px; font-size: 1rem; text-align: center; margin-bottom: 10px; box-sizing: border-box; }
+        .spin-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #ec4899, #db2777); border: none; color: #fff; font-weight: bold; border-radius: 10px; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 15px rgba(236, 72, 153, 0.4); }
 
         /* Блекджек */
-        .bj-container { background: var(--card); border: 2px solid #262b36; border-radius: 16px; padding: 20px; text-align: center; max-width: 360px; margin: 0 auto; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
-        .bj-table-section { margin: 15px 0; background: #12141c; padding: 12px; border-radius: 12px; border: 1px solid #262b36; }
+        .bj-container { background: var(--card); border: 2px solid #312e81; border-radius: 16px; padding: 20px; text-align: center; max-width: 360px; margin: 0 auto; box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
+        .bj-table-section { margin: 15px 0; background: #09070f; padding: 12px; border-radius: 12px; border: 1px solid #312e81; }
         .bj-cards-row { display: flex; justify-content: center; gap: 8px; margin-top: 8px; min-height: 75px; align-items: center; }
-        .playing-card { width: 48px; height: 72px; background: #ffffff; color: #000000; border-radius: 6px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-size: 0.9rem; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
-        .playing-card.red { color: #dc2626; }
-        .playing-card.hidden { background: #3b82f6; color: white; justify-content: center; align-items: center; font-size: 1.4rem; }
+        .playing-card { width: 48px; height: 72px; background: #ffffff; color: #000000; border-radius: 8px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-size: 0.9rem; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        .playing-card.red { color: #e11d48; }
+        .playing-card.hidden { background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; justify-content: center; align-items: center; font-size: 1.4rem; }
         .bj-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
-        .bj-btn { padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; color: white; }
-        .bj-btn-hit { background: #3b82f6; }
-        .bj-btn-stand { background: #ef4444; }
-        .bj-btn-double { background: #f59e0b; color: black; grid-column: span 2; }
-        .bj-start-btn { width: 100%; padding: 12px; background: #22c55e; border: none; color: white; font-weight: bold; border-radius: 8px; font-size: 1.1rem; cursor: pointer; margin-top: 10px; }
+        .bj-btn { padding: 12px; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; color: white; transition: 0.2s; }
+        .bj-btn-hit { background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        .bj-btn-stand { background: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+        .bj-btn-double { background: linear-gradient(135deg, #f59e0b, #d97706); color: black; grid-column: span 2; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); }
+        .bj-start-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; font-weight: bold; border-radius: 10px; font-size: 1.1rem; cursor: pointer; margin-top: 10px; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
 
-        /* ОБНОВЛЕННЫЙ КРАШ (РАКЕТА) */
-        .crash-container { background: var(--card); border: 2px solid #262b36; border-radius: 16px; padding: 15px; max-width: 440px; margin: 0 auto; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+        /* КРАШ (РАКЕТА) С КОСМОСОМ, РАКЕТОЙ И ШКАЛОЙ */
+        .crash-container { background: var(--card); border: 2px solid #312e81; border-radius: 16px; padding: 15px; max-width: 440px; margin: 0 auto; box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
+        .crash-big-screen { position: relative; width: 100%; height: 320px; background: radial-gradient(circle at center, #1a103c 0%, #09070f 100%); border-radius: 14px; border: 2px solid #3b3363; overflow: hidden; }
+        .crash-multiplier-display { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; font-weight: 900; color: #ffffff; z-index: 10; text-shadow: 0 0 15px rgba(168, 85, 247, 0.6); }
         
-        /* Большой квадрат с ракетой */
-        .crash-big-screen { position: relative; width: 100%; height: 320px; background: #0b0c10; border-radius: 14px; border: 2px solid #333947; overflow: hidden; }
-        .crash-multiplier-display { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; font-weight: 900; color: #ffffff; z-index: 10; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
-        
-        /* Левая шкала с отметками Х */
-        .crash-y-axis { position: absolute; left: 8px; top: 10px; bottom: 10px; display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 0.65rem; font-weight: bold; z-index: 5; pointer-events: none; opacity: 0.7; }
-        
-        /* Линия траектории следа ракеты */
+        .crash-y-axis { position: absolute; left: 10px; top: 10px; bottom: 10px; display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 0.65rem; font-weight: bold; z-index: 5; pointer-events: none; opacity: 0.8; }
         .crash-trajectory-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; }
 
-        /* Ракета с огненным шлейфом */
-        .rocket-container { position: absolute; left: 30px; bottom: 30px; font-size: 2.2rem; transition: transform 0.08s linear; z-index: 6; display: flex; align-items: center; }
-        .rocket-flame { width: 14px; height: 6px; background: #f59e0b; border-radius: 50%; box-shadow: 0 0 12px #ef4444; margin-left: -6px; animation: flamePulse 0.2s infinite alternate; }
-        @keyframes flamePulse { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.5); opacity: 1; } }
+        /* Красивая ракета вместо эмодзи */
+        .rocket-container { position: absolute; left: 30px; bottom: 30px; transition: transform 0.08s linear; z-index: 6; }
+        .rocket-ship-wrapper { position: relative; display: flex; align-items: center; }
+        .rocket-img { width: 65px; height: 65px; object-fit: contain; transform: rotate(35deg); filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.8)); }
+        .rocket-flame-effect { position: absolute; left: -12px; bottom: 10px; width: 25px; height: 12px; background: linear-gradient(90deg, #ef4444, #f59e0b, transparent); border-radius: 50%; filter: blur(2px); box-shadow: 0 0 15px #ef4444; animation: flameAnim 0.15s infinite alternate; }
+        @keyframes flameAnim { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.4); opacity: 1; } }
+
+        .explosion-effect { font-size: 3.5rem; animation: explodeAnim 0.4s ease-out forwards; }
+        @keyframes explodeAnim { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2.2); opacity: 0; } }
 
         /* Горизонтальная история под квадратом */
         .crash-history-horizontal { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; margin: 12px 0; scrollbar-width: none; }
         .crash-history-horizontal::-webkit-scrollbar { display: none; }
-        .history-chip { background: #12141c; border: 1px solid #262b36; border-radius: 8px; padding: 6px 12px; font-weight: bold; font-size: 0.85rem; color: #3b82f6; white-space: nowrap; flex-shrink: 0; }
-        .history-chip.high { color: #22c55e; }
-        .history-chip.crash { color: #ef4444; }
+        .history-chip { background: #09070f; border: 1px solid #312e81; border-radius: 8px; padding: 6px 12px; font-weight: bold; font-size: 0.85rem; color: #818cf8; white-space: nowrap; flex-shrink: 0; }
+        .history-chip.high { color: #34d399; border-color: #059669; }
+        .history-chip.crash { color: #f87171; border-color: #dc2626; }
 
         .crash-controls { margin-top: 10px; }
-        .crash-action-btn { width: 100%; padding: 14px; border: none; border-radius: 10px; font-weight: bold; font-size: 1.1rem; cursor: pointer; color: white; transition: transform 0.1s; }
-        .crash-action-btn:active { transform: scale(0.97); }
-        .btn-start-crash { background: #22c55e; }
-        .btn-cashout { background: #f59e0b; color: black; animation: cashoutPulse 0.5s infinite alternate; }
-        @keyframes cashoutPulse { from { box-shadow: 0 0 5px #f59e0b; } to { box-shadow: 0 0 15px #f59e0b; } }
+        .crash-action-btn { width: 100%; padding: 14px; border: none; border-radius: 10px; font-weight: bold; font-size: 1.1rem; cursor: pointer; color: white; transition: 0.1s; }
+        .btn-start-crash { background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
+        .btn-cashout { background: linear-gradient(135deg, #f59e0b, #d97706); color: black; animation: cashoutPulse 0.5s infinite alternate; }
+        @keyframes cashoutPulse { from { box-shadow: 0 0 10px #f59e0b; } to { box-shadow: 0 0 25px #f59e0b; } }
 
         /* Инвентарь */
         .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .inv-item { background: var(--card); border-radius: 10px; padding: 12px; text-align: center; border: 1px solid #262b36; cursor: pointer; }
-        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
-        .modal-content { background: var(--card); padding: 20px; border-radius: 14px; width: 85%; max-width: 320px; text-align: center; border: 1px solid #333947; }
+        .inv-item { background: var(--card); border-radius: 12px; padding: 12px; text-align: center; border: 1px solid #312e81; cursor: pointer; transition: 0.2s; }
+        .inv-item:hover { border-color: #8b5cf6; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: var(--card); padding: 20px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; border: 1px solid #312e81; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
         .modal-btns { display: flex; gap: 10px; margin-top: 15px; }
-        .modal-btns button { flex: 1; padding: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
-        .btn-yes { background: #ef4444; color: white; }
-        .btn-no { background: #333947; color: white; }
+        .modal-btns button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; color: white; }
+        .btn-yes { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .btn-no { background: linear-gradient(135deg, #475569, #334155); }
     </style>
 </head>
 <body>
@@ -158,7 +186,7 @@
                 <div class="roulette-pointer"></div>
                 <div class="roulette-track" id="roulette-track"></div>
             </div>
-            <div id="win-notification" style="text-align: center; font-weight: bold; color: #f59e0b; margin-bottom: 10px; min-height: 24px;"></div>
+            <div id="win-notification" style="text-align: center; font-weight: bold; color: #fbbf24; margin-bottom: 10px; min-height: 24px;"></div>
             <button class="open-btn" onclick="openCurrentCase()">Открыть кейс</button>
             <div class="drop-list" id="room-drop-list"></div>
         </div>
@@ -181,7 +209,7 @@
                 <div class="lever-stick"><div class="lever-knob"></div></div>
             </div>
         </div>
-        <div id="slot-notification" style="text-align: center; font-weight: bold; color: #f59e0b; margin-top: 10px; min-height: 24px;"></div>
+        <div id="slot-notification" style="text-align: center; font-weight: bold; color: #fbbf24; margin-top: 10px; min-height: 24px;"></div>
     </div>
 
     <!-- РАЗДЕЛ БЛЕКДЖЕКА -->
@@ -201,7 +229,7 @@
                     <div style="font-size: 0.85rem; color: var(--muted);">Ваши карты (<span id="player-score">0</span>)</div>
                     <div class="bj-cards-row" id="player-cards"></div>
                 </div>
-                <div id="bj-message" style="font-weight: bold; color: #f59e0b; margin: 10px 0; min-height: 22px;"></div>
+                <div id="bj-message" style="font-weight: bold; color: #fbbf24; margin: 10px 0; min-height: 22px;"></div>
                 <div class="bj-controls" id="bj-action-buttons">
                     <button class="bj-btn bj-btn-hit" onclick="bjAction('hit')">Взять еще</button>
                     <button class="bj-btn bj-btn-stand" onclick="bjAction('stand')">Хватит</button>
@@ -212,10 +240,10 @@
         </div>
     </div>
 
-    <!-- РАЗДЕЛ КРАШ (РАКЕТА) С БОЛЬШИМ КВАДРАТОМ И ИСТОРИЕЙ СНИЗУ -->
+    <!-- РАЗДЕЛ КРАШ (РАКЕТА) -->
     <div id="section-crash" class="view-section">
         <div class="crash-container">
-            <!-- Большой игровой квадрат -->
+            <!-- Большой квадрат с космосом -->
             <div class="crash-big-screen" id="crash-screen">
                 <div class="crash-multiplier-display" id="crash-multiplier-text">1.00x</div>
                 
@@ -235,15 +263,17 @@
                     <span>2x</span>
                 </div>
 
-                <!-- Красивая линия следа (SVG траектория) -->
+                <!-- Неоновая линия траектории -->
                 <svg class="crash-trajectory-svg">
-                    <path id="trajectory-path" d="M 30 290 L 30 290" fill="none" stroke="#3b82f6" stroke-width="4" stroke-linecap="round"/>
+                    <path id="trajectory-path" d="M 30 290 L 30 290" fill="none" stroke="#a855f7" stroke-width="4" stroke-linecap="round"/>
                 </svg>
 
-                <!-- Ракета -->
+                <!-- Ракета с пламенем -->
                 <div class="rocket-container" id="rocket-container">
-                    <div class="rocket-icon">🚀</div>
-                    <div class="rocket-flame"></div>
+                    <div class="rocket-ship-wrapper">
+                        <img src="https://cdn-icons-png.flaticon.com/512/1356/1356479.png" class="rocket-img" alt="Rocket">
+                        <div class="rocket-flame-effect"></div>
+                    </div>
                 </div>
             </div>
 
@@ -256,7 +286,7 @@
                 <div class="history-chip">--</div>
             </div>
 
-            <!-- Блок ставки под историей -->
+            <!-- Блок ставки -->
             <div class="crash-controls">
                 <input type="number" id="crash-bet-input" class="slot-input" placeholder="Сумма ставки" value="50000" style="margin-bottom: 8px;">
                 <button class="crash-action-btn btn-start-crash" id="crash-main-btn" onclick="handleCrashButton()">СДЕЛАТЬ СТАВКУ</button>
@@ -274,7 +304,7 @@
         <div class="modal-content">
             <h3>Продажа предмета</h3>
             <p id="modal-item-name" style="margin: 10px 0; color: var(--muted);"></p>
-            <p style="font-weight: bold; color: #22c55e;" id="modal-item-price"></p>
+            <p style="font-weight: bold; color: #4ade80;" id="modal-item-price"></p>
             <p>Вы точно хотите продать этот предмет?</p>
             <div class="modal-btns">
                 <button class="btn-yes" onclick="confirmSell()">Да</button>
@@ -612,7 +642,7 @@
             bjGameState = null;
         }
 
-        /* --- КРАШ (РАКЕТА) С ТРАЕКТОРИЕЙ И ШКАЛОЙ --- */
+        /* --- КРАШ (РАКЕТА) --- */
         async function handleCrashButton() {
             const btn = document.getElementById('crash-main-btn');
             const betInput = document.getElementById('crash-bet-input');
@@ -643,7 +673,7 @@
 
                 startRocketFlight();
 
-            } else if (crashState === 'RUNNING') {
+             } else if (crashState === 'RUNNING') {
                 clearInterval(crashInterval);
                 crashState = 'FINISHED';
 
@@ -684,6 +714,9 @@
                     textDisplay.innerText = `${currentMultiplier.toFixed(2)}x КРАШ! 💥`;
                     textDisplay.style.color = '#ef4444';
                     
+                    // Эффект взрыва при краше
+                    rocket.innerHTML = '<div class="explosion-effect">💥</div>';
+
                     const btn = document.getElementById('crash-main-btn');
                     btn.innerText = 'ПРОИГРЫШ 😢';
                     btn.className = 'crash-action-btn';
@@ -697,13 +730,11 @@
                 textDisplay.innerText = `${currentMultiplier.toFixed(2)}x`;
                 textDisplay.style.color = '#ffffff';
 
-                // Расчет координат для большого квадрата (ширина ~380, высота 320)
                 let posX = 30 + Math.min(elapsed * 32, 330);
                 let posY = 290 - Math.min((currentMultiplier - 1.0) * 18, 260);
 
                 rocket.style.transform = `translate(${posX - 30}px, ${posY - 290}px)`;
                 
-                // Добавляем точки к линии траектории
                 flightPathCoordinates += ` L ${posX + 15} ${posY + 15}`;
                 pathElem.setAttribute("d", flightPathCoordinates);
 
@@ -720,10 +751,17 @@
 
             btn.innerText = 'СДЕЛАТЬ СТАВКУ';
             btn.className = 'crash-action-btn btn-start-crash';
-            btn.style.background = '#22c55e';
             betInput.disabled = false;
             textDisplay.innerText = '1.00x';
             textDisplay.style.color = '#ffffff';
+            
+            // Возвращаем ракету на стартовую позицию
+            rocket.innerHTML = `
+                <div class="rocket-ship-wrapper">
+                    <img src="https://cdn-icons-png.flaticon.com/512/1356/1356479.png" class="rocket-img" alt="Rocket">
+                    <div class="rocket-flame-effect"></div>
+                </div>
+            `;
             rocket.style.transform = 'translate(0px, 0px)';
             pathElem.setAttribute("d", "M 30 290 L 30 290");
         }
@@ -753,7 +791,7 @@
                 <div class="inv-item" onclick="openSellModal(${idx})">
                     <div style="font-size: 2rem;">🎁</div>
                     <div style="font-weight: bold; font-size: 0.9rem; margin: 5px 0;">${item.name}</div>
-                    <div style="color: #22c55e; font-size: 0.8rem;">${item.price.toLocaleString()} ¢</div>
+                    <div style="color: #4ade80; font-size: 0.8rem;">${item.price.toLocaleString()} ¢</div>
                 </div>
             `).join('');
         }
