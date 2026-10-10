@@ -44,30 +44,25 @@
         .roulette-item { min-width: 90px; height: 90px; background: #1e222d; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #333947; }
         .roulette-item span { font-size: 0.7rem; margin-top: 5px; color: var(--muted); text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 80px; }
 
-        /* Игровой автомат (Казино) */
+        /* Слоты */
         .slot-machine-wrapper { display: flex; justify-content: center; align-items: center; gap: 15px; margin: 20px 0; }
         .slot-machine { background: linear-gradient(135deg, #1e222d, #12141c); border: 4px solid #f59e0b; border-radius: 20px; padding: 25px; text-align: center; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
         .slots-display { display: flex; justify-content: center; gap: 10px; background: #0b0c10; padding: 15px; border-radius: 12px; border: 2px solid #333947; margin-bottom: 20px; }
         .slot-reel { font-size: 2.5rem; width: 55px; height: 70px; background: #181b24; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #262b36; }
-        
         .slot-lever { display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none; }
         .lever-stick { width: 10px; height: 90px; background: #94a3b8; border-radius: 5px; position: relative; transition: transform 0.2s; }
         .lever-knob { width: 30px; height: 30px; background: #ef4444; border-radius: 50%; position: absolute; top: -15px; left: -10px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
         .slot-lever.pulled .lever-stick { transform: rotateX(45deg); }
-
         .slot-input { width: 100%; padding: 12px; background: #0b0c10; border: 1px solid #333947; color: white; border-radius: 8px; font-size: 1rem; text-align: center; margin-bottom: 10px; box-sizing: border-box; }
         .spin-btn { width: 100%; padding: 12px; background: #f59e0b; border: none; color: #000; font-weight: bold; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
-        .spin-btn:active { transform: scale(0.98); }
 
         /* Блекджек */
         .bj-container { background: var(--card); border: 2px solid #262b36; border-radius: 16px; padding: 20px; text-align: center; max-width: 360px; margin: 0 auto; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
         .bj-table-section { margin: 15px 0; background: #12141c; padding: 12px; border-radius: 12px; border: 1px solid #262b36; }
         .bj-cards-row { display: flex; justify-content: center; gap: 8px; margin-top: 8px; min-height: 75px; align-items: center; }
-        .playing-card { width: 48px; height: 72px; background: #ffffff; color: #000000; border-radius: 6px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-size: 0.9rem; box-shadow: 0 4px 8px rgba(0,0,0,0.3); animation: dealCard 0.3s ease-out; }
+        .playing-card { width: 48px; height: 72px; background: #ffffff; color: #000000; border-radius: 6px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-size: 0.9rem; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
         .playing-card.red { color: #dc2626; }
         .playing-card.hidden { background: #3b82f6; color: white; justify-content: center; align-items: center; font-size: 1.4rem; }
-        @keyframes dealCard { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
         .bj-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
         .bj-btn { padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; color: white; }
         .bj-btn-hit { background: #3b82f6; }
@@ -75,28 +70,37 @@
         .bj-btn-double { background: #f59e0b; color: black; grid-column: span 2; }
         .bj-start-btn { width: 100%; padding: 12px; background: #22c55e; border: none; color: white; font-weight: bold; border-radius: 8px; font-size: 1.1rem; cursor: pointer; margin-top: 10px; }
 
-        /* Краш (Ракета) */
-        .crash-wrapper { display: flex; gap: 10px; max-width: 420px; margin: 0 auto; }
-        .crash-game-box { flex: 1; background: var(--card); border: 2px solid #262b36; border-radius: 16px; padding: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
-        .crash-screen { position: relative; width: 100%; height: 210px; background: #0b0c10; border-radius: 12px; border: 2px solid #333947; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-        .crash-multiplier-display { font-size: 2.2rem; font-weight: 900; color: #ffffff; z-index: 5; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
-        .rocket-container { position: absolute; left: 20px; bottom: 20px; font-size: 2rem; transition: transform 0.1s linear; z-index: 4; display: flex; align-items: center; }
-        .rocket-flame { width: 12px; height: 6px; background: #f59e0b; border-radius: 50%; box-shadow: 0 0 10px #ef4444; margin-left: -5px; animation: flamePulse 0.2s infinite alternate; }
-        @keyframes flamePulse { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.4); opacity: 1; } }
-        .crash-controls { margin-top: 12px; }
-        .crash-action-btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; color: white; transition: transform 0.1s; }
+        /* ОБНОВЛЕННЫЙ КРАШ (РАКЕТА) */
+        .crash-container { background: var(--card); border: 2px solid #262b36; border-radius: 16px; padding: 15px; max-width: 440px; margin: 0 auto; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+        
+        /* Большой квадрат с ракетой */
+        .crash-big-screen { position: relative; width: 100%; height: 320px; background: #0b0c10; border-radius: 14px; border: 2px solid #333947; overflow: hidden; }
+        .crash-multiplier-display { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; font-weight: 900; color: #ffffff; z-index: 10; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
+        
+        /* Левая шкала с отметками Х */
+        .crash-y-axis { position: absolute; left: 8px; top: 10px; bottom: 10px; display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 0.65rem; font-weight: bold; z-index: 5; pointer-events: none; opacity: 0.7; }
+        
+        /* Линия траектории следа ракеты */
+        .crash-trajectory-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; }
+
+        /* Ракета с огненным шлейфом */
+        .rocket-container { position: absolute; left: 30px; bottom: 30px; font-size: 2.2rem; transition: transform 0.08s linear; z-index: 6; display: flex; align-items: center; }
+        .rocket-flame { width: 14px; height: 6px; background: #f59e0b; border-radius: 50%; box-shadow: 0 0 12px #ef4444; margin-left: -6px; animation: flamePulse 0.2s infinite alternate; }
+        @keyframes flamePulse { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.5); opacity: 1; } }
+
+        /* Горизонтальная история под квадратом */
+        .crash-history-horizontal { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; margin: 12px 0; scrollbar-width: none; }
+        .crash-history-horizontal::-webkit-scrollbar { display: none; }
+        .history-chip { background: #12141c; border: 1px solid #262b36; border-radius: 8px; padding: 6px 12px; font-weight: bold; font-size: 0.85rem; color: #3b82f6; white-space: nowrap; flex-shrink: 0; }
+        .history-chip.high { color: #22c55e; }
+        .history-chip.crash { color: #ef4444; }
+
+        .crash-controls { margin-top: 10px; }
+        .crash-action-btn { width: 100%; padding: 14px; border: none; border-radius: 10px; font-weight: bold; font-size: 1.1rem; cursor: pointer; color: white; transition: transform 0.1s; }
         .crash-action-btn:active { transform: scale(0.97); }
         .btn-start-crash { background: #22c55e; }
         .btn-cashout { background: #f59e0b; color: black; animation: cashoutPulse 0.5s infinite alternate; }
         @keyframes cashoutPulse { from { box-shadow: 0 0 5px #f59e0b; } to { box-shadow: 0 0 15px #f59e0b; } }
-
-        /* Боковая панель истории Краша (5 строчек) */
-        .crash-history-sidebar { width: 85px; background: var(--card); border: 2px solid #262b36; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; align-items: center; }
-        .history-title { font-size: 0.75rem; color: var(--muted); margin-bottom: 8px; font-weight: bold; text-transform: uppercase; }
-        .history-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-        .history-item { background: #12141c; border: 1px solid #262b36; border-radius: 8px; padding: 8px 4px; text-align: center; font-weight: bold; font-size: 0.85rem; color: #3b82f6; }
-        .history-item.high { color: #22c55e; }
-        .history-item.crash { color: #ef4444; }
 
         /* Инвентарь */
         .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -116,7 +120,7 @@
         <div class="balance" id="user-balance">0 ¢</div>
     </header>
 
-    <!-- ВЕРХНИЕ ВКЛАДКИ С КАРТИНКАМИ -->
+    <!-- ВЕРХНИЕ ВКЛАДКИ -->
     <div class="image-tabs">
         <div class="image-tab-card active" id="tab-cases-btn" onclick="switchTopTab('cases')">
             <img src="https://cdn-icons-png.flaticon.com/512/4248/4248443.png" alt="Кейсы">
@@ -145,7 +149,6 @@
         <div id="view-cases-list" class="view-section active">
             <div class="cases-grid" id="cases-grid"></div>
         </div>
-
         <div id="view-case-room" class="view-section">
             <div class="case-header">
                 <button class="back-btn" onclick="goBackToList()">❮</button>
@@ -209,31 +212,54 @@
         </div>
     </div>
 
-    <!-- РАЗДЕЛ КРАШ (РАКЕТА) -->
+    <!-- РАЗДЕЛ КРАШ (РАКЕТА) С БОЛЬШИМ КВАДРАТОМ И ИСТОРИЕЙ СНИЗУ -->
     <div id="section-crash" class="view-section">
-        <div class="crash-wrapper">
-            <div class="crash-game-box">
-                <div class="crash-screen" id="crash-screen">
-                    <div class="crash-multiplier-display" id="crash-multiplier-text">1.00x</div>
-                    <div class="rocket-container" id="rocket-container">
-                        <div class="rocket-icon">🚀</div>
-                        <div class="rocket-flame"></div>
-                    </div>
+        <div class="crash-container">
+            <!-- Большой игровой квадрат -->
+            <div class="crash-big-screen" id="crash-screen">
+                <div class="crash-multiplier-display" id="crash-multiplier-text">1.00x</div>
+                
+                <!-- Шкала отметки Х слева -->
+                <div class="crash-y-axis">
+                    <span>15x</span>
+                    <span>14x</span>
+                    <span>13x</span>
+                    <span>12x</span>
+                    <span>11x</span>
+                    <span>10x</span>
+                    <span>7x</span>
+                    <span>6x</span>
+                    <span>5x</span>
+                    <span>4x</span>
+                    <span>3x</span>
+                    <span>2x</span>
                 </div>
-                <div class="crash-controls">
-                    <input type="number" id="crash-bet-input" class="slot-input" placeholder="Ставка" value="50000" style="margin-bottom: 8px;">
-                    <button class="crash-action-btn btn-start-crash" id="crash-main-btn" onclick="handleCrashButton()">СДЕЛАТЬ СТАВКУ</button>
+
+                <!-- Красивая линия следа (SVG траектория) -->
+                <svg class="crash-trajectory-svg">
+                    <path id="trajectory-path" d="M 30 290 L 30 290" fill="none" stroke="#3b82f6" stroke-width="4" stroke-linecap="round"/>
+                </svg>
+
+                <!-- Ракета -->
+                <div class="rocket-container" id="rocket-container">
+                    <div class="rocket-icon">🚀</div>
+                    <div class="rocket-flame"></div>
                 </div>
             </div>
-            <div class="crash-history-sidebar">
-                <div class="history-title">История</div>
-                <div class="history-list" id="crash-history-list">
-                    <div class="history-item">--</div>
-                    <div class="history-item">--</div>
-                    <div class="history-item">--</div>
-                    <div class="history-item">--</div>
-                    <div class="history-item">--</div>
-                </div>
+
+            <!-- История под квадратом -->
+            <div class="crash-history-horizontal" id="crash-history-list">
+                <div class="history-chip">--</div>
+                <div class="history-chip">--</div>
+                <div class="history-chip">--</div>
+                <div class="history-chip">--</div>
+                <div class="history-chip">--</div>
+            </div>
+
+            <!-- Блок ставки под историей -->
+            <div class="crash-controls">
+                <input type="number" id="crash-bet-input" class="slot-input" placeholder="Сумма ставки" value="50000" style="margin-bottom: 8px;">
+                <button class="crash-action-btn btn-start-crash" id="crash-main-btn" onclick="handleCrashButton()">СДЕЛАТЬ СТАВКУ</button>
             </div>
         </div>
     </div>
@@ -268,13 +294,14 @@
         let activeCaseId = null;
         let bjGameState = null;
 
-        // Переменные для Краша
+        // Переменные Краша
         let crashState = 'IDLE';
         let currentMultiplier = 1.00;
         let targetCrashPoint = 2.00;
         let crashInterval = null;
         let crashHistory = [];
         let activeCrashBet = 0;
+        let flightPathCoordinates = "M 30 290";
 
         const casesData = [
             {
@@ -371,7 +398,6 @@
             document.getElementById('room-case-title').innerText = `${c.name} (${c.price.toLocaleString()} ¢)`;
             document.getElementById('room-drop-list').innerHTML = c.dropListText;
             document.getElementById('win-notification').innerText = '';
-
             document.getElementById('view-cases-list').classList.remove('active');
             document.getElementById('view-case-room').classList.add('active');
             createRouletteDummy(c);
@@ -434,7 +460,6 @@
             track.style.transform = 'translateX(0px)';
 
             document.getElementById('win-notification').innerText = '🌀 Крутим рулетку...';
-
             setTimeout(() => {
                 track.style.transition = 'transform 4s cubic-bezier(0.15, 0.85, 0.35, 1)';
                 const offset = (winningIndex * 100) - 120 + Math.random()*40;
@@ -457,7 +482,6 @@
             setTimeout(() => lever.classList.remove('pulled'), 300);
 
             document.getElementById('slot-notification').innerText = '🎰 Крутим барабаны...';
-
             const symbolsList = ["7️⃣", "🍋", "🍇", "🎁"];
             const interval = setInterval(() => {
                 document.getElementById('reel-1').innerText = symbolsList[Math.floor(Math.random()*symbolsList.length)];
@@ -472,18 +496,14 @@
                     body: JSON.stringify({user_id: userId, bet: bet})
                 });
                 const data = await res.json();
-
                 setTimeout(() => {
                     clearInterval(interval);
                     if(data.error) { alert(data.error); document.getElementById('slot-notification').innerText = ''; return; }
-
                     userBalance = data.new_balance;
                     document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-
                     document.getElementById('reel-1').innerText = data.symbols[0];
                     document.getElementById('reel-2').innerText = data.symbols[1];
                     document.getElementById('reel-3').innerText = data.symbols[2];
-
                     if(data.won) {
                         document.getElementById('slot-notification').innerText = `🎉 Победа! Выигрыш: +${data.payout.toLocaleString()} ¢`;
                     } else {
@@ -518,7 +538,6 @@
                 document.getElementById('bj-bet-area').style.display = 'none';
                 document.getElementById('bj-game-area').style.display = 'block';
                 document.getElementById('bj-message').innerText = data.message || '';
-                
                 renderBjCards(data);
                 if(data.game_over) endBjGame();
             } catch(e) { console.error(e); }
@@ -538,7 +557,6 @@
                 userBalance = data.balance;
                 document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
                 bjGameState = data;
-
                 document.getElementById('bj-message').innerText = data.message || '';
                 renderBjCards(data);
                 if(data.game_over) endBjGame();
@@ -549,7 +567,6 @@
             document.getElementById('dealer-cards').innerHTML = data.dealer_hand.map(card => createCardHtml(card)).join('');
             document.getElementById('player-cards').innerHTML = data.player_hand.map(card => createCardHtml(card)).join('');
             document.getElementById('player-score').innerText = calculateHandScore(data.player_hand);
-            
             if(data.dealer_hand[1].suit !== 'hidden') {
                 document.getElementById('dealer-score').innerText = calculateHandScore(data.dealer_hand);
             } else {
@@ -595,7 +612,7 @@
             bjGameState = null;
         }
 
-        /* --- КРАШ (РАКЕТА) --- */
+        /* --- КРАШ (РАКЕТА) С ТРАЕКТОРИЕЙ И ШКАЛОЙ --- */
         async function handleCrashButton() {
             const btn = document.getElementById('crash-main-btn');
             const betInput = document.getElementById('crash-bet-input');
@@ -622,6 +639,7 @@
                 btn.innerText = 'ЗАБРАТЬ';
                 btn.className = 'crash-action-btn btn-cashout';
                 betInput.disabled = true;
+                flightPathCoordinates = "M 30 290";
 
                 startRocketFlight();
 
@@ -651,11 +669,12 @@
         function startRocketFlight() {
             const textDisplay = document.getElementById('crash-multiplier-text');
             const rocket = document.getElementById('rocket-container');
+            const pathElem = document.getElementById('trajectory-path');
             let startTime = Date.now();
 
             crashInterval = setInterval(() => {
                 let elapsed = (Date.now() - startTime) / 1000;
-                currentMultiplier = 1.00 + (elapsed * elapsed * 0.15) + (elapsed * 0.05);
+                currentMultiplier = 1.00 + (elapsed * elapsed * 0.12) + (elapsed * 0.04);
                 
                 if (currentMultiplier >= targetCrashPoint) {
                     clearInterval(crashInterval);
@@ -664,8 +683,7 @@
                     
                     textDisplay.innerText = `${currentMultiplier.toFixed(2)}x КРАШ! 💥`;
                     textDisplay.style.color = '#ef4444';
-                    rocket.style.transform = `translate(150px, -120px) rotate(45deg)`;
-
+                    
                     const btn = document.getElementById('crash-main-btn');
                     btn.innerText = 'ПРОИГРЫШ 😢';
                     btn.className = 'crash-action-btn';
@@ -679,9 +697,16 @@
                 textDisplay.innerText = `${currentMultiplier.toFixed(2)}x`;
                 textDisplay.style.color = '#ffffff';
 
-                let posX = Math.min(elapsed * 25, 180);
-                let posY = Math.min(elapsed * 18, 100);
-                rocket.style.transform = `translate(${posX}px, -${posY}px) rotate(${posX * 0.15}deg)`;
+                // Расчет координат для большого квадрата (ширина ~380, высота 320)
+                let posX = 30 + Math.min(elapsed * 32, 330);
+                let posY = 290 - Math.min((currentMultiplier - 1.0) * 18, 260);
+
+                rocket.style.transform = `translate(${posX - 30}px, ${posY - 290}px)`;
+                
+                // Добавляем точки к линии траектории
+                flightPathCoordinates += ` L ${posX + 15} ${posY + 15}`;
+                pathElem.setAttribute("d", flightPathCoordinates);
+
             }, 50);
         }
 
@@ -691,6 +716,7 @@
             const betInput = document.getElementById('crash-bet-input');
             const rocket = document.getElementById('rocket-container');
             const textDisplay = document.getElementById('crash-multiplier-text');
+            const pathElem = document.getElementById('trajectory-path');
 
             btn.innerText = 'СДЕЛАТЬ СТАВКУ';
             btn.className = 'crash-action-btn btn-start-crash';
@@ -698,17 +724,18 @@
             betInput.disabled = false;
             textDisplay.innerText = '1.00x';
             textDisplay.style.color = '#ffffff';
-            rocket.style.transform = 'translate(0px, 0px) rotate(0deg)';
+            rocket.style.transform = 'translate(0px, 0px)';
+            pathElem.setAttribute("d", "M 30 290 L 30 290");
         }
 
         function addCrashHistory(mult, isWin) {
             crashHistory.unshift({ mult: mult, win: isWin });
-            if (crashHistory.length > 5) crashHistory.pop();
+            if (crashHistory.length > 8) crashHistory.pop();
 
             const listDiv = document.getElementById('crash-history-list');
             listDiv.innerHTML = crashHistory.map(item => {
-                let cssClass = item.mult >= 2.0 ? 'history-item high' : 'history-item';
-                if (!item.win && item.mult === targetCrashPoint) cssClass = 'history-item crash';
+                let cssClass = item.mult >= 2.0 ? 'history-chip high' : 'history-chip';
+                if (!item.win && item.mult === targetCrashPoint) cssClass = 'history-chip crash';
                 return `<div class="${cssClass}">Χ${item.mult.toFixed(2)}</div>`;
             }).join('');
         }
