@@ -2235,8 +2235,7 @@ async def api_crash_bet(request):
         crash_point = round(1.01 + raw_val * 14.0, 2)
         if crash_point > 15.0:
             crash_point = 15.0
-        })
-
+        
     elif action == "cashout":
         win_amount = int(bet * cashout_multiplier)
         balance += win_amount
