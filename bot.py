@@ -626,16 +626,24 @@ async def text_top(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     placeholders = ','.join(['?'] * len(ADMIN_IDS)) if ADMIN_IDS else '0'
-    cursor.execute(f"SELECT custom_name, username, (balance + bank_balance + invested) as total, is_creator FROM users WHERE user_id NOT IN ({placeholders}) ORDER BY total DESC LIMIT 10", tuple(ADMIN_IDS))
+    cursor.execute(
+        f"SELECT custom_name, username, (balance + bank_balance + invested) as total, is_creator "
+        f"FROM users WHERE user_id NOT IN ({placeholders}) ORDER BY total DESC LIMIT 10", 
+        tuple(ADMIN_IDS)
+    )
     top_list = cursor.fetchall()
     conn.close()
+    
     text = "🏆 Топ-10 богатейших игроков:\n\n"
     if not top_list:
         text += "Пока нет игроков для отображения."
     for idx, (custom_name, uname, total, is_creat) in enumerate(top_list, 1):
         display_name = custom_name if custom_name else (uname if uname else "Игрок")
+        # Экранируем спецсимволы Markdown, чтобы они не ломали отправку сообщения
+        safe_name = display_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
         badge = " 🎬" if is_creat == 1 else ""
-        text += f"{idx}. {display_name}{badge} — {total:,} ¢\n".replace(",", " ")
+        text += f"{idx}. {safe_name}{badge} — {total:,} ¢\n".replace(",", " ")
+        
     await smart_answer(message, text)
 
 # --- РАБОТА (КД: МЕТАЛЛ 4С, БУТЫЛКИ 2С, ВОРОВСТВО 6С) ---
