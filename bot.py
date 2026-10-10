@@ -2227,10 +2227,11 @@ async def api_crash_bet(request):
 
         # Сбалансированная генерация: частые мелкие иксы, редкие крупные (максимум 15.0x)
         r = random.random()
-        if r < 0.10:
-            crash_point = 1.00  # 10% шанс моментального краша
+        if r < 0.18:
+            crash_point = 1.00  # 18% шанс раннего краша
         else:
-            raw_val = random.random() ** 3
+            # Степень 5 сильно смещает результаты к нижней границе (большинство будет от 1.01x до 2.2x)
+            raw_val = random.random() ** 5
             crash_point = round(1.01 + raw_val * 14.0, 2)
             if crash_point > 15.0:
                 crash_point = 15.0
