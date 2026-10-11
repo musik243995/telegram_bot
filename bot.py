@@ -375,9 +375,7 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
         conn.close()
         await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
         return False
-    else:
-        cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-        conn.commit()
+    
     conn.close()
     return True
         
