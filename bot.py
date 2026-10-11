@@ -2,8 +2,6 @@ import random
 import time
 import os
 import sqlite3
-import psycopg2
-from urllib.parse import urlparse
 import asyncio
 from datetime import datetime
 from urllib.parse import quote
@@ -98,83 +96,12 @@ def get_admin_keyboard():
     )
 
 # --- БАЗА ДАННЫХ ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-class PostgresCursorWrapper:
-    def __init__(self, cursor):
-        self.cursor = cursor
-    def execute(self, query, params=None):
-        query = query.replace("?", "%s")
-        query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-        query = query.replace("AUTOINCREMENT", "SERIAL")
-        query = query.replace("DATETIME", "TIMESTAMP")
-        return self.cursor.execute(query, params)
-    def executemany(self, query, params_list):
-        query = query.replace("?", "%s")
-        query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-        query = query.replace("AUTOINCREMENT", "SERIAL")
-        query = query.replace("DATETIME", "TIMESTAMP")
-        return self.cursor.executemany(query, params_list)
-    def fetchone(self):
-        return self.cursor.fetchone()
-    def fetchall(self):
-        return self.cursor.fetchall()
-    @property
-    def rowcount(self):
-        return self.cursor.rowcount
-    
-class PostgresConnWrapper:
-    def __init__(self, conn):
-        self.conn = conn
-    def cursor(self):
-        return PostgresCursorWrapper(self.conn.cursor())
-    def commit(self):
-        return self.conn.commit()
-    def rollback(self):
-        return self.conn.rollback()
-    def close(self):
-        return self.conn.close()
-    def execute(self, query, params=None):
-        c = self.cursor()
-        c.execute(query, params)
-        return c
-
-# --- Глобальная переменная для постоянного пула соединений ---
-_global_db_conn = None
-
 def get_db():
-    global _global_db_conn
-    if DATABASE_URL:
-        try:
-            if _global_db_conn is not None:
-                # Проверяем живо ли соединение быстрым запросом
-                with _global_db_conn.cursor() as temp_cursor:
-                    temp_cursor.execute("SELECT 1")
-                return _global_db_conn
-        except Exception:
-            _global_db_conn = None  # Сбрасываем при разрыве
-
-        url = urlparse(DATABASE_URL)
-        # Обязательно используем порт 6543 (Session Pooler) для скорости!
-        db_port = url.port if url.port else 6543
-        
-        _global_db_conn = psycopg2.connect(
-            database=url.path[1:],
-            user=url.username,
-            password=url.password,
-            host=url.hostname,
-            port=db_port,
-            sslmode='require',
-            connect_timeout=3
-        )
-        _global_db_conn.autocommit = False
-        return PostgresConnWrapper(_global_db_conn)
-    else:
-        conn = sqlite3.connect("game.db", timeout=30.0)
-        conn.execute("PRAGMA busy_timeout = 30000")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
-        return conn
+    conn = sqlite3.connect("game.db", timeout=30.0)
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
 
 def init_db():
     conn = get_db()
@@ -267,8 +194,8 @@ def init_db():
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN stolen INTEGER DEFAULT 0")
         conn.commit()
-    except Exception:
-        conn.rollback()
+    except sqlite3.OperationalError:
+        pass
     conn.close()
 
 def log_user_action(user_id, username, action_type, details):
@@ -330,59 +257,47 @@ def update_quest_progress(user_id, quest_type, amount=1):
 
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
-    user_id = user.id
-    username = user.username or user.first_name
-
+    user_id, username = user.id, user.username or user.first_name
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
+        res = cursor.fetchone()
 
-    if res is None:
-        ref_id = 0
-        if command and command.args and command.args.startswith("ref_"):
-            try:
-                potential_ref = int(command.args.replace("ref_", ""))
-                if potential_ref != user_id:
-                    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
-                    if cursor.fetchone():
-                        ref_id = potential_ref
-            except:
-                pass
+        if res is None:
+            ref_id = 0
+            if command and command.args and command.args.startswith("ref_"):
+                try:
+                    potential_ref = int(command.args.replace("ref_", ""))
+                    if potential_ref != user_id:
+                        cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
+                        if cursor.fetchone(): ref_id = potential_ref
+                except: pass
 
-        cursor.execute("""
-            INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) 
-            VALUES (?, ?, 10000, ?, ?)
-        """, (user_id, username, time.time(), ref_id))
-        
-        ref_bonus = 1_000_000
-        if ref_id != 0:
-            cursor.execute("UPDATE users SET balance = balance + ?, ref_count = ref_count + 1 WHERE user_id = ?", (ref_bonus, ref_id))
+            cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
+            if ref_id != 0:
+                cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
+            conn.commit()
 
-        conn.commit()
-        conn.close()
-
-        if ref_id != 0:
-            log_action(ref_id, f"Приглашён новый игрок: +{ref_bonus:,} ¢ за реферала".replace(",", " "))
-            try:
-                await bot.send_message(
-                    ref_id,
-                    "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢.",
-                    parse_mode="MARKDOWN"
-                )
-            except:
-                pass
+            if ref_id != 0:
+                try:
+                    await bot.send_message(
+                        ref_id,
+                        "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢."
+                    )
+                except Exception:
+                    pass
+            return True
+        elif res[0] == 1:
+            await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
+            return False
+        else:
+            cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+            conn.commit()
         return True
-    elif res[0] == 1:
+    finally:
         conn.close()
-        await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
-        return False
-    else:
-        cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-        conn.commit()
-    conn.close()
-    return True
-        
+
 async def is_creator(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
     conn = get_db()
@@ -555,7 +470,6 @@ async def text_gang_menu(message: Message):
 
 @router.callback_query(F.data == "join_gang")
 async def callback_join_gang(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -574,7 +488,6 @@ async def callback_join_gang(callback: CallbackQuery):
 
 @router.callback_query(F.data == "gang_brothers")
 async def callback_gang_brothers(callback: CallbackQuery):
-    await callback.answer()
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT custom_name, username FROM users WHERE gang_name = 'Уличные волки'")
@@ -596,7 +509,6 @@ async def callback_gang_brothers(callback: CallbackQuery):
 
 @router.callback_query(F.data == "gang_back")
 async def callback_gang_back(callback: CallbackQuery):
-    await callback.answer() 
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -617,7 +529,6 @@ async def callback_gang_back(callback: CallbackQuery):
 
 @router.callback_query(F.data == "gang_rob_bank")
 async def callback_gang_rob(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     if now - gang_rob_cooldowns.get(user_id, 0) < 3600:
@@ -655,25 +566,17 @@ def format_profile(user_data):
 async def msg_profile(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
-    
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT u.custom_name, u.username, u.balance, u.bank_balance, u.invested, u.is_creator, u.ref_count,
-               (SELECT COUNT(*) FROM user_apartments WHERE user_id = ?) as apt_count
-        FROM users u WHERE u.user_id = ?
-    """, (user_id, user_id))
+    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator FROM users WHERE user_id = ?", (user_id,))
     u = cursor.fetchone()
-    conn.close()
-    
-    if not u:
-        await message.answer("❌ Профиль не найден.")
-        return
-        
-    custom_name, uname, balance, bank_balance, invested, is_creat, ref_count, apt_count = u
+    custom_name, uname, balance, bank_balance, invested, is_creat = u if u else (None, "user", 10000, 0, 0, 0)
     display_name = custom_name if custom_name else (uname if uname else message.from_user.first_name)
-    ref_count = ref_count or 0
-    
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    apt_count = cursor.fetchone()[0]
+    cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
+    ref_count = cursor.fetchone()[0] or 0
+    conn.close()
     await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat)))
 
 @router.message(F.text.casefold() == "чекнуть")
@@ -770,7 +673,6 @@ async def text_work(message: Message):
 
 @router.callback_query(F.data == "work_bottles")
 async def work_bottles(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     last = work_cooldowns.get(f"b_{user_id}", 0)
@@ -798,7 +700,6 @@ async def work_bottles(callback: CallbackQuery):
 
 @router.callback_query(F.data == "work_metal")
 async def work_metal(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     last = work_cooldowns.get(f"m_{user_id}", 0)
@@ -825,7 +726,6 @@ async def work_metal(callback: CallbackQuery):
 
 @router.callback_query(F.data == "work_steal")
 async def work_steal(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     last = work_cooldowns.get(f"s_{user_id}", 0)
@@ -851,7 +751,6 @@ async def work_steal(callback: CallbackQuery):
 
 @router.callback_query(F.data == "sell_resources")
 async def sell_resources(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db(); cursor = conn.cursor()
     cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
@@ -960,7 +859,7 @@ async def callback_buy_company(callback: CallbackQuery):
         conn.close()
         return
     cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (cost, user_id))
-    cursor.execute("INSERT INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, ?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET level = EXCLUDED.level, last_claim = EXCLUDED.last_claim, earned_balance = EXCLUDED.earned_balance", (user_id, 1, time.time(), 0))
+    cursor.execute("INSERT OR REPLACE INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, 1, ?, 0)", (user_id, time.time()))
     conn.commit()
     conn.close()
     
@@ -973,7 +872,6 @@ async def callback_buy_company(callback: CallbackQuery):
 
 @router.callback_query(F.data == "claim_company_profit")
 async def callback_claim_company(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -1014,7 +912,6 @@ async def callback_claim_company(callback: CallbackQuery):
 
 @router.callback_query(F.data == "upgrade_company")
 async def callback_upgrade_company(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -1484,7 +1381,6 @@ async def text_flipping(message: Message):
 
 @router.callback_query(F.data == "refresh_flip")
 async def refresh_flipping(callback: CallbackQuery):
-    await callback.answer()
     price = random.randint(1_000_000, 100_000_000)
     apt_name = random.choice(APARTMENT_NAMES)
     user_id = callback.from_user.id
@@ -1509,7 +1405,6 @@ async def refresh_flipping(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("buy_apt_"))
 async def buy_apartment(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     parts = callback.data.split("_")
     price = int(parts[2])
@@ -1585,7 +1480,6 @@ async def text_my_apartments(message: Message):
 
 @router.callback_query(F.data.startswith("sell_apt_"))
 async def sell_apartment(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     apt_id = int(callback.data.split("_")[2])
 
@@ -1689,7 +1583,7 @@ async def activate_promo_code(message: Message):
         conn.close()
         return
     reward = promo[0]
-    cursor.execute("INSERT INTO user_promo (user_id, code) VALUES (?, ?) ON CONFLICT DO NOTHING", (user_id, code))
+    cursor.execute("INSERT OR IGNORE INTO user_promo (user_id, code) VALUES (?, ?)", (user_id, code))
     cursor.execute("UPDATE promo_codes SET activations_left = activations_left - 1 WHERE code = ?", (code,))
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
     conn.commit()
@@ -1705,7 +1599,6 @@ async def text_creator_command(message: Message):
 
 @router.callback_query(F.data == "creator_claim_salary")
 async def callback_creator_salary(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     if not await is_creator(user_id): return
     now = time.time()
@@ -1752,7 +1645,6 @@ async def cmd_admin_panel(message: Message):
 
 @router.callback_query(F.data == "admin_history_help")
 async def admin_history_help_callback(callback: CallbackQuery):
-    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     await callback.message.answer("📋 История игрока\n\nНапиши: история @username\nНапример: история @chapa")
     await callback.answer()
@@ -1778,7 +1670,6 @@ async def admin_history(message: Message):
 
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats_callback(callback: CallbackQuery):
-    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     conn = get_db()
     cursor = conn.cursor()
@@ -1795,7 +1686,6 @@ async def admin_back_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_broadcast")
 async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     await callback.message.answer("📢 Введите текст для рассылки игрокам (или /cancel):")
     await state.set_state(AdminStates.waiting_for_broadcast)
@@ -1826,7 +1716,6 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "admin_balance")
 async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     await callback.message.answer("💰 Введите юзернейм/ID и сумму (например: `@username 5кк` или `123456 1ккк`):")
     await state.set_state(AdminStates.waiting_for_balance_change)
@@ -1863,7 +1752,6 @@ async def admin_balance_process(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "admin_ban_menu")
 async def admin_ban_menu_callback(callback: CallbackQuery):
-    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     text = "Команды в чате:\n• бан @юз\n• разбан @юз\n• выдавать креатора @юз\n• забрать креатора @юз\n• обнулить @юз"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]])

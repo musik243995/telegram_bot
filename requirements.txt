@@ -1,3 +1,2 @@
 aiogram
 aiohttp
-psycopg2-binary
