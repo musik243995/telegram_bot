@@ -232,6 +232,7 @@ def init_db():
             code TEXT
         )
     """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_quests (
             user_id INTEGER,
             day_num INTEGER,
@@ -241,7 +242,7 @@ def init_db():
             last_reset_date TEXT,
             PRIMARY KEY (user_id, day_num, quest_id)
         )
-    """)
+    """)    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
