@@ -361,7 +361,7 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
         conn.close()
 
         if ref_id != 0:
-            log_action(ref_id, f"Приглашён новый игрок: +{ref_bonus:,} ¢ за реферала".replace(",", " "))
+            log_user_action(ref_id, "Система", "Реферал", f"Приглашён новый игрок: +{ref_bonus:,} ¢ за реферала".replace(",", " "))
             try:
                 await bot.send_message(
                     ref_id,
