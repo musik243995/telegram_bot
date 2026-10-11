@@ -249,8 +249,8 @@ def init_db():
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN stolen INTEGER DEFAULT 0")
         conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    except Exception:
+        conn.rollback()
     conn.close()
 
 def log_user_action(user_id, username, action_type, details):
