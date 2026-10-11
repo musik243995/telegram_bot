@@ -661,17 +661,25 @@ def format_profile(user_data):
 async def msg_profile(message: Message):
     if not await check_ban_and_register(message): return
     user_id = message.from_user.id
+    
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("""
+        SELECT u.custom_name, u.username, u.balance, u.bank_balance, u.invested, u.is_creator, u.ref_count,
+               (SELECT COUNT(*) FROM user_apartments WHERE user_id = ?) as apt_count
+        FROM users u WHERE u.user_id = ?
+    """, (user_id, user_id))
     u = cursor.fetchone()
-    custom_name, uname, balance, bank_balance, invested, is_creat = u if u else (None, "user", 10000, 0, 0, 0)
-    display_name = custom_name if custom_name else (uname if uname else message.from_user.first_name)
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
-    apt_count = cursor.fetchone()[0]
-    cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
-    ref_count = cursor.fetchone()[0] or 0
     conn.close()
+    
+    if not u:
+        await message.answer("❌ Профиль не найден.")
+        return
+        
+    custom_name, uname, balance, bank_balance, invested, is_creat, ref_count, apt_count = u
+    display_name = custom_name if custom_name else (uname if uname else message.from_user.first_name)
+    ref_count = ref_count or 0
+    
     await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat)))
 
 @router.message(F.text.casefold() == "чекнуть")
