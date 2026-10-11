@@ -259,45 +259,44 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
     user = message.from_user
     user_id, username = user.id, user.username or user.first_name
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
+        res = cursor.fetchone()
 
-    if res is None:
-        ref_id = 0
-        if command and command.args and command.args.startswith("ref_"):
-            try:
-                potential_ref = int(command.args.replace("ref_", ""))
-                if potential_ref != user_id:
-                    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
-                    if cursor.fetchone(): ref_id = potential_ref
-            except: pass
+        if res is None:
+            ref_id = 0
+            if command and command.args and command.args.startswith("ref_"):
+                try:
+                    potential_ref = int(command.args.replace("ref_", ""))
+                    if potential_ref != user_id:
+                        cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
+                        if cursor.fetchone(): ref_id = potential_ref
+                except: pass
 
-        cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
-        if ref_id != 0:
-            cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
-        conn.commit()
-        conn.close()
+            cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
+            if ref_id != 0:
+                cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
+            conn.commit()
 
-        # Telegram API вызываем только после завершения транзакции SQLite.
-        if ref_id != 0:
-            try:
-                await bot.send_message(
-                    ref_id,
-                    "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢."
-                )
-            except Exception:
-                pass
+            if ref_id != 0:
+                try:
+                    await bot.send_message(
+                        ref_id,
+                        "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢."
+                    )
+                except Exception:
+                    pass
+            return True
+        elif res[0] == 1:
+            await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
+            return False
+        else:
+            cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+            conn.commit()
         return True
-    elif res[0] == 1:
+    finally:
         conn.close()
-        await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
-        return False
-    else:
-        cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-        conn.commit()
-    conn.close()
-    return True
 
 async def is_creator(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
@@ -627,16 +626,24 @@ async def text_top(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     placeholders = ','.join(['?'] * len(ADMIN_IDS)) if ADMIN_IDS else '0'
-    cursor.execute(f"SELECT custom_name, username, (balance + bank_balance + invested) as total, is_creator FROM users WHERE user_id NOT IN ({placeholders}) ORDER BY total DESC LIMIT 10", tuple(ADMIN_IDS))
+    cursor.execute(
+        f"SELECT custom_name, username, (balance + bank_balance + invested) as total, is_creator "
+        f"FROM users WHERE user_id NOT IN ({placeholders}) ORDER BY total DESC LIMIT 10", 
+        tuple(ADMIN_IDS)
+    )
     top_list = cursor.fetchall()
     conn.close()
+    
     text = "🏆 Топ-10 богатейших игроков:\n\n"
     if not top_list:
         text += "Пока нет игроков для отображения."
     for idx, (custom_name, uname, total, is_creat) in enumerate(top_list, 1):
         display_name = custom_name if custom_name else (uname if uname else "Игрок")
+        # Экранируем спецсимволы Markdown, чтобы они не ломали отправку сообщения
+        safe_name = display_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
         badge = " 🎬" if is_creat == 1 else ""
-        text += f"{idx}. {display_name}{badge} — {total:,} ¢\n".replace(",", " ")
+        text += f"{idx}. {safe_name}{badge} — {total:,} ¢\n".replace(",", " ")
+        
     await smart_answer(message, text)
 
 # --- РАБОТА (КД: МЕТАЛЛ 4С, БУТЫЛКИ 2С, ВОРОВСТВО 6С) ---
@@ -1915,29 +1922,6 @@ async def api_sell_item(request):
 
     return web.json_response({"success": True, "new_balance": new_bal})
 
-async def api_sell_item(request):
-    data = await request.json()
-    user_id = data.get("user_id")
-    item_id = data.get("item_id")
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT price FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (item_id, user_id))
-    item = cursor.fetchone()
-    if not item:
-        conn.close()
-        return web.json_response({"success": False})
-
-    price = item[0]
-    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (item_id,))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    new_bal = cursor.fetchone()[0]
-    conn.commit()
-    conn.close()
-
-    return web.json_response({"success": True, "new_balance": new_bal})
-
 # --- НОВАЯ ФУНКЦИЯ ДЛЯ КАЗИНО (Шаг 1) ---
 async def api_casino_spin(request):
     data = await request.json()
@@ -1962,11 +1946,11 @@ async def api_casino_spin(request):
     if rand_val < 0.15:  # 15% шанс на выигрыш
         if random.random() < 0.2:  # Редкие 777
             symbols = ["7️⃣", "7️⃣", "7️⃣"]
-            payout = bet * 6  # Изменили на x6
+            payout = bet * 6  # x6
         else:
             sym = random.choice([["🍋", "🍋", "🍋"], ["🍇", "🍇", "🍇"], ["🎁", "🎁", "🎁"]])
             symbols = sym
-            payout = bet * 4   # Изменили на x4
+            payout = bet * 4   # x4
         balance += payout
         won = True
     else:
@@ -1981,7 +1965,306 @@ async def api_casino_spin(request):
     conn.commit()
     conn.close()
 
+    # Засчитываем прогресс квеста для первого дня (игра в казино)
+    update_quest_progress(int(user_id), 1, bet if get_current_quest_day() == 1 else 0)
+
     return web.json_response({"new_balance": balance, "symbols": symbols, "won": won, "payout": payout})
+
+# --- API ДЛЯ БЛЕКДЖЕКА ---
+async def api_blackjack_action(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    action = data.get("action")  # "start", "hit", "stand", "double"
+    bet = int(data.get("bet", 0))
+    game_state = data.get("game_state", {})
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return web.json_response({"error": "Пользователь не найден"}, status=400)
+    
+    balance = row[0]
+
+    # Колода карт
+    def create_deck():
+        suits = ['♠', '♥', '♦', '♣']
+        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+        deck = []
+        for s in suits:
+            for r in ranks:
+                deck.append({"rank": r, "suit": s})
+        random.shuffle(deck)
+        return deck
+
+    def get_card_value(hand):
+        value = 0
+        aces = 0
+        for card in hand:
+            r = card["rank"]
+            if r in ['J', 'Q', 'K']:
+                value += 10
+            elif r == 'A':
+                aces += 1
+                value += 11
+            else:
+                value += int(r)
+        while value > 21 and aces > 0:
+            value -= 10
+            aces -= 1
+        return value
+
+    if action == "start":
+        if bet <= 0 or balance < bet:
+            conn.close()
+            return web.json_response({"error": "Недостаточно средств или неверная ставка"}, status=400)
+        
+        # Списываем ставку
+        balance -= bet
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        deck = create_deck()
+        player_hand = [deck.pop(), deck.pop()]
+        dealer_hand = [deck.pop(), deck.pop()]
+
+        p_val = get_card_value(player_hand)
+        
+        # Проверка на мгновенный Blackjack у игрока
+        game_over = False
+        message = ""
+        payout = 0
+
+        if p_val == 21:
+            game_over = True
+            payout = int(bet * 2.5)
+            balance += payout
+            message = "🔥 Блекджек! Вы выиграли!"
+            
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+            conn.commit()
+            conn.close()
+
+        return web.json_response({
+            "balance": balance,
+            "player_hand": player_hand,
+            "dealer_hand": [dealer_hand[0], {"rank": "?", "suit": "hidden"}], # скрываем вторую карту дилера
+            "dealer_full_hidden": dealer_hand,
+            "deck": deck,
+            "bet": bet,
+            "game_over": game_over,
+            "message": message,
+            "payout": payout
+        })
+
+    elif action == "hit":
+        deck = game_state["deck"]
+        player_hand = game_state["player_hand"]
+        dealer_hidden = game_state["dealer_full_hidden"]
+        bet = game_state["bet"]
+
+        player_hand.append(deck.pop())
+        p_val = get_card_value(player_hand)
+
+        game_over = False
+        message = ""
+        payout = 0
+
+        if p_val > 21:
+            game_over = True
+            message = "💥 Перебор! Вы проиграли."
+
+        return web.json_response({
+            "balance": balance,
+            "player_hand": player_hand,
+            "dealer_hand": [dealer_hidden[0], {"rank": "?", "suit": "hidden"}],
+            "dealer_full_hidden": dealer_hidden,
+            "deck": deck,
+            "bet": bet,
+            "game_over": game_over,
+            "message": message,
+            "payout": 0
+        })
+
+    elif action == "stand":
+        deck = game_state["deck"]
+        player_hand = game_state["player_hand"]
+        dealer_hand = game_state["dealer_full_hidden"]
+        bet = game_state["bet"]
+
+        # Ход дилера (добирает пока меньше 17)
+        while get_card_value(dealer_hand) < 17:
+            dealer_hand.append(deck.pop())
+
+        p_val = get_card_value(player_hand)
+        d_val = get_card_value(dealer_hand)
+
+        game_over = True
+        payout = 0
+        message = ""
+
+        if d_val > 21:
+            payout = bet * 2
+            message = "🎉 У дилера перебор! Вы выиграли!"
+        elif p_val > d_val:
+            payout = bet * 2
+            message = f"🎉 Победа! ({p_val} против {d_val})"
+        elif p_val < d_val:
+            message = f"😢 Дилер выиграл ({d_val} против {p_val})"
+        else:
+            payout = bet
+            message = f"🤝 Ничья! ({p_val} : {d_val})"
+
+        balance += payout
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        return web.json_response({
+            "balance": balance,
+            "player_hand": player_hand,
+            "dealer_hand": dealer_hand,
+            "bet": bet,
+            "game_over": True,
+            "message": message,
+            "payout": payout
+        })
+
+    elif action == "double":
+        if balance < bet:
+            conn.close()
+            return web.json_response({"error": "Недостаточно средств для удвоения"}, status=400)
+        
+        # Списываем доп ставку
+        balance -= bet
+        bet *= 2
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        deck = game_state["deck"]
+        player_hand = game_state["player_hand"]
+        dealer_hand = game_state["dealer_full_hidden"]
+
+        player_hand.append(deck.pop())
+        p_val = get_card_value(player_hand)
+
+        if p_val > 21:
+            return web.json_response({
+                "balance": balance,
+                "player_hand": player_hand,
+                "dealer_hand": dealer_hand,
+                "bet": bet,
+                "game_over": True,
+                "message": "💥 Перебор после удвоения! Вы проиграли.",
+                "payout": 0
+            })
+
+        # Автоматический ход дилера после удвоения
+        while get_card_value(dealer_hand) < 17:
+            dealer_hand.append(deck.pop())
+
+        d_val = get_card_value(dealer_hand)
+        payout = 0
+        message = ""
+
+        if d_val > 21:
+            payout = bet * 2
+            message = "🎉 У дилера перебор! Вы выиграли удвоенную ставку!"
+        elif p_val > d_val:
+            payout = bet * 2
+            message = f"🎉 Победа после удвоения! ({p_val} : {d_val})"
+        elif p_val < d_val:
+            message = f"😢 Дилер выиграл ({d_val} : {p_val})"
+        else:
+            payout = bet
+            message = f"🤝 Ничья! Ставка возвращена."
+
+        balance += payout
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        return web.json_response({
+            "balance": balance,
+            "player_hand": player_hand,
+            "dealer_hand": dealer_hand,
+            "bet": bet,
+            "game_over": True,
+            "message": message,
+            "payout": payout
+        })
+
+    conn.close()
+    return web.json_response({"error": "Неизвестное действие"}, status=400)
+
+# --- API ДЛЯ МИНИ-ИГРЫ КРАШ (РАКЕТА) ---
+async def api_crash_bet(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    bet = int(data.get("bet", 0))
+    action = data.get("action")  # "start" или "cashout"
+    cashout_multiplier = float(data.get("multiplier", 1.0))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return web.json_response({"error": "Пользователь не найден"}, status=400)
+    
+    balance = row[0]
+
+    if action == "start":
+        if bet <= 0 or balance < bet:
+            conn.close()
+            return web.json_response({"error": "Недостаточно средств или неверная ставка"}, status=400)
+        
+        # Списываем ставку
+        balance -= bet
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        # Сбалансированная генерация: частые мелкие иксы, редкие крупные (максимум 15.0x)
+        r = random.random()
+        if r < 0.12:
+            crash_point = 1.00  # 18% шанс раннего краша
+        else:
+            # Степень 5 сильно смещает результаты к нижней границе (большинство будет от 1.01x до 2.2x)
+            raw_val = random.random() ** 5
+            crash_point = round(1.01 + raw_val * 14.0, 2)
+            if crash_point > 15.0:
+                crash_point = 15.0
+
+        return web.json_response({
+            "balance": balance,
+            "crash_point": crash_point
+        })
+
+    elif action == "cashout":
+        win_amount = int(bet * cashout_multiplier)
+        balance += win_amount
+        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+        conn.commit()
+        conn.close()
+
+        return web.json_response({
+            "balance": balance,
+            "win_amount": win_amount
+        })
+
+    conn.close()
+    return web.json_response({"error": "Неверное действие"}, status=400)
 
 async def web_server():
     app = web.Application()
@@ -1991,6 +2274,8 @@ async def web_server():
     app.router.add_post("/api/open_case", api_open_case)
     app.router.add_post("/api/sell_item", api_sell_item)
     app.router.add_post("/api/casino_spin", api_casino_spin)
+    app.router.add_post("/api/blackjack", api_blackjack_action)
+    app.router.add_post("/api/crash", api_crash_bet)
     
     runner = web.AppRunner(app)
     await runner.setup()
