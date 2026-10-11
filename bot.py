@@ -2,6 +2,8 @@ import random
 import time
 import os
 import sqlite3
+import psycopg2
+from urllib.parse import urlparse
 import asyncio
 from datetime import datetime
 from urllib.parse import quote
@@ -96,12 +98,61 @@ def get_admin_keyboard():
     )
 
 # --- БАЗА ДАННЫХ ---
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+class PostgresCursorWrapper:
+    def __init__(self, cursor):
+        self.cursor = cursor
+    def execute(self, query, params=None):
+        query = query.replace("?", "%s")
+        query = query.replace("AUTOINCREMENT", "SERIAL")
+        return self.cursor.execute(query, params)
+    def executemany(self, query, params_list):
+        query = query.replace("?", "%s")
+        query = query.replace("AUTOINCREMENT", "SERIAL")
+        return self.cursor.executemany(query, params_list)
+    def fetchone(self):
+        return self.cursor.fetchone()
+    def fetchall(self):
+        return self.cursor.fetchall()
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
+
+class PostgresConnWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+    def cursor(self):
+        return PostgresCursorWrapper(self.conn.cursor())
+    def commit(self):
+        return self.conn.commit()
+    def rollback(self):
+        return self.conn.rollback()
+    def close(self):
+        return self.conn.close()
+    def execute(self, query, params=None):
+        c = self.cursor()
+        c.execute(query, params)
+        return c
+
 def get_db():
-    conn = sqlite3.connect("game.db", timeout=30.0)
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
-    return conn
+    if DATABASE_URL:
+        url = urlparse(DATABASE_URL)
+        conn = psycopg2.connect(
+            database=url.path[1:],
+            user=url.username,
+            password=url.password,
+            host=url.hostname,
+            port=url.port,
+            sslmode='require'
+        )
+        return PostgresConnWrapper(conn)
+    else:
+        conn = sqlite3.connect("game.db", timeout=30.0)
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        return conn
 
 def init_db():
     conn = get_db()
@@ -859,7 +910,7 @@ async def callback_buy_company(callback: CallbackQuery):
         conn.close()
         return
     cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (cost, user_id))
-    cursor.execute("INSERT OR REPLACE INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, 1, ?, 0)", (user_id, time.time()))
+    cursor.execute("INSERT INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, ?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET level = EXCLUDED.level, last_claim = EXCLUDED.last_claim, earned_balance = EXCLUDED.earned_balance", (user_id, 1, time.time(), 0))
     conn.commit()
     conn.close()
     
@@ -1583,7 +1634,7 @@ async def activate_promo_code(message: Message):
         conn.close()
         return
     reward = promo[0]
-    cursor.execute("INSERT OR IGNORE INTO user_promo (user_id, code) VALUES (?, ?)", (user_id, code))
+    cursor.execute("INSERT INTO user_promo (user_id, code) VALUES (?, ?) ON CONFLICT DO NOTHING", (user_id, code))
     cursor.execute("UPDATE promo_codes SET activations_left = activations_left - 1 WHERE code = ?", (code,))
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
     conn.commit()
