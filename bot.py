@@ -2,8 +2,6 @@ import random
 import time
 import os
 import sqlite3
-import psycopg2
-from urllib.parse import urlparse
 import asyncio
 from datetime import datetime
 from urllib.parse import quote
