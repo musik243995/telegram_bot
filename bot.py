@@ -525,6 +525,7 @@ async def text_gang_menu(message: Message):
 
 @router.callback_query(F.data == "join_gang")
 async def callback_join_gang(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -543,6 +544,7 @@ async def callback_join_gang(callback: CallbackQuery):
 
 @router.callback_query(F.data == "gang_brothers")
 async def callback_gang_brothers(callback: CallbackQuery):
+    await callback.answer()
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT custom_name, username FROM users WHERE gang_name = 'Уличные волки'")
@@ -564,6 +566,7 @@ async def callback_gang_brothers(callback: CallbackQuery):
 
 @router.callback_query(F.data == "gang_back")
 async def callback_gang_back(callback: CallbackQuery):
+    await callback.answer() 
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -584,6 +587,7 @@ async def callback_gang_back(callback: CallbackQuery):
 
 @router.callback_query(F.data == "gang_rob_bank")
 async def callback_gang_rob(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     if now - gang_rob_cooldowns.get(user_id, 0) < 3600:
@@ -728,6 +732,7 @@ async def text_work(message: Message):
 
 @router.callback_query(F.data == "work_bottles")
 async def work_bottles(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     last = work_cooldowns.get(f"b_{user_id}", 0)
@@ -755,6 +760,7 @@ async def work_bottles(callback: CallbackQuery):
 
 @router.callback_query(F.data == "work_metal")
 async def work_metal(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     last = work_cooldowns.get(f"m_{user_id}", 0)
@@ -781,6 +787,7 @@ async def work_metal(callback: CallbackQuery):
 
 @router.callback_query(F.data == "work_steal")
 async def work_steal(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     now = time.time()
     last = work_cooldowns.get(f"s_{user_id}", 0)
@@ -806,6 +813,7 @@ async def work_steal(callback: CallbackQuery):
 
 @router.callback_query(F.data == "sell_resources")
 async def sell_resources(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db(); cursor = conn.cursor()
     cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
@@ -902,6 +910,7 @@ async def text_company_menu(message: Message):
 
 @router.callback_query(F.data == "buy_company")
 async def callback_buy_company(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -927,6 +936,7 @@ async def callback_buy_company(callback: CallbackQuery):
 
 @router.callback_query(F.data == "claim_company_profit")
 async def callback_claim_company(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -967,6 +977,7 @@ async def callback_claim_company(callback: CallbackQuery):
 
 @router.callback_query(F.data == "upgrade_company")
 async def callback_upgrade_company(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -1436,6 +1447,7 @@ async def text_flipping(message: Message):
 
 @router.callback_query(F.data == "refresh_flip")
 async def refresh_flipping(callback: CallbackQuery):
+    await callback.answer()
     price = random.randint(1_000_000, 100_000_000)
     apt_name = random.choice(APARTMENT_NAMES)
     user_id = callback.from_user.id
@@ -1460,6 +1472,7 @@ async def refresh_flipping(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("buy_apt_"))
 async def buy_apartment(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     parts = callback.data.split("_")
     price = int(parts[2])
@@ -1535,6 +1548,7 @@ async def text_my_apartments(message: Message):
 
 @router.callback_query(F.data.startswith("sell_apt_"))
 async def sell_apartment(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     apt_id = int(callback.data.split("_")[2])
 
@@ -1654,6 +1668,7 @@ async def text_creator_command(message: Message):
 
 @router.callback_query(F.data == "creator_claim_salary")
 async def callback_creator_salary(callback: CallbackQuery):
+    await callback.answer()
     user_id = callback.from_user.id
     if not await is_creator(user_id): return
     now = time.time()
@@ -1700,6 +1715,7 @@ async def cmd_admin_panel(message: Message):
 
 @router.callback_query(F.data == "admin_history_help")
 async def admin_history_help_callback(callback: CallbackQuery):
+    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     await callback.message.answer("📋 История игрока\n\nНапиши: история @username\nНапример: история @chapa")
     await callback.answer()
@@ -1725,6 +1741,7 @@ async def admin_history(message: Message):
 
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats_callback(callback: CallbackQuery):
+    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     conn = get_db()
     cursor = conn.cursor()
@@ -1741,6 +1758,7 @@ async def admin_back_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_broadcast")
 async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     await callback.message.answer("📢 Введите текст для рассылки игрокам (или /cancel):")
     await state.set_state(AdminStates.waiting_for_broadcast)
@@ -1771,6 +1789,7 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "admin_balance")
 async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     await callback.message.answer("💰 Введите юзернейм/ID и сумму (например: `@username 5кк` или `123456 1ккк`):")
     await state.set_state(AdminStates.waiting_for_balance_change)
@@ -1807,6 +1826,7 @@ async def admin_balance_process(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "admin_ban_menu")
 async def admin_ban_menu_callback(callback: CallbackQuery):
+    await callback.answer()
     if callback.from_user.id not in ADMIN_IDS: return
     text = "Команды в чате:\n• бан @юз\n• разбан @юз\n• выдавать креатора @юз\n• забрать креатора @юз\n• обнулить @юз"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]])
