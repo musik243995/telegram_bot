@@ -328,66 +328,60 @@ def update_quest_progress(user_id, quest_type, amount=1):
     conn.commit()
     conn.close()
 
-# --- КЭШ В ПАМЯТИ ДЛЯ МГНОВЕННОГО ОТКЛИКА ---
-VALID_USERS_CACHE = set()
-BANNED_USERS_CACHE = set()
-
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
     user_id = user.id
-    
-    # 1. Если пользователь уже есть в кэше памяти — пропускаем запросы к БД!
-    if user_id in VALID_USERS_CACHE:
+    username = user.username or user.first_name
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
+    res = cursor.fetchone()
+
+    if res is None:
+        ref_id = 0
+        if command and command.args and command.args.startswith("ref_"):
+            try:
+                potential_ref = int(command.args.replace("ref_", ""))
+                if potential_ref != user_id:
+                    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
+                    if cursor.fetchone():
+                        ref_id = potential_ref
+            except:
+                pass
+
+        cursor.execute("""
+            INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) 
+            VALUES (?, ?, 10000, ?, ?)
+        """, (user_id, username, time.time(), ref_id))
+        
+        ref_bonus = 1_000_000
+        if ref_id != 0:
+            cursor.execute("UPDATE users SET balance = balance + ?, ref_count = ref_count + 1 WHERE user_id = ?", (ref_bonus, ref_id))
+
+        conn.commit()
+        conn.close()
+
+        if ref_id != 0:
+            log_action(ref_id, f"Приглашён новый игрок: +{ref_bonus:,} ¢ за реферала".replace(",", " "))
+            try:
+                await bot.send_message(
+                    ref_id,
+                    "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢.",
+                    parse_mode="MARKDOWN"
+                )
+            except:
+                pass
         return True
-    if user_id in BANNED_USERS_CACHE:
+    elif res[0] == 1:
+        conn.close()
         await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
         return False
-
-    username = user.username or user.first_name
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
-        res = cursor.fetchone()
-
-        if res is None:
-            ref_id = 0
-            if command and command.args and command.args.startswith("ref_"):
-                try:
-                    potential_ref = int(command.args.replace("ref_", ""))
-                    if potential_ref != user_id:
-                        cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
-                        if cursor.fetchone(): ref_id = potential_ref
-                except: pass
-
-            cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
-            if ref_id != 0:
-                cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
-            conn.commit()
-
-            if ref_id != 0:
-                try:
-                    await bot.send_message(
-                        ref_id,
-                        "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢."
-                    )
-                except Exception:
-                    pass
-            
-            VALID_USERS_CACHE.add(user_id)
-            return True
-        elif res[0] == 1:
-            BANNED_USERS_CACHE.add(user_id)
-            await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
-            return False
-        else:
-            cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-            conn.commit()
-            
-        VALID_USERS_CACHE.add(user_id)
-        return True
-    finally:
-        conn.close()
+    else:
+        cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+        conn.commit()
+    conn.close()
+    return True
         
 async def is_creator(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
