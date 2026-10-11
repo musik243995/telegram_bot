@@ -107,12 +107,21 @@ class PostgresCursorWrapper:
         query = query.replace("?", "%s")
         query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
         query = query.replace("AUTOINCREMENT", "SERIAL")
+        query = query.replace("DATETIME", "TIMESTAMP")
         return self.cursor.execute(query, params)
     def executemany(self, query, params_list):
         query = query.replace("?", "%s")
         query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
         query = query.replace("AUTOINCREMENT", "SERIAL")
+        query = query.replace("DATETIME", "TIMESTAMP")
         return self.cursor.executemany(query, params_list)
+    def fetchone(self):
+        return self.cursor.fetchone()
+    def fetchall(self):
+        return self.cursor.fetchall()
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
     
 class PostgresConnWrapper:
     def __init__(self, conn):
