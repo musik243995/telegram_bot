@@ -903,6 +903,7 @@ def get_company_data_and_keyboard(user_id):
 
 @router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
 async def text_company_menu(message: Message):
+    await callback.answer()
     if not await check_ban_and_register(message): return
     log_user_action(message.from_user.id, message.from_user.username or message.from_user.first_name, "КНОПКА/КОМАНДА", "Компания по флипингу")
     text, keyboard = get_company_data_and_keyboard(message.from_user.id)
@@ -910,7 +911,6 @@ async def text_company_menu(message: Message):
 
 @router.callback_query(F.data == "buy_company")
 async def callback_buy_company(callback: CallbackQuery):
-    await callback.answer()
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
