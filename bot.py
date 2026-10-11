@@ -139,18 +139,36 @@ class PostgresConnWrapper:
         c.execute(query, params)
         return c
 
+# --- Глобальная переменная для постоянного пула соединений ---
+_global_db_conn = None
+
 def get_db():
+    global _global_db_conn
     if DATABASE_URL:
+        try:
+            if _global_db_conn is not None:
+                # Проверяем живо ли соединение быстрым запросом
+                with _global_db_conn.cursor() as temp_cursor:
+                    temp_cursor.execute("SELECT 1")
+                return _global_db_conn
+        except Exception:
+            _global_db_conn = None  # Сбрасываем при разрыве
+
         url = urlparse(DATABASE_URL)
-        conn = psycopg2.connect(
+        # Обязательно используем порт 6543 (Session Pooler) для скорости!
+        db_port = url.port if url.port else 6543
+        
+        _global_db_conn = psycopg2.connect(
             database=url.path[1:],
             user=url.username,
             password=url.password,
             host=url.hostname,
-            port=url.port,
-            sslmode='require'
+            port=db_port,
+            sslmode='require',
+            connect_timeout=3
         )
-        return PostgresConnWrapper(conn)
+        _global_db_conn.autocommit = False
+        return PostgresConnWrapper(_global_db_conn)
     else:
         conn = sqlite3.connect("game.db", timeout=30.0)
         conn.execute("PRAGMA busy_timeout = 30000")
