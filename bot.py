@@ -1569,18 +1569,28 @@ async def activate_promo_code(message: Message):
     code = message.text.split()[1].upper()
     conn = get_db()
     cursor = conn.cursor()
+    
+    # Проверяем, вводил ли пользователь этот промокод раньше
+    cursor.execute("SELECT 1 FROM user_promo WHERE user_id = ? AND code = ?", (user_id, code))
+    if cursor.fetchone():
+        await message.answer("❌ Вы уже вводили этот промокод.")
+        conn.close()
+        return
+
     cursor.execute("SELECT reward, activations_left FROM promo_codes WHERE code = ?", (code,))
     promo = cursor.fetchone()
     if not promo or promo[1] <= 0:
         await message.answer("❌ Промокод не найден или истек.")
         conn.close()
         return
+        
     reward = promo[0]
-    cursor.execute("INSERT OR IGNORE INTO user_promo (user_id, code) VALUES (?, ?)", (user_id, code))
+    cursor.execute("INSERT INTO user_promo (user_id, code) VALUES (?, ?)", (user_id, code))
     cursor.execute("UPDATE promo_codes SET activations_left = activations_left - 1 WHERE code = ?", (code,))
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
     conn.commit()
     conn.close()
+    
     update_quest_progress(user_id, 3, 1)
     await message.answer(f"🎉 Промокод активирован! Получено: +{reward:,} ¢".replace(",", " "))
 
