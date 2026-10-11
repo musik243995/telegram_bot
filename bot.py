@@ -328,9 +328,22 @@ def update_quest_progress(user_id, quest_type, amount=1):
     conn.commit()
     conn.close()
 
+# --- КЭШ В ПАМЯТИ ДЛЯ МГНОВЕННОГО ОТКЛИКА ---
+VALID_USERS_CACHE = set()
+BANNED_USERS_CACHE = set()
+
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
-    user_id, username = user.id, user.username or user.first_name
+    user_id = user.id
+    
+    # 1. Если пользователь уже есть в кэше памяти — пропускаем запросы к БД!
+    if user_id in VALID_USERS_CACHE:
+        return True
+    if user_id in BANNED_USERS_CACHE:
+        await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
+        return False
+
+    username = user.username or user.first_name
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -360,17 +373,22 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
                     )
                 except Exception:
                     pass
+            
+            VALID_USERS_CACHE.add(user_id)
             return True
         elif res[0] == 1:
+            BANNED_USERS_CACHE.add(user_id)
             await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
             return False
         else:
             cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
             conn.commit()
+            
+        VALID_USERS_CACHE.add(user_id)
         return True
     finally:
         conn.close()
-
+        
 async def is_creator(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
     conn = get_db()
