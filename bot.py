@@ -96,83 +96,12 @@ def get_admin_keyboard():
     )
 
 # --- БАЗА ДАННЫХ ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-class PostgresCursorWrapper:
-    def __init__(self, cursor):
-        self.cursor = cursor
-    def execute(self, query, params=None):
-        query = query.replace("?", "%s")
-        query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-        query = query.replace("AUTOINCREMENT", "SERIAL")
-        query = query.replace("DATETIME", "TIMESTAMP")
-        return self.cursor.execute(query, params)
-    def executemany(self, query, params_list):
-        query = query.replace("?", "%s")
-        query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-        query = query.replace("AUTOINCREMENT", "SERIAL")
-        query = query.replace("DATETIME", "TIMESTAMP")
-        return self.cursor.executemany(query, params_list)
-    def fetchone(self):
-        return self.cursor.fetchone()
-    def fetchall(self):
-        return self.cursor.fetchall()
-    @property
-    def rowcount(self):
-        return self.cursor.rowcount
-    
-class PostgresConnWrapper:
-    def __init__(self, conn):
-        self.conn = conn
-    def cursor(self):
-        return PostgresCursorWrapper(self.conn.cursor())
-    def commit(self):
-        return self.conn.commit()
-    def rollback(self):
-        return self.conn.rollback()
-    def close(self):
-        return self.conn.close()
-    def execute(self, query, params=None):
-        c = self.cursor()
-        c.execute(query, params)
-        return c
-
-# --- Глобальная переменная для постоянного пула соединений ---
-_global_db_conn = None
-
 def get_db():
-    global _global_db_conn
-    if DATABASE_URL:
-        try:
-            if _global_db_conn is not None:
-                # Проверяем живо ли соединение быстрым запросом
-                with _global_db_conn.cursor() as temp_cursor:
-                    temp_cursor.execute("SELECT 1")
-                return _global_db_conn
-        except Exception:
-            _global_db_conn = None  # Сбрасываем при разрыве
-
-        url = urlparse(DATABASE_URL)
-        # Обязательно используем порт 6543 (Session Pooler) для скорости!
-        db_port = url.port if url.port else 6543
-        
-        _global_db_conn = psycopg2.connect(
-            database=url.path[1:],
-            user=url.username,
-            password=url.password,
-            host=url.hostname,
-            port=db_port,
-            sslmode='require',
-            connect_timeout=3
-        )
-        _global_db_conn.autocommit = False
-        return PostgresConnWrapper(_global_db_conn)
-    else:
-        conn = sqlite3.connect("game.db", timeout=30.0)
-        conn.execute("PRAGMA busy_timeout = 30000")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
-        return conn
+    conn = sqlite3.connect("game.db", timeout=30.0)
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
 
 def init_db():
     conn = get_db()
@@ -225,9 +154,9 @@ def init_db():
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_promo (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            code TEXT
+            code TEXT,
+            PRIMARY KEY (user_id, code)
         )
     """)
     cursor.execute("""
@@ -240,7 +169,7 @@ def init_db():
             last_reset_date TEXT,
             PRIMARY KEY (user_id, day_num, quest_id)
         )
-    """)    
+    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -265,8 +194,8 @@ def init_db():
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN stolen INTEGER DEFAULT 0")
         conn.commit()
-    except Exception:
-        conn.rollback()
+    except sqlite3.OperationalError:
+        pass
     conn.close()
 
 def log_user_action(user_id, username, action_type, details):
@@ -328,9 +257,7 @@ def update_quest_progress(user_id, quest_type, amount=1):
 
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
-    user_id = user.id
-    username = user.username or user.first_name
-
+    user_id, username = user.id, user.username or user.first_name
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
@@ -343,39 +270,32 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
                 potential_ref = int(command.args.replace("ref_", ""))
                 if potential_ref != user_id:
                     cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
-                    if cursor.fetchone():
-                        ref_id = potential_ref
-            except:
-                pass
+                    if cursor.fetchone(): ref_id = potential_ref
+            except: pass
 
-        cursor.execute("""
-            INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) 
-            VALUES (?, ?, 10000, ?, ?)
-        """, (user_id, username, time.time(), ref_id))
-        
-        ref_bonus = 1_000_000
+        cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
         if ref_id != 0:
-            cursor.execute("UPDATE users SET balance = balance + ?, ref_count = ref_count + 1 WHERE user_id = ?", (ref_bonus, ref_id))
-
+            cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
         conn.commit()
         conn.close()
 
+        # Telegram API вызываем только после завершения транзакции SQLite.
         if ref_id != 0:
-            log_user_action(ref_id, "Система", "Реферал", f"Приглашён новый игрок: +{ref_bonus:,} ¢ за реферала".replace(",", " "))
             try:
                 await bot.send_message(
                     ref_id,
-                    "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢.",
-                    parse_mode="MARKDOWN"
+                    "🎉 По вашей реферальной ссылке зарегистрировался новый игрок! Вам начислено 1 000 000 ¢."
                 )
-            except:
+            except Exception:
                 pass
         return True
     elif res[0] == 1:
         conn.close()
         await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
         return False
-    
+    else:
+        cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+        conn.commit()
     conn.close()
     return True
         
