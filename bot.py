@@ -61,6 +61,23 @@ BIG_TRANSFER_THRESHOLD = 10_000_000
 ADMIN_IDS = [1222239198, 8390540110, 8565202662, 7145763697]
 RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
 
+# --- РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ ---
+MAINTENANCE_MODE = False  # Переключатель (True = включено, False = выключено)
+
+@router.message(Command("tech_on"))
+async def enable_maintenance(message: Message):
+    global MAINTENANCE_MODE
+    if message.from_user.id not in ADMIN_IDS: return
+    MAINTENANCE_MODE = True
+    await message.answer("🚨 **Режим тех. работ ВКЛЮЧЕН.** Теперь бот отвечает только администраторам.", parse_mode="MARKDOWN")
+
+@router.message(Command("tech_off"))
+async def disable_maintenance(message: Message):
+    global MAINTENANCE_MODE
+    if message.from_user.id not in ADMIN_IDS: return
+    MAINTENANCE_MODE = False
+    await message.answer("✅ **Режим тех. работ ВЫКЛЮЧЕН.** Бот доступен всем.", parse_mode="MARKDOWN")
+
 # Названия квартир для флипинга
 APARTMENT_NAMES = [
     "Убитая хрущевка на окраине", "Сталинка в центре под ремонт", 
@@ -272,6 +289,13 @@ def update_quest_progress(user_id, quest_type, amount=1):
 async def check_ban_and_register(message: Message, command: CommandObject = None):
     user = message.from_user
     user_id, username = user.id, user.username or user.first_name
+    
+    # --- ПРОВЕРКА ТЕХ. РАБОТ ---
+    if MAINTENANCE_MODE and user_id not in ADMIN_IDS:
+        await message.answer("🛠 **В боте ведутся технические работы!**\nПопробуйте зайти позже.", parse_mode="MARKDOWN")
+        return False
+    # ---------------------------
+
     conn = get_db()
     try:
         cursor = conn.cursor()
