@@ -78,16 +78,22 @@
         .roulette-item { min-width: 90px; height: 90px; background: #1a1528; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #3b3363; }
         .roulette-item span { font-size: 0.7rem; margin-top: 5px; color: var(--muted); text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 80px; }
 
-        /* АПГРЕЙДЕР */
+        /* АПГРЕЙДЕР С КОВРИКОМ И ВРАЩАЮЩЕЙСЯ СТРЕЛОЧКОЙ */
         .upgrader-wrapper { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         .upgrader-circle-area { position: relative; width: 220px; height: 220px; margin: 10px auto 5px auto; display: flex; align-items: center; justify-content: center; }
-        .upgrader-top-arrow { position: absolute; top: -6px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 14px solid #ffffff; z-index: 10; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+        
+        /* Вращающийся контейнер стрелки */
+        .upgrader-spinner-arrow-wrap { position: absolute; inset: 0; z-index: 10; transition: transform 3.5s cubic-bezier(0.1, 0.9, 0.2, 1); pointer-events: none; }
+        .upgrader-top-arrow { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 16px solid #fbbf24; filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.8)); }
+
         .upgrader-svg-circle { width: 100%; height: 100%; transform: rotate(-90deg); }
         .upgrader-circle-bg { fill: none; stroke: #20173d; stroke-width: 14; }
-        .upgrader-circle-sector { fill: none; stroke: #8b5cf6; stroke-width: 14; stroke-dasharray: 565; stroke-dashoffset: 565; transition: stroke-dashoffset 0.4s ease, stroke 0.3s; }
+        .upgrader-circle-sector { fill: none; stroke: #8b5cf6; stroke-width: 14; stroke-dasharray: 565; stroke-dashoffset: 565; }
+        
         .upgrader-center-info { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .upgrader-chance-val { font-size: 2.2rem; font-weight: 900; color: #ffffff; line-height: 1; }
         .upgrader-chance-lbl { font-size: 0.75rem; font-weight: 800; color: var(--muted); letter-spacing: 1px; margin-top: 4px; }
+        
         .upgrader-slots-row { display: grid; grid-template-columns: 1fr 24px 1fr; align-items: center; gap: 8px; }
         .upgrader-card-box { background: #181230; border: 1px dashed #34285c; border-radius: 16px; padding: 16px 10px; text-align: center; min-height: 85px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
         .upgrader-card-box.selected { border-style: solid; border-color: #8b5cf6; background: #1e163d; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2); }
@@ -185,9 +191,9 @@
         .btn-yes { background: linear-gradient(135deg, #ef4444, #dc2626); }
         .btn-no { background: linear-gradient(135deg, #475569, #334155); }
 
-        /* НИЖНЯЯ ПАНЕЛЬ С 5 КНОПКАМИ */
+        /* НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ */
         .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #0b0818; border-top: 1px solid #231d42; display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding: 0 4px; }
-        .nav-btn { background: transparent; border: none; color: #716c96; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 600; cursor: pointer; width: 20%; height: 100%; gap: 3px; }
+        .nav-btn { background: transparent; border: none; color: #716c96; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 600; cursor: pointer; width: 16.66%; height: 100%; gap: 3px; }
         .nav-btn svg { width: 22px; height: 22px; stroke: #716c96; }
         .nav-btn.active { color: #f59e0b; }
         .nav-btn.active svg { stroke: #f59e0b; transform: translateY(-2px); }
@@ -229,7 +235,10 @@
     <div id="section-upgrader" class="view-section">
         <div class="upgrader-wrapper">
             <div class="upgrader-circle-area">
-                <div class="upgrader-top-arrow"></div>
+                <!-- Вращающаяся стрелочка (круг вращения) -->
+                <div class="upgrader-spinner-arrow-wrap" id="upgrader-spinner-wrap">
+                    <div class="upgrader-top-arrow"></div>
+                </div>
                 <svg class="upgrader-svg-circle" viewBox="0 0 200 200">
                     <circle class="upgrader-circle-bg" cx="100" cy="100" r="90"></circle>
                     <circle class="upgrader-circle-sector" id="upgrader-sector" cx="100" cy="100" r="90"></circle>
@@ -294,8 +303,8 @@
                 <div id="sim-result-actions" style="display: none; margin-top: 10px;">
                     <div id="sim-result-price-label" style="font-size: 0.9rem; font-weight: bold; color: #4ade80; margin-bottom: 8px;">Стоимость: 0 ¢</div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="open-btn" style="background: #ef4444; padding: 10px; font-size: 0.9rem;" onclick="sellCurrentSim()">Продать</button>
-                        <button class="open-btn" style="background: #3b82f6; padding: 10px; font-size: 0.9rem;" onclick="saveCurrentSim()">Сохранить</button>
+                        <button class="open-btn" id="sim-sell-btn" style="background: #ef4444; padding: 10px; font-size: 0.9rem;" onclick="sellCurrentRolledSim()">Продать</button>
+                        <button class="open-btn" id="sim-save-btn" style="background: #3b82f6; padding: 10px; font-size: 0.9rem;" onclick="saveCurrentSim()">Сохранить</button>
                     </div>
                 </div>
 
@@ -314,21 +323,21 @@
                                 <div class="sim-cat-title">Редкие</div>
                                 <div class="sim-cat-price">1 000 000 ¢</div>
                             </div>
-                            <div style="font-size: 0.7rem; color: var(--muted);">Парные / Шанс мусора</div>
+                            <div style="font-size: 0.7rem; color: var(--muted);">Парные цифры</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('epic')">
                             <div>
                                 <div class="sim-cat-title">Эпик</div>
                                 <div class="sim-cat-price">3 000 000 ¢</div>
                             </div>
-                            <div style="font-size: 0.7rem; color: var(--muted);">2-4 одинаковых / Шанс мусора</div>
+                            <div style="font-size: 0.7rem; color: var(--muted);">3-4 одинаковых</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('legendary')">
                             <div>
                                 <div class="sim-cat-title">Легендарный</div>
                                 <div class="sim-cat-price">100 000 000 ¢</div>
                             </div>
-                            <div style="font-size: 0.7rem; color: var(--muted);">4-8 одинаковых / Шанс мусора</div>
+                            <div style="font-size: 0.7rem; color: var(--muted);">4-8 одинаковых</div>
                         </div>
                     </div>
                 </div>
@@ -412,7 +421,7 @@
         </div>
     </div>
 
-    <!-- НИЖНЯЯ ПАНЕЛЬ С 5 КНОПКАМИ -->
+    <!-- НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ -->
     <div class="bottom-nav">
         <button class="nav-btn active" id="nav-cases-btn" onclick="switchNavTab('cases')">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -508,9 +517,10 @@
         let currentChosenPct = 38;
         let isUpgradingSpin = false;
 
+        // ОБНОВЛЕННЫЕ ФОТОГРАФИИ КЕЙСОВ
         const casesData = [
             {
-                id: 1, name: "квартира кейс", price: 5000000, img: "https://i.yapx.ru/eSeLn.jpg",
+                id: 1, name: "Квартира кейс", price: 5000000, img: "https://yapx.ru/album/eSywc",
                 items: [
                     { name: "Ключи от однушки", price: 500000, chance: 45, emoji: "🔑" },
                     { name: "Ключи от двушки", price: 2500000, chance: 35, emoji: "🚪" },
@@ -520,7 +530,7 @@
                 dropListText: "<b>Что может выпасть:</b><br>🔑 Ключи от однушки (500.000¢ — 45%)<br>🚪 Ключи от двушки (2.500.000¢ — 35%)<br>🏢 Ключи от трешки (7.500.000¢ — 15%)<br>🏰 Ключи от 4комнатной (10.000.000¢ — 5%)"
             },
             {
-                id: 2, name: "Машина кейс", price: 15000000, img: "https://i.yapx.ru/eSd6C.jpg",
+                id: 2, name: "Машина кейс", price: 15000000, img: "https://yapx.ru/album/eSyvv",
                 items: [
                     { name: "Жигуль", price: 5000000, chance: 45, emoji: "🚙" },
                     { name: "Камри", price: 10000000, chance: 35, emoji: "🚗" },
@@ -530,7 +540,7 @@
                 dropListText: "<b>Что может выпасть:</b><br>🚙 Жигуль (5.000.000¢ — 45%)<br>🚗 Камри (10.000.000¢ — 35%)<br>🏎️ БМВ (20.000.000¢ — 15%)<br>🚀 БУГАТИ (25.000.000¢ — 5%)"
             },
             {
-                id: 3, name: "кп кейс", price: 25000000, img: "https://i.yapx.ru/eSd5r.jpg",
+                id: 3, name: "Кп кейс", price: 25000000, img: "https://yapx.ru/album/eSyw8",
                 items: [
                     { name: "Кп по кв", price: 15000000, chance: 45, emoji: "📊" },
                     { name: "Кп по мш", price: 20000000, chance: 35, emoji: "📈" },
@@ -540,7 +550,7 @@
                 dropListText: "<b>Что может выпасть:</b><br>📊 Кп по кв (15.000.000¢ — 45%)<br>📈 Кп по мш (20.000.000¢ — 35%)<br>🏢 Кп по дм (30.000.000¢ — 15%)<br>💎 Кп по флт (40.000.000¢ — 5%)"
             },
             {
-                id: 4, name: "Дом кейс", price: 10000000, img: "https://i.yapx.ru/eSd4S.jpg",
+                id: 4, name: "Дом кейс", price: 10000000, img: "https://yapx.ru/album/eSywG",
                 items: [
                     { name: "Ключи от маленького домика", price: 3500000, chance: 45, emoji: "🛖" },
                     { name: "Средний домик", price: 6500000, chance: 35, emoji: "🏠" },
@@ -685,63 +695,237 @@
             }, 4100);
         }
 
-        /* ==================== СИМ-КАРТЫ С ЗАЩИТОЙ ЭКОНОМИКИ (30% ШАНС МУСОРА) ==================== */
+        /* ==================== СИМ-КАРТЫ И НОМЕРА ==================== */
         const simConfig = {
-            common: { price: 100000, name: 'Обычные' },
-            rare: { price: 1000000, name: 'Редкие' },
-            epic: { price: 3000000, name: 'Эпик' },
-            legendary: { price: 100000000, name: 'Легендарный' }
+            common: { price: 100000, minPrice: 200000, maxPrice: 1000000 },
+            rare: { price: 1000000, minPrice: 200000, maxPrice: 2000000 },
+            epic: { price: 3000000, minPrice: 1000000, maxPrice: 5000000 },
+            legendary: { price: 100000000, minPrice: 50000000, maxPrice: 300000000 }
         };
+
+        function getMaxRepeatingDigits(digits) {
+            let counts = {};
+            for (let char of digits) {
+                counts[char] = (counts[char] || 0) + 1;
+            }
+            let maxCount = 0;
+            for (let char in counts) {
+                if (counts[char] > maxCount) maxCount = counts[char];
+            }
+            return maxCount;
+        }
 
         function generateSimNumber(category) {
             let digits = '';
-            for(let i = 0; i < 8; i++) {
-                digits += Math.floor(Math.random() * 10);
+            let maxCount = 1;
+            
+            if (category === 'common') {
+                for(let i=0; i<8; i++) digits += Math.floor(Math.random() * 10);
+                maxCount = getMaxRepeatingDigits(digits);
+            } else if (category === 'rare') {
+                let base = Math.floor(Math.random() * 10);
+                let indices = [];
+                while(indices.length < 2) {
+                    let r = Math.floor(Math.random() * 8);
+                    if(!indices.includes(r)) indices.push(r);
+                }
+                let arr = [];
+                for(let i=0; i<8; i++) arr.push(Math.floor(Math.random() * 10));
+                indices.forEach(idx => arr[idx] = base);
+                digits = arr.join('');
+                maxCount = getMaxRepeatingDigits(digits);
+            } else if (category === 'epic') {
+                let repeatCount = Math.random() < 0.6 ? 3 : 4;
+                let base = Math.floor(Math.random() * 10);
+                let arr = [];
+                for(let i=0; i<8; i++) arr.push(Math.floor(Math.random() * 10));
+                for(let i=0; i<repeatCount; i++) arr[i] = base;
+                arr.sort(() => Math.random() - 0.5);
+                digits = arr.join('');
+                maxCount = getMaxRepeatingDigits(digits);
+            } else if (category === 'legendary') {
+                let repeatCount = Math.floor(Math.random() * 5) + 4;
+                let base = Math.floor(Math.random() * 10);
+                let arr = [];
+                for(let i=0; i<8; i++) arr.push(Math.floor(Math.random() * 10));
+                for(let i=0; i<repeatCount; i++) arr[i] = base;
+                arr.sort(() => Math.random() - 0.5);
+                digits = arr.join('');
+                maxCount = getMaxRepeatingDigits(digits);
             }
-            let basePrice = simConfig[category].price;
-            let multiplier = 1 + (Math.random() * 1.5);
-            let finalPrice = Math.floor(basePrice * multiplier);
+
+            const conf = simConfig[category];
+            let priceRange = conf.maxPrice - conf.minPrice;
+            let baseCalculatedPrice = conf.minPrice + Math.random() * priceRange;
+
+            if (maxCount >= 7) {
+                baseCalculatedPrice *= (1.3 + Math.random() * 0.2);
+            } else if (maxCount >= 5) {
+                baseCalculatedPrice *= (1.0 + Math.random() * 0.2);
+            } else if (maxCount === 4) {
+                baseCalculatedPrice *= (0.9 + Math.random() * 0.2); 
+            } else {
+                baseCalculatedPrice *= (0.8 + Math.random() * 0.2);
+            }
+
+            let finalPrice = Math.floor(baseCalculatedPrice);
+            if (finalPrice < conf.minPrice) finalPrice = conf.minPrice;
+            if (finalPrice > conf.maxPrice && category !== 'legendary') finalPrice = conf.maxPrice;
 
             return {
                 number: `+888 ${digits.slice(0, 4)} ${digits.slice(4)}`,
                 price: finalPrice,
-                category: category
+                category: category,
+                maxRep: maxCount
             };
         }
 
+        async function autoSavePreviousSimIfNeeded() {
+            if (currentRolledSim) {
+                if (savedSims.length < 5) {
+                    try {
+                        await fetch('/api/save_sim', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                user_id: userId,
+                                number: currentRolledSim.number,
+                                price: currentRolledSim.price,
+                                category: currentRolledSim.category
+                            })
+                        });
+                    } catch(e) {}
+                }
+                currentRolledSim = null;
+            }
+        }
+
         async function rollSimCard(category) {
-            const config = simConfig[category];
-            if (!config) return;
-            
-            if (userBalance < config.price) {
+            const conf = simConfig[category];
+            if(!conf) return;
+
+            if (userBalance < conf.price) {
                 alert('❌ Недостаточно средств для прокрутки!');
                 return;
             }
 
-            userBalance -= config.price;
+            await autoSavePreviousSimIfNeeded();
+
+            userBalance -= conf.price;
             document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
             document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
 
             document.getElementById('sim-result-actions').style.display = 'none';
             const displayEl = document.getElementById('sim-active-display');
-            
+
             let counter = 0;
             let rollInterval = setInterval(() => {
                 let tempDigits = '';
-                for(let i = 0; i < 8; i++) {
-                    tempDigits += Math.floor(Math.random() * 10);
-                }
+                for(let i=0; i<8; i++) tempDigits += Math.floor(Math.random() * 10);
                 displayEl.innerText = `+888 ${tempDigits.slice(0, 4)} ${tempDigits.slice(4)}`;
                 counter++;
-                
+
                 if (counter > 25) {
                     clearInterval(rollInterval);
                     currentRolledSim = generateSimNumber(category);
                     displayEl.innerText = currentRolledSim.number;
                     document.getElementById('sim-result-price-label').innerText = `Стоимость: ${currentRolledSim.price.toLocaleString()} ¢`;
+                    
+                    const sellBtn = document.getElementById('sim-sell-btn');
+                    const saveBtn = document.getElementById('sim-save-btn');
+                    
+                    sellBtn.style.background = '#ef4444';
+                    sellBtn.innerText = 'Продать';
+                    saveBtn.style.background = '#3b82f6';
+                    saveBtn.innerText = 'Сохранить';
+
                     document.getElementById('sim-result-actions').style.display = 'block';
+                    updatePhoneTabUI();
                 }
             }, 70);
+        }
+
+        async function saveCurrentSim() {
+            if(!currentRolledSim) return;
+            if(savedSims.length >= 5) {
+                alert('❌ Лимит сохраненных номеров (максимум 5)!');
+                return;
+            }
+            const res = await fetch('/api/save_sim', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    user_id: userId,
+                    number: currentRolledSim.number,
+                    price: currentRolledSim.price,
+                    category: currentRolledSim.category
+                })
+            });
+            const data = await res.json();
+            if(data.error) { alert(data.error); return; }
+
+            alert('✅ Номер успешно сохранен в инвентарь!');
+            currentRolledSim = null;
+            document.getElementById('sim-result-actions').style.display = 'none';
+            document.getElementById('sim-active-display').innerText = '+888 00000000';
+            updatePhoneTabUI();
+        }
+
+        async function sellCurrentRolledSim() {
+            if(!currentRolledSim) return;
+            userBalance += currentRolledSim.price;
+            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+
+            alert(`✅ Сим-карта продана за ${currentRolledSim.price.toLocaleString()} ¢!`);
+            currentRolledSim = null;
+            document.getElementById('sim-result-actions').style.display = 'none';
+            document.getElementById('sim-active-display').innerText = '+888 00000000';
+        }
+
+        async function sellSavedSim(simId) {
+            const res = await fetch('/api/sell_sim', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId, sim_id: simId})
+            });
+            const data = await res.json();
+            if(data.error) { alert(data.error); return; }
+
+            userBalance = data.new_balance;
+            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+            updatePhoneTabUI();
+            alert('✅ Сим-карта из инвентаря успешно продана!');
+        }
+
+        function equipSimNumber(numStr) {
+            equippedPhoneNum = numStr;
+            document.getElementById('header-phone-status').innerText = `Телефон: ${equippedPhoneNum}`;
+            alert(`📱 Номер ${equippedPhoneNum} успешно установлен на телефон!`);
+        }
+
+        function renderSimInventory() {
+            const listEl = document.getElementById('sim-inventory-list');
+            document.getElementById('sim-inv-count').innerText = savedSims.length;
+
+            if(savedSims.length === 0) {
+                listEl.innerHTML = `<div style="text-align: center; color: var(--muted); font-size: 0.85rem; padding: 10px;">Нет сохраненных номеров</div>`;
+                return;
+            }
+
+            listEl.innerHTML = savedSims.map(sim => `
+                <div class="sim-inv-item">
+                    <div>
+                        <div style="font-weight: bold; color: #fbbf24; font-size: 0.95rem;">${sim.number}</div>
+                        <div style="font-size: 0.75rem; color: #4ade80;">${sim.price.toLocaleString()} ¢</div>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="open-btn" style="background: #10b981; padding: 6px 10px; font-size: 0.75rem;" onclick="equipSimNumber('${sim.number}')">Одеть</button>
+                        <button class="open-btn" style="background: #ef4444; padding: 6px 10px; font-size: 0.75rem;" onclick="sellSavedSim(${sim.id})">Продать</button>
+                    </div>
+                </div>
+            `).join('');
         }
 
         async function updatePhoneTabUI() {
@@ -786,45 +970,7 @@
             alert('🎉 Поздравляем с покупкой телефона!');
         }
 
-        async function saveCurrentSim() {
-            if(!currentRolledSim) return;
-            const res = await fetch('/api/save_sim', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    user_id: userId,
-                    number: currentRolledSim.number,
-                    price: currentRolledSim.price,
-                    category: currentRolledSim.category
-                })
-            });
-            const data = await res.json();
-            if(data.error) { alert(data.error); return; }
-
-            alert(`✅ Номер успешно сохранен в инвентарь!`);
-            currentRolledSim = null;
-            document.getElementById('sim-result-actions').style.display = 'none';
-            document.getElementById('sim-active-display').innerText = '+888 00000000';
-            updatePhoneTabUI();
-        }
-
-        async function sellSavedSim(simId) {
-            const res = await fetch('/api/sell_sim', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, sim_id: simId})
-            });
-            const data = await res.json();
-            if(data.error) { alert(data.error); return; }
-
-            userBalance = data.new_balance;
-            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
-            updatePhoneTabUI();
-            alert('✅ Сим-карта успешно продана!');
-        }
-
-        /* --- АПГРЕЙДЕР ЛОГИКА --- */
+        /* --- АПГРЕЙДЕР ЛОГИКА СО ВРАЩАЮЩЕЙСЯ СТРЕЛОЧКОЙ --- */
         async function initUpgraderView() {
             const res = await fetch(`/api/get_inventory?user_id=${userId}`);
             inventory = await res.json();
@@ -981,7 +1127,7 @@
 
             isUpgradingSpin = true;
             const statusMsg = document.getElementById('upgrader-status-msg');
-            const sector = document.getElementById('upgrader-sector');
+            const spinnerWrap = document.getElementById('upgrader-spinner-wrap');
             const isFast = document.getElementById('fast-spin-toggle').checked;
 
             statusMsg.innerText = '⚡ Запуск апгрейда...';
@@ -991,12 +1137,27 @@
             let randomRoll = Math.random() * 100;
             let isWon = randomRoll <= chance;
 
-            const duration = isFast ? 400 : 3500;
-            const timing = isFast ? 'cubic-bezier(0.2, 0.8, 0.2, 1)' : 'cubic-bezier(0.1, 0.9, 0.2, 1)';
+            // Расчет градуса остановки стрелки
+            // Шанс занимает сектор от 0 до (chance * 3.6) градусов.
+            // Если выигрыш — останавливаемся внутри сектора шанса. Если проигрыш — в зоне неуспеха.
+            let targetAngle = 0;
+            let fullSpins = 5 * 360; // 5 полных оборотов для красоты
 
-            sector.style.transition = `stroke-dashoffset ${duration}ms ${timing}, stroke 0.3s`;
-            sector.style.stroke = '#f59e0b';
-            setTimeout(() => { sector.style.strokeDashoffset = '0'; }, 50);
+            if (isWon) {
+                let randomOffsetInChance = Math.random() * (chance * 3.6 - 10) + 5;
+                targetAngle = fullSpins + randomOffsetInChance;
+            } else {
+                let failStart = chance * 3.6 + 10;
+                let failRange = 360 - failStart - 10;
+                let randomOffsetInFail = failStart + Math.random() * failRange;
+                targetAngle = fullSpins + randomOffsetInFail;
+            }
+
+            const duration = isFast ? 400 : 3500;
+            const timing = isFast ? 'cubic-bezier(0.2, 0.8, 0.2, 1)' : 'cubic-bezier(0.15, 0.85, 0.35, 1)';
+
+            spinnerWrap.style.transition = `transform ${duration}ms ${timing}`;
+            spinnerWrap.style.transform = `rotate(${targetAngle}deg)`;
 
             setTimeout(async () => {
                 try {
@@ -1015,17 +1176,22 @@
 
                     if(isWon) {
                         successfulUpgrades++;
-                        sector.style.stroke = '#10b981';
                         statusMsg.innerText = `🎉 УСПЕХ! Вы получили ${upgraderSelectedTargetItem.name}!`;
                     } else {
                         failedUpgrades++;
-                        sector.style.stroke = '#ef4444';
                         statusMsg.innerText = `😢 НЕУДАЧА! Предмет сгорел.`;
                     }
                     upgraderSelectedMyItem = null;
                     upgraderSelectedTargetItem = null;
                     isUpgradingSpin = false;
-                    setTimeout(() => { initUpgraderView(); }, 1500);
+
+                    // Сброс положения стрелки без анимации для следующего раза
+                    setTimeout(() => {
+                        spinnerWrap.style.transition = 'none';
+                        spinnerWrap.style.transform = 'rotate(0deg)';
+                        initUpgraderView();
+                    }, 1000);
+
                 } catch(e) {
                     console.error(e);
                     statusMsg.innerText = '❌ Ошибка сети';
