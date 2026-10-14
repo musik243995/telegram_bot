@@ -686,6 +686,64 @@
         }
 
         /* ==================== СИМ-КАРТЫ С ЗАЩИТОЙ ЭКОНОМИКИ (30% ШАНС МУСОРА) ==================== */
+        const simConfig = {
+            common: { price: 100000, name: 'Обычные' },
+            rare: { price: 1000000, name: 'Редкие' },
+            epic: { price: 3000000, name: 'Эпик' },
+            legendary: { price: 100000000, name: 'Легендарный' }
+        };
+
+        function generateSimNumber(category) {
+            let digits = '';
+            for(let i = 0; i < 8; i++) {
+                digits += Math.floor(Math.random() * 10);
+            }
+            let basePrice = simConfig[category].price;
+            let multiplier = 1 + (Math.random() * 1.5);
+            let finalPrice = Math.floor(basePrice * multiplier);
+
+            return {
+                number: `+888 ${digits.slice(0, 4)} ${digits.slice(4)}`,
+                price: finalPrice,
+                category: category
+            };
+        }
+
+        async function rollSimCard(category) {
+            const config = simConfig[category];
+            if (!config) return;
+            
+            if (userBalance < config.price) {
+                alert('❌ Недостаточно средств для прокрутки!');
+                return;
+            }
+
+            userBalance -= config.price;
+            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+
+            document.getElementById('sim-result-actions').style.display = 'none';
+            const displayEl = document.getElementById('sim-active-display');
+            
+            let counter = 0;
+            let rollInterval = setInterval(() => {
+                let tempDigits = '';
+                for(let i = 0; i < 8; i++) {
+                    tempDigits += Math.floor(Math.random() * 10);
+                }
+                displayEl.innerText = `+888 ${tempDigits.slice(0, 4)} ${tempDigits.slice(4)}`;
+                counter++;
+                
+                if (counter > 25) {
+                    clearInterval(rollInterval);
+                    currentRolledSim = generateSimNumber(category);
+                    displayEl.innerText = currentRolledSim.number;
+                    document.getElementById('sim-result-price-label').innerText = `Стоимость: ${currentRolledSim.price.toLocaleString()} ¢`;
+                    document.getElementById('sim-result-actions').style.display = 'block';
+                }
+            }, 70);
+        }
+
         async function updatePhoneTabUI() {
             try {
                 const res = await fetch(`/api/get_sims?user_id=${userId}`);
