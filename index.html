@@ -78,22 +78,17 @@
         .roulette-item { min-width: 90px; height: 90px; background: #1a1528; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #3b3363; }
         .roulette-item span { font-size: 0.7rem; margin-top: 5px; color: var(--muted); text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 80px; }
 
-        /* АПГРЕЙДЕР С КОВРИКОМ И ВРАЩАЮЩЕЙСЯ СТРЕЛОЧКОЙ */
+        /* АПГРЕЙДЕР */
         .upgrader-wrapper { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         .upgrader-circle-area { position: relative; width: 220px; height: 220px; margin: 10px auto 5px auto; display: flex; align-items: center; justify-content: center; }
-        
-        /* Вращающийся контейнер стрелки */
         .upgrader-spinner-arrow-wrap { position: absolute; inset: 0; z-index: 10; transition: transform 3.5s cubic-bezier(0.1, 0.9, 0.2, 1); pointer-events: none; }
         .upgrader-top-arrow { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 16px solid #fbbf24; filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.8)); }
-
         .upgrader-svg-circle { width: 100%; height: 100%; transform: rotate(-90deg); }
         .upgrader-circle-bg { fill: none; stroke: #20173d; stroke-width: 14; }
         .upgrader-circle-sector { fill: none; stroke: #8b5cf6; stroke-width: 14; stroke-dasharray: 565; stroke-dashoffset: 565; }
-        
         .upgrader-center-info { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .upgrader-chance-val { font-size: 2.2rem; font-weight: 900; color: #ffffff; line-height: 1; }
         .upgrader-chance-lbl { font-size: 0.75rem; font-weight: 800; color: var(--muted); letter-spacing: 1px; margin-top: 4px; }
-        
         .upgrader-slots-row { display: grid; grid-template-columns: 1fr 24px 1fr; align-items: center; gap: 8px; }
         .upgrader-card-box { background: #181230; border: 1px dashed #34285c; border-radius: 16px; padding: 16px 10px; text-align: center; min-height: 85px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
         .upgrader-card-box.selected { border-style: solid; border-color: #8b5cf6; background: #1e163d; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2); }
@@ -129,15 +124,27 @@
         .phone-shop-card { background: var(--card); border: 1px solid #312e81; border-radius: 18px; padding: 16px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
         .sim-card-spin-box { background: #120c24; border: 2px solid #3b3363; border-radius: 20px; padding: 20px; text-align: center; position: relative; overflow: hidden; }
         .sim-screen-number { font-size: 1.6rem; font-weight: 900; color: #fbbf24; margin: 15px 0; letter-spacing: 1px; text-shadow: 0 0 10px rgba(251, 191, 36, 0.4); }
-        
         .sim-categories-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
         .sim-cat-card { background: #181230; border: 1px solid #312e81; border-radius: 14px; padding: 12px; text-align: center; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; justify-content: space-between; }
         .sim-cat-card:hover { border-color: #8b5cf6; transform: translateY(-2px); }
         .sim-cat-title { font-weight: 800; font-size: 0.9rem; color: #fff; margin-bottom: 4px; }
         .sim-cat-price { font-size: 0.8rem; color: #4ade80; font-weight: bold; margin-bottom: 10px; }
-        
         .sim-inventory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px; }
         .sim-inv-item { background: #120c24; border: 1px solid #312e81; border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* РЫНОК СИМ-КАРТ */
+        .market-section-wrap { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+        .market-tabs { display: grid; grid-template-columns: 1fr 1fr; background: #130d28; padding: 4px; border-radius: 12px; border: 1px solid #281d4a; }
+        .market-tab-btn { background: transparent; border: none; color: #716c96; padding: 10px; font-weight: 800; font-size: 0.85rem; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .market-tab-btn.active { background: #251b47; color: #ffffff; }
+        .market-content-box { display: none; }
+        .market-content-box.active { display: block; }
+        .market-list { display: flex; flex-direction: column; gap: 10px; }
+        .market-item-card { background: var(--card); border: 1px solid #312e81; border-radius: 14px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .market-item-info { display: flex; flex-direction: column; gap: 2px; }
+        .market-item-owner { font-size: 0.75rem; color: var(--muted); }
+        .market-item-num { font-weight: 900; color: #fbbf24; font-size: 0.95rem; }
+        .market-item-price { font-size: 0.8rem; color: #4ade80; font-weight: bold; }
 
         /* КРАШ */
         .crash-container { background: var(--card); border: 2px solid #312e81; border-radius: 16px; padding: 15px; max-width: 440px; margin: 0 auto; box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
@@ -193,7 +200,7 @@
 
         /* НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ */
         .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #0b0818; border-top: 1px solid #231d42; display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding: 0 4px; }
-        .nav-btn { background: transparent; border: none; color: #716c96; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 600; cursor: pointer; width: 16.66%; height: 100%; gap: 3px; }
+        .nav-btn { background: transparent; border: none; color: #716c96; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 600; cursor: pointer; width: 16.66%; height: 100%; gap: 3px; }
         .nav-btn svg { width: 22px; height: 22px; stroke: #716c96; }
         .nav-btn.active { color: #f59e0b; }
         .nav-btn.active svg { stroke: #f59e0b; transform: translateY(-2px); }
@@ -235,7 +242,6 @@
     <div id="section-upgrader" class="view-section">
         <div class="upgrader-wrapper">
             <div class="upgrader-circle-area">
-                <!-- Вращающаяся стрелочка (круг вращения) -->
                 <div class="upgrader-spinner-arrow-wrap" id="upgrader-spinner-wrap">
                     <div class="upgrader-top-arrow"></div>
                 </div>
@@ -353,6 +359,31 @@
         </div>
     </div>
 
+    <!-- РЫНОК СИМ-КАРТ -->
+    <div id="section-market" class="view-section">
+        <div class="market-section-wrap">
+            <div class="market-tabs">
+                <button class="market-tab-btn active" id="market-tab-btn-browse" onclick="switchMarketTab('browse')">Сим-карты</button>
+                <button class="market-tab-btn" id="market-tab-btn-sell" onclick="switchMarketTab('sell')">Выставить сим-карту</button>
+            </div>
+
+            <!-- Вкладка 1: Просмотр сим-карт на рынке -->
+            <div class="market-content-box active" id="market-box-browse">
+                <div class="market-list" id="market-listings-list">
+                    <!-- Сюда динамически подгружаются выставленные симки -->
+                </div>
+            </div>
+
+            <!-- Вкладка 2: Выставить свою сим-карту из инвентаря -->
+            <div class="market-content-box" id="market-box-sell">
+                <div style="font-size: 0.85rem; color: var(--muted); margin-bottom: 10px;">Выберите сим-карту из инвентаря для выставления на рынок:</div>
+                <div class="sim-inventory-grid" id="market-my-sims-list">
+                    <!-- Сюда подгружаются ваши симки с кнопкой "Выставить" -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- КРАШ (РАКЕТА) -->
     <div id="section-crash" class="view-section">
         <div class="crash-container">
@@ -449,6 +480,15 @@
             <span>Симки</span>
         </button>
 
+        <button class="nav-btn" id="nav-market-btn" onclick="switchNavTab('market')">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+            <span>Рынок</span>
+        </button>
+
         <button class="nav-btn" id="nav-crash-btn" onclick="switchNavTab('crash')">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path>
@@ -517,7 +557,6 @@
         let currentChosenPct = 38;
         let isUpgradingSpin = false;
 
-        // ОБНОВЛЕННЫЕ ФОТОГРАФИИ КЕЙСОВ
         const casesData = [
             {
                 id: 1, name: "Квартира кейс", price: 5000000, img: "https://yapx.ru/album/eSywc",
@@ -601,6 +640,10 @@
                 document.getElementById('nav-phone-btn').classList.add('active');
                 document.getElementById('section-phone').classList.add('active');
                 updatePhoneTabUI();
+            } else if(tab === 'market') {
+                document.getElementById('nav-market-btn').classList.add('active');
+                document.getElementById('section-market').classList.add('active');
+                initMarketView();
             } else if(tab === 'crash') {
                 document.getElementById('nav-crash-btn').classList.add('active');
                 document.getElementById('section-crash').classList.add('active');
@@ -970,6 +1013,148 @@
             alert('🎉 Поздравляем с покупкой телефона!');
         }
 
+        /* ==================== РЫНОК СИМ-КАРТ ==================== */
+        let marketListings = [];
+
+        async function initMarketView() {
+            switchMarketTab('browse');
+            await loadMarketListings();
+        }
+
+        function switchMarketTab(tab) {
+            document.getElementById('market-tab-btn-browse').classList.toggle('active', tab === 'browse');
+            document.getElementById('market-tab-btn-sell').classList.toggle('active', tab === 'sell');
+            document.getElementById('market-box-browse').classList.toggle('active', tab === 'browse');
+            document.getElementById('market-box-sell').classList.toggle('active', tab === 'sell');
+
+            if(tab === 'browse') {
+                loadMarketListings();
+            } else {
+                loadMarketSellInventory();
+            }
+        }
+
+        async function loadMarketListings() {
+            try {
+                const res = await fetch(`/api/market/get_listings`);
+                marketListings = await res.json();
+                renderMarketListings();
+            } catch(e) {
+                // Если эндпоинта на бэкенде еще нет, показываем пример или пустой список
+                const listEl = document.getElementById('market-listings-list');
+                listEl.innerHTML = `<div style="text-align: center; color: var(--muted); padding: 15px;">Рынок сим-карт пуст</div>`;
+            }
+        }
+
+        function renderMarketListings() {
+            const listEl = document.getElementById('market-listings-list');
+            if(!marketListings || marketListings.length === 0) {
+                listEl.innerHTML = `<div style="text-align: center; color: var(--muted); padding: 15px;">На рынке пока нет сим-карт</div>`;
+                return;
+            }
+
+            listEl.innerHTML = marketListings.map(item => {
+                let isOwner = item.seller_id === userId;
+                let actionBtn = isOwner 
+                    ? `<button class="open-btn" style="background: #ef4444; padding: 6px 12px; font-size: 0.8rem;" onclick="cancelMarketListing(${item.id})">Снять</button>`
+                    : `<button class="open-btn" style="background: #10b981; padding: 6px 12px; font-size: 0.8rem;" onclick="buyMarketListing(${item.id})">Купить</button>`;
+
+                return `
+                    <div class="market-item-card">
+                        <div class="market-item-info">
+                            <div class="market-item-owner">Игрок: ${item.seller_name}</div>
+                            <div class="market-item-num">${item.number}</div>
+                            <div class="market-item-price">Стоимость: ${item.price.toLocaleString()} ¢</div>
+                        </div>
+                        <div>${actionBtn}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadMarketSellInventory() {
+            try {
+                const res = await fetch(`/api/get_sims?user_id=${userId}`);
+                const data = await res.json();
+                savedSims = data.sims;
+
+                const listEl = document.getElementById('market-my-sims-list');
+                if(!savedSims || savedSims.length === 0) {
+                    listEl.innerHTML = `<div style="text-align: center; color: var(--muted); padding: 15px; grid-column: span 1;">У вас нет сохраненных сим-карт в инвентаре для выставления</div>`;
+                    return;
+                }
+
+                listEl.innerHTML = savedSims.map(sim => `
+                    <div class="sim-inv-item">
+                        <div>
+                            <div style="font-weight: bold; color: #fbbf24; font-size: 0.95rem;">${sim.number}</div>
+                            <div style="font-size: 0.75rem; color: #4ade80;">Рекомендованная: ${sim.price.toLocaleString()} ¢</div>
+                        </div>
+                        <button class="open-btn" style="background: #8b5cf6; padding: 6px 12px; font-size: 0.8rem;" onclick="promptListSim(${sim.id}, '${sim.number}')">Выставить</button>
+                    </div>
+                `).join('');
+            } catch(e) { console.error(e); }
+        }
+
+        async function promptListSim(simId, simNumber) {
+            let priceInput = prompt(`Введите цену продажи для сим-карты ${simNumber}:`, "5000000");
+            if(!priceInput) return;
+            let price = parseInt(priceInput);
+            if(isNaN(price) || price <= 0) {
+                alert("❌ Неверная цена!");
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/market/list_sim', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId, sim_id: simId, price: price })
+                });
+                const data = await res.json();
+                if(data.error) { alert(data.error); return; }
+                alert("✅ Сим-карта успешно выставлена на рынок!");
+                switchMarketTab('browse');
+            } catch(e) {
+                alert("❌ Ошибка соединения с сервером");
+            }
+        }
+
+        async function buyMarketListing(listingId) {
+            try {
+                const res = await fetch('/api/market/buy_sim', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId, listing_id: listingId })
+                });
+                const data = await res.json();
+                if(data.error) { alert(data.error); return; }
+                userBalance = data.new_balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+                alert("🎉 Вы успешно купили сим-карту!");
+                loadMarketListings();
+            } catch(e) {
+                alert("❌ Ошибка при покупке");
+            }
+        }
+
+        async function cancelMarketListing(listingId) {
+            try {
+                const res = await fetch('/api/market/cancel_sim', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId, listing_id: listingId })
+                });
+                const data = await res.json();
+                if(data.error) { alert(data.error); return; }
+                alert("✅ Сим-карта снята с рынка и возвращена в инвентарь!");
+                loadMarketListings();
+            } catch(e) {
+                alert("❌ Ошибка при снятии с рынка");
+            }
+        }
+
         /* --- АПГРЕЙДЕР ЛОГИКА СО ВРАЩАЮЩЕЙСЯ СТРЕЛОЧКОЙ --- */
         async function initUpgraderView() {
             const res = await fetch(`/api/get_inventory?user_id=${userId}`);
@@ -1137,11 +1322,8 @@
             let randomRoll = Math.random() * 100;
             let isWon = randomRoll <= chance;
 
-            // Расчет градуса остановки стрелки
-            // Шанс занимает сектор от 0 до (chance * 3.6) градусов.
-            // Если выигрыш — останавливаемся внутри сектора шанса. Если проигрыш — в зоне неуспеха.
             let targetAngle = 0;
-            let fullSpins = 5 * 360; // 5 полных оборотов для красоты
+            let fullSpins = 5 * 360;
 
             if (isWon) {
                 let randomOffsetInChance = Math.random() * (chance * 3.6 - 10) + 5;
@@ -1185,7 +1367,6 @@
                     upgraderSelectedTargetItem = null;
                     isUpgradingSpin = false;
 
-                    // Сброс положения стрелки без анимации для следующего раза
                     setTimeout(() => {
                         spinnerWrap.style.transition = 'none';
                         spinnerWrap.style.transform = 'rotate(0deg)';
