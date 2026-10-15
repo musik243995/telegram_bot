@@ -1924,6 +1924,39 @@ async def admin_reset_user(message: Message):
     conn.close()
     await message.answer(f"🔄 Игрок @{uname} обнулен.")
 
+def generate_unique_sim(cursor, category_name):
+    while True:
+        if category_name == "Легендарный":
+            # Вероятности для легендарной категории:
+            # 50% - рандом, 30% - 4 одинаковые, 15% - 5 цифр, 10% - 6 цифр, 4% - 7 цифр, 1% - 8 цифр
+            roll = random.choices([1, 4, 5, 6, 7, 8], weights=[50, 30, 15, 10, 4, 1])[0]
+            
+            if roll == 1:
+                digits = "".join([str(random.randint(0, 9)) for _ in range(8)])
+            else:
+                rep_char = str(random.randint(0, 9))
+                rep_part = rep_char * roll
+                rand_part = "".join([str(random.randint(0, 9)) for _ in range(8 - roll)])
+                
+                combined = list(rep_part + rand_part)
+                random.shuffle(combined)
+                digits = "".join(combined)
+                
+            number = f"+888{digits}"
+        else:
+            # Для остальных категорий (обычные, редкие, эпические) оставляем стандартную генерацию
+            number = f"+888{random.randint(10000000, 99999999)}"
+            
+        # Проверка на уникальность (чтобы номер не повторялся у игроков и на рынке)
+        cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
+        exists_in_inv = cursor.fetchone()
+        
+        cursor.execute("SELECT 1 FROM market_sims WHERE number = ?", (number,))
+        exists_in_market = cursor.fetchone()
+        
+        if not exists_in_inv and not exists_in_market:
+            return number
+
 # --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ И РЫНКА ---
 async def index_handler(request):
     return web.FileResponse("index.html")

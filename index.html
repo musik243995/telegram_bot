@@ -320,28 +320,28 @@
                         <div class="sim-cat-card" onclick="rollSimCard('common')">
                             <div>
                                 <div class="sim-cat-title">Обычные</div>
-                                <div class="sim-cat-price">100 000 ¢</div>
+                                <div class="sim-cat-price">1 000 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">Рандомные числа</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('rare')">
                             <div>
                                 <div class="sim-cat-title">Редкие</div>
-                                <div class="sim-cat-price">1 000 000 ¢</div>
+                                <div class="sim-cat-price">10 000 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">Парные цифры</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('epic')">
                             <div>
                                 <div class="sim-cat-title">Эпик</div>
-                                <div class="sim-cat-price">3 000 000 ¢</div>
+                                <div class="sim-cat-price">50 000 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">3-4 одинаковых</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('legendary')">
                             <div>
                                 <div class="sim-cat-title">Легендарный</div>
-                                <div class="sim-cat-price">100 000 000 ¢</div>
+                                <div class="sim-cat-price">250 000 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">4-8 одинаковых</div>
                         </div>
@@ -740,10 +740,10 @@
 
         /* ==================== СИМ-КАРТЫ И НОМЕРА ==================== */
         const simConfig = {
-            common: { price: 100000, minPrice: 200000, maxPrice: 1000000 },
-            rare: { price: 1000000, minPrice: 200000, maxPrice: 2000000 },
-            epic: { price: 3000000, minPrice: 1000000, maxPrice: 5000000 },
-            legendary: { price: 100000000, minPrice: 50000000, maxPrice: 300000000 }
+            common: { price: 1000000, minPrice: 500000, maxPrice: 1500000 },
+            rare: { price: 10000000, minPrice: 2000000, maxPrice: 15000000 },
+            epic: { price: 50000000, minPrice: 10000000, maxPrice: 75000000 },
+            legendary: { price: 250000000, minPrice: 50000000, maxPrice: 300000000 }
         };
 
         function getMaxRepeatingDigits(digits) {
@@ -787,13 +787,40 @@
                 digits = arr.join('');
                 maxCount = getMaxRepeatingDigits(digits);
             } else if (category === 'legendary') {
-                let repeatCount = Math.floor(Math.random() * 5) + 4;
-                let base = Math.floor(Math.random() * 10);
-                let arr = [];
-                for(let i=0; i<8; i++) arr.push(Math.floor(Math.random() * 10));
-                for(let i=0; i<repeatCount; i++) arr[i] = base;
-                arr.sort(() => Math.random() - 0.5);
-                digits = arr.join('');
+                // Шансы для легендарной категории: 50% рандом, 30% - 4 цифры, 15% - 5 цифр, 10% - 6 цифр, 4% - 7 цифр, 1% - 8 цифр
+                const rand = Math.random() * 100;
+                let roll = 1; // по умолчанию рандом (50%)
+                
+                if (rand < 50) {
+                    roll = 1; // рандомные цифры (50%)
+                } else if (rand < 80) {
+                    roll = 4; // 4 одинаковые (30%)
+                } else if (rand < 95) {
+                    roll = 5; // 5 цифр (15%)
+                } else if (rand < 99) {
+                    roll = 6; // 6 цифр (4%)
+                } else {
+                    roll = 8; // 8 цифр (1%)
+                }
+
+                if (roll === 1) {
+                    for (let i = 0; i < 8; i++) {
+                        digits += Math.floor(Math.random() * 10);
+                    }
+                } else {
+                    let digitChar = String(Math.floor(Math.random() * 10));
+                    let repPart = digitChar.repeat(roll);
+                    let randPart = "";
+                    for (let i = 0; i < (8 - roll); i++) {
+                        randPart += Math.floor(Math.random() * 10);
+                    }
+                    let combined = (repPart + randPart).split('');
+                    for (let i = combined.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [combined[i], combined[j]] = [combined[j], combined[i]];
+                    }
+                    digits = combined.join('');
+                }
                 maxCount = getMaxRepeatingDigits(digits);
             }
 
