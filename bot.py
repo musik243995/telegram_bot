@@ -158,6 +158,17 @@ def init_db():
         )
     """)
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS market_sims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seller_id INTEGER,
+            seller_name TEXT,
+            sim_id INTEGER,
+            number TEXT,
+            price INTEGER,
+            category TEXT
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_apartments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -931,7 +942,7 @@ async def work_metal(callback: CallbackQuery):
     log_user_action(user_id, callback.from_user.username or callback.from_user.first_name, "Работа", "Собрал 1 металл")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🍾 Собирать бутылки", callback_data="work_bottles")],
-        [InlineKeyboardButton(text="⚙ Собирать металл", callback_data="work_metal")],
+        [InlineKeyboardButton(text="⚙ Собирать металл",callback_data="work_metal")],
         [InlineKeyboardButton(text="🥷 Воровать (КД 6с)", callback_data="work_steal")],
         [InlineKeyboardButton(text="💰 Продать ресурсы", callback_data="sell_resources")]
     ])
@@ -972,7 +983,7 @@ async def sell_resources(callback: CallbackQuery):
     row = cursor.fetchone()
     if not row:
         conn.close(); await callback.answer("❌ Игрок не найден!", show_alert=True); return
-    bal, b, m, st = row[0], row[1], row[2], row[3] or 0
+    bal, b, m, st = row[0], row[1], row[2], row[3]
     if b == 0 and m == 0 and st == 0:
         conn.close(); await callback.answer("❌ Нет ресурсов для продажи!", show_alert=True); return
     payout = (b * 1000) + (m * 5000) + (st * 10000)
@@ -1818,7 +1829,7 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
 @router.callback_query(F.data == "admin_balance")
 async def admin_balance_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS: return
-    await message.answer("💰 Введите юзернейм/ID и сумму (например: `@username 5кк` или `123456 1ккк`):")
+    await callback.message.answer("💰 Введите юзернейм/ID и сумму (например: `@username 5кк` или `123456 1ккк`):")
     await state.set_state(AdminStates.waiting_for_balance_change)
     await callback.answer()
 
@@ -1913,7 +1924,7 @@ async def admin_reset_user(message: Message):
     conn.close()
     await message.answer(f"🔄 Игрок @{uname} обнулен.")
 
-# --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ ---
+# --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ И РЫНКА ---
 async def index_handler(request):
     return web.FileResponse("index.html")
 
@@ -2054,6 +2065,17 @@ async def api_save_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
+    
+    # 🛡 Защита: проверяем, не принадлежит ли уже этот номер кому-то в инвентаре или на рынке
+    cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
+    in_inv = cursor.fetchone()
+    cursor.execute("SELECT 1 FROM market_sims WHERE number = ?", (number,))
+    in_mkt = cursor.fetchone()
+    
+    if in_inv or in_mkt:
+        conn.close()
+        return web.json_response({"error": "Этот номер уже кому-то принадлежит или продается!"}, status=400)
+
     cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
     count = cursor.fetchone()[0]
     if count >= 5:
@@ -2087,6 +2109,119 @@ async def api_sell_sim(request):
     conn.close()
     return web.json_response({"success": True, "new_balance": new_bal})
 
+# --- API РЫНКА СИМ-КАРТ ---
+async def api_market_get_listings(request):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, seller_id, seller_name, sim_id, number, price, category FROM market_sims")
+    listings = [
+        {
+            "id": r[0], "seller_id": r[1], "seller_name": r[2], 
+            "sim_id": r[3], "number": r[4], "price": r[5], "category": r[6]
+        } 
+        for r in cursor.fetchall()
+    ]
+    conn.close()
+    return web.json_response(listings)
+
+async def api_market_list_sim(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    sim_id = data.get("sim_id")
+    price = int(data.get("price", 0))
+
+    if price <= 0:
+        return web.json_response({"error": "Неверная цена"}, status=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT number, category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
+    sim = cursor.fetchone()
+    if not sim:
+        conn.close()
+        return web.json_response({"error": "Сим-карта не найдена в инвентаре"}, status=400)
+
+    number, category = sim[0], sim[1]
+    cursor.execute("SELECT custom_name, username FROM users WHERE user_id = ?", (user_id,))
+    u = cursor.fetchone()
+    seller_name = u[0] if u and u[0] else (u[1] if u and u[1] else "Игрок")
+
+    cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
+    cursor.execute(
+        "INSERT INTO market_sims (seller_id, seller_name, sim_id, number, price, category) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, seller_name, sim_id, number, price, category)
+    )
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True})
+
+async def api_market_buy_sim(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    listing_id = data.get("listing_id")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT seller_id, sim_id, number, price, category FROM market_sims WHERE id = ?", (listing_id,))
+    listing = cursor.fetchone()
+    if not listing:
+        conn.close()
+        return web.json_response({"error": "Лот не найден или уже куплен"}, status=400)
+
+    seller_id, sim_id, number, price, category = listing
+    if seller_id == user_id:
+        conn.close()
+        return web.json_response({"error": "Нельзя купить свою собственную сим-карту"}, status=400)
+
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    buyer_row = cursor.fetchone()
+    if not buyer_row or buyer_row[0] < price:
+        conn.close()
+        return web.json_response({"error": "Недостаточно средств для покупки"}, status=400)
+
+    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
+    if cursor.fetchone()[0] >= 5:
+        conn.close()
+        return web.json_response({"error": "В вашем инвентаре нет свободного места (максимум 5 сим-карт)"}, status=400)
+
+    # Перевод денег и перенос симки
+    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
+    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, seller_id))
+    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, price, category))
+    cursor.execute("DELETE FROM market_sims WHERE id = ?", (listing_id,))
+    
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    new_balance = cursor.fetchone()[0]
+
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "new_balance": new_balance})
+
+async def api_market_cancel_sim(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    listing_id = data.get("listing_id")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT sim_id, number, price, category FROM market_sims WHERE id = ? AND seller_id = ?", (listing_id, user_id))
+    listing = cursor.fetchone()
+    if not listing:
+        conn.close()
+        return web.json_response({"error": "Лот не найден"}, status=400)
+
+    sim_id, number, price, category = listing
+    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
+    if cursor.fetchone()[0] >= 5:
+        conn.close()
+        return web.json_response({"error": "В инвентаре нет свободного места для возврата сим-карты"}, status=400)
+
+    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, price, category))
+    cursor.execute("DELETE FROM market_sims WHERE id = ?", (listing_id,))
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True})
+
 async def api_upgrader(request):
     data = await request.json()
     user_id = data.get("user_id")
@@ -2103,7 +2238,6 @@ async def api_upgrader(request):
         conn.close()
         return web.json_response({"error": "Исходный предмет не найден"}, status=400)
 
-    # Помечаем предмет в инвентаре как проданный (сгоревший или использованный)
     cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (from_item_id,))
 
     if client_won:
@@ -2177,11 +2311,16 @@ async def web_server():
     app.router.add_post("/api/upgrader", api_upgrader)
     app.router.add_post("/api/crash", api_crash_bet)
     
-    # --- ДОБАВЬТЕ ЭТИ СТРОКИ ДЛЯ СИМ-КАРТ ---
     app.router.add_post("/api/buy_phone", api_buy_phone)
     app.router.add_get("/api/get_sims", api_get_sims)
     app.router.add_post("/api/save_sim", api_save_sim)
     app.router.add_post("/api/sell_sim", api_sell_sim)
+
+    # --- ЭНДПОИНТЫ РЫНКА СИМ-КАРТ ---
+    app.router.add_get("/api/market/get_listings", api_market_get_listings)
+    app.router.add_post("/api/market/list_sim", api_market_list_sim)
+    app.router.add_post("/api/market/buy_sim", api_market_buy_sim)
+    app.router.add_post("/api/market/cancel_sim", api_market_cancel_sim)
     
     runner = web.AppRunner(app)
     await runner.setup()
