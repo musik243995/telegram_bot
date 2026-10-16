@@ -895,12 +895,17 @@
                 displayEl.innerText = `+888 ${tempDigits.slice(0, 4)} ${tempDigits.slice(4)}`;
                 counter++;
 
-                if (counter > 25) {
+               if (counter > 25) {
                     clearInterval(rollInterval);
-                    currentRolledSim = generateSimNumber(category);
+                    const generated = generateSimNumber(category);
+                    // Жестко фиксируем цену, чтобы она не менялась при сохранении/продаже
+                    currentRolledSim = {
+                        number: generated.number,
+                        price: generated.price,
+                        category: category
+                    };
                     displayEl.innerText = currentRolledSim.number;
                     document.getElementById('sim-result-price-label').innerText = `Стоимость: ${currentRolledSim.price.toLocaleString()} ¢`;
-                    
                     const sellBtn = document.getElementById('sim-sell-btn');
                     const saveBtn = document.getElementById('sim-save-btn');
                     
