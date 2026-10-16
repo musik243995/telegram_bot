@@ -2400,7 +2400,6 @@ async def web_server():
 
 async def main():
     init_db()
-    await web_server()
     
     from aiogram.types import MenuButtonWebApp, WebAppInfo
     await bot.set_chat_menu_button(
@@ -2410,7 +2409,12 @@ async def main():
         )
     )
     
-    await dp.start_polling(bot)
+    # Запускаем веб-сервер и поллинг бота параллельно
+    await asyncio.gather(
+        web_server(),
+        dp.start_polling(bot)
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
