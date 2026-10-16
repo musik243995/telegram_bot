@@ -1294,22 +1294,22 @@
                     </div>
                 `).join('') + `</div>`;
             } else {
+                // Показываем абсолютно все возможные предметы без ограничений по шансам
                 let allItems = getAllPossibleItems();
                 if(upgraderSelectedMyItem) {
-                    allItems = allItems.filter(i => {
-                        let chance = (upgraderSelectedMyItem.price / i.price) * 100;
-                        return chance <= 75;
-                    });
+                    allItems = allItems.filter(i => i.price > upgraderSelectedMyItem.price);
                 }
+                
                 if(allItems.length === 0) {
-                    container.innerHTML = `<div style="text-align: center; color: var(--muted); padding: 20px;">Нет доступных целей от 75%</div>`;
+                    container.innerHTML = `<div style="text-align: center; color: var(--muted); padding: 20px;">Нет доступных целей для апгрейда</div>`;
                     return;
                 }
                 container.innerHTML = `<div class="upgrader-grid-items">` + allItems.map((item) => {
                     let chance = upgraderSelectedMyItem ? ((upgraderSelectedMyItem.price / item.price) * 100).toFixed(0) : 0;
+                    if(chance > 100) chance = 100;
                     return `
                         <div class="upgrader-item-card ${upgraderSelectedTargetItem && upgraderSelectedTargetItem.name === item.name ? 'selected' : ''}" onclick="selectTargetItemForUpgrade('${item.name}')">
-                            <div style="font-size: 1.5rem;">${item.emoji}</div>
+                            <div style="font-size: 1.5rem;">${item.emoji || '🎯'}</div>
                             <div style="font-weight: bold; font-size: 0.8rem; margin: 3px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</div>
                             <div style="color: #fbbf24; font-size: 0.75rem; font-weight: bold;">${item.price.toLocaleString()} ¢ (${chance}%)</div>
                         </div>
