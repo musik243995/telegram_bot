@@ -787,9 +787,9 @@
                 digits = arr.join('');
                 maxCount = getMaxRepeatingDigits(digits);
             } else if (category === 'legendary') {
-                // Возвращаем шансы выпадения комбинаций (вероятности)
+                // Шансы для легендарной категории: 50% рандом, 30% - 4 цифры, 15% - 5 цифр, 10% - 6 цифр, 4% - 7 цифр, 1% - 8 цифр
                 const rand = Math.random() * 100;
-                let roll = 1;
+                let roll = 1; // по умолчанию рандом (50%)
                 
                 if (rand < 50) {
                     roll = 1; // рандомные цифры (50%)
@@ -824,24 +824,6 @@
                 maxCount = getMaxRepeatingDigits(digits);
             }
 
-            // Четкие диапазоны цен без множителей красоты (легендарные — от 50 до 300 млн)
-            const priceRanges = {
-                common: { min: 1000000, max: 10000000 },       // от 1 млн до 10 млн
-                rare: { min: 10000000, max: 50000000 },        // от 10 млн до 50 млн
-                epic: { min: 50000000, max: 150000000 },       // от 50 млн до 150 млн
-                legendary: { min: 50000000, max: 300000000 }   // от 50 млн до 300 млн
-            };
-
-            const range = priceRanges[category] || priceRanges.common;
-            let finalPrice = Math.floor(range.min + Math.random() * (range.max - range.min));
-
-            return {
-                number: `+888 ${digits.slice(0, 4)} ${digits.slice(4)}`,
-                price: finalPrice,
-                category: category,
-                maxRep: maxCount
-            };
-        }
             const conf = simConfig[category];
             let priceRange = conf.maxPrice - conf.minPrice;
             let baseCalculatedPrice = conf.minPrice + Math.random() * priceRange;
