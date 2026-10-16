@@ -89,17 +89,31 @@ APARTMENT_NAMES = [
 
 def get_private_keyboard(is_creator_flag=False):
     kb = [
-        [KeyboardButton(text="🎰 Казино"), KeyboardButton(text="👷 Работа")],
-        [KeyboardButton(text="💸 Флипинг"), KeyboardButton(text="🏢 Компания по флипингу 💸")],
-        [KeyboardButton(text="🏦 Банк"), KeyboardButton(text="👤 Профиль")],
-        [KeyboardButton(text="🏆 Топ"), KeyboardButton(text="🏠 Квартиры")],
-        [KeyboardButton(text="🎁 Бонус"), KeyboardButton(text="👥 Рефералы")],
-        [KeyboardButton(text="🥷 Нычка"), KeyboardButton(text="📜 Квесты")],
-        [KeyboardButton(text="🔫 Банда"), KeyboardButton(text="🏪 Магазин")],
-        [KeyboardButton(text="⭐ Донат"), KeyboardButton(text="📖 Помощь")]
+        [KeyboardButton(text="Капуста💸")],
+        [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="🏆 Топ")],
+        [KeyboardButton(text="🥷 Нычка"), KeyboardButton(text="🔫 Банда")],
+        [KeyboardButton(text="🏪 Магазин"), KeyboardButton(text="⭐ Донат")],
+        [KeyboardButton(text="Прочее")]
     ]
     if is_creator_flag:
         kb.append([KeyboardButton(text="🎬 Креатор")])
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_cabbage_keyboard():
+    kb = [
+        [KeyboardButton(text="👷 Работа"), KeyboardButton(text="🎰 Казино")],
+        [KeyboardButton(text="💸 Флипинг"), KeyboardButton(text="🏠 Квартиры")],
+        [KeyboardButton(text="🏢 Компания по флипингу 💸"), KeyboardButton(text="🏦 Банк")],
+        [KeyboardButton(text="🔙 Назад")]
+    ]
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_other_keyboard():
+    kb = [
+        [KeyboardButton(text="🎁 Бонус"), KeyboardButton(text="👥 Рефералы")],
+        [KeyboardButton(text="📜 Квесты"), KeyboardButton(text="📖 Помощь")],
+        [KeyboardButton(text="🔙 Назад")]
+    ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 def get_admin_keyboard():
@@ -396,10 +410,20 @@ async def cmd_start(message: Message, command: CommandObject):
     if not await check_ban_and_register(message, command): return
     await smart_answer(message, "🏠 Главное меню игры:\nДобро пожаловать! Используйте кнопки меню или команды.")
 
-@router.message(F.text.casefold().in_(["главное меню", "меню"]))
+@router.message(F.text.casefold().in_(["главное меню", "меню", "🔙 назад", "назад"]))
 async def text_main_menu(message: Message):
     if not await check_ban_and_register(message): return
     await smart_answer(message, "🏠 Главное меню игры:")
+
+@router.message(F.text.casefold().in_(["капуста💸", "капуста"]))
+async def text_cabbage_menu(message: Message):
+    if not await check_ban_and_register(message): return
+    await message.answer("💸 Раздел «Капуста💸»:\nВыберите нужный раздел из меню ниже.", reply_markup=get_cabbage_keyboard())
+
+@router.message(F.text.casefold().in_(["прочее"]))
+async def text_other_menu(message: Message):
+    if not await check_ban_and_register(message): return
+    await message.answer("⚙ Раздел «Прочее»:\nВыберите нужный раздел из меню ниже.", reply_markup=get_other_keyboard())
 
 HELP_TEXT = (
     "📖 Инструкция по игре:\n\n"
@@ -942,7 +966,7 @@ async def work_metal(callback: CallbackQuery):
     log_user_action(user_id, callback.from_user.username or callback.from_user.first_name, "Работа", "Собрал 1 металл")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🍾 Собирать бутылки", callback_data="work_bottles")],
-        [InlineKeyboardButton(text="⚙ Собирать металл",callback_data="work_metal")],
+        [InlineKeyboardButton(text="⚙ Собирать металл", callback_data="work_metal")],
         [InlineKeyboardButton(text="🥷 Воровать (КД 6с)", callback_data="work_steal")],
         [InlineKeyboardButton(text="💰 Продать ресурсы", callback_data="sell_resources")]
     ])
@@ -1175,7 +1199,7 @@ async def text_casino(message: Message):
         "• дартс [ставка] центр (или мимо)\n"
         "• баскет [ставка]"
     )
-    await smart_answer(message, text)
+    await message.answer(text, parse_mode="MARKDOWN")
 
 @router.message(F.text.regexp(r"(?i)^рул\s+.+"))
 async def casino_roulette(message: Message):
@@ -1368,7 +1392,7 @@ async def text_bank(message: Message):
     u = cursor.fetchone()
     conn.close()
     balance, bank_balance = (u[0], u[1]) if u else (10000, 0)
-    await smart_answer(message, f"🏦 Банк:\n💰 Наличные: {balance:,} ¢\n🏛 В банке: {bank_balance:,} ¢\n\n• вложить [сумма]\n• снять [сумма]".replace(",", " "))
+    await message.answer(f"🏦 Банк:\n💰 Наличные: {balance:,} ¢\n🏛 В банке: {bank_balance:,} ¢\n\n• вложить [сумма]\n• снять [сумма]".replace(",", " "))
 
 @router.message(F.text.regexp(r"(?i)^(вложить|вл)\s+.+"))
 async def bank_deposit(message: Message):
