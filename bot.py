@@ -2154,8 +2154,7 @@ async def api_sell_sim(request):
     data = await request.json()
     user_id = data.get("user_id")
     sim_id = data.get("sim_id")
-    # Принимаем цену от фронтенда, если она передается, иначе берем из базы
-    client_price = data.get("price")
+    client_price = data.get("price") # Принимаем цену от фронтенда
 
     conn = get_db()
     cursor = conn.cursor()
@@ -2165,7 +2164,7 @@ async def api_sell_sim(request):
         conn.close()
         return web.json_response({"error": "Номер не найден"}, status=400)
 
-    # Если фронтенд прислал цену, используем её, иначе из базы
+    # Используем цену из запроса (если передана), иначе из базы
     price = int(client_price) if client_price is not None else row[0]
 
     cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))

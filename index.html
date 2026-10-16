@@ -959,10 +959,14 @@
         }
 
         async function sellSavedSim(simId) {
+            // Находим симку в массиве savedSims по её ID, чтобы взять её реальную цену
+            const simObj = savedSims.find(s => s.id === simId);
+            const priceToSend = simObj ? simObj.price : null;
+
             const res = await fetch('/api/sell_sim', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, sim_id: simId})
+                body: JSON.stringify({user_id: userId, sim_id: simId, price: priceToSend})
             });
             const data = await res.json();
             if(data.error) { alert(data.error); return; }
@@ -973,7 +977,6 @@
             updatePhoneTabUI();
             alert('✅ Сим-карта из инвентаря успешно продана!');
         }
-
         function equipSimNumber(numStr) {
             equippedPhoneNum = numStr;
             document.getElementById('header-phone-status').innerText = `Телефон: ${equippedPhoneNum}`;
