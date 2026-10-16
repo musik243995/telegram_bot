@@ -1288,7 +1288,7 @@
                 }
                 container.innerHTML = `<div class="upgrader-grid-items">` + inventory.map((item, idx) => `
                     <div class="upgrader-item-card ${upgraderSelectedMyItem && upgraderSelectedMyItem.id === item.id ? 'selected' : ''}" onclick="selectMyItemForUpgrade(${idx})">
-                        <div style="font-size: 1.5rem;">🎁</div>
+                        <div style="font-size: 1.5rem;">${item.emoji || '🎁'}</div>
                         <div style="font-weight: bold; font-size: 0.8rem; margin: 3px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</div>
                         <div style="color: #4ade80; font-size: 0.75rem; font-weight: bold;">${item.price.toLocaleString()} ¢</div>
                     </div>
