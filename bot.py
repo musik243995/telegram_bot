@@ -179,9 +179,15 @@ def init_db():
             sim_id INTEGER,
             number TEXT,
             price INTEGER,
+            original_price INTEGER,
             category TEXT
         )
     """)
+    try:
+        cursor.execute("ALTER TABLE market_sims ADD COLUMN original_price INTEGER")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_apartments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2192,21 +2198,23 @@ async def api_market_list_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT number, category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
+    # Считываем также оригинальную цену сим-карты (price) из инвентаря
+    cursor.execute("SELECT number, price, category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
     sim = cursor.fetchone()
     if not sim:
         conn.close()
         return web.json_response({"error": "Сим-карта не найдена в инвентаре"}, status=400)
 
-    number, category = sim[0], sim[1]
+    number, orig_price, category = sim[0], sim[1], sim[2]
     cursor.execute("SELECT custom_name, username FROM users WHERE user_id = ?", (user_id,))
     u = cursor.fetchone()
     seller_name = u[0] if u and u[0] else (u[1] if u and u[1] else "Игрок")
 
     cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
+    # Сохраняем цену продажи в price, а старую цену в original_price
     cursor.execute(
-        "INSERT INTO market_sims (seller_id, seller_name, sim_id, number, price, category) VALUES (?, ?, ?, ?, ?, ?)",
-        (user_id, seller_name, sim_id, number, price, category)
+        "INSERT INTO market_sims (seller_id, seller_name, sim_id, number, price, original_price, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, seller_name, sim_id, number, price, orig_price, category)
     )
     conn.commit()
     conn.close()
@@ -2261,19 +2269,24 @@ async def api_market_cancel_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT sim_id, number, price, category FROM market_sims WHERE id = ? AND seller_id = ?", (listing_id, user_id))
+    # Достаем из базы рынка сохраненную original_price
+    cursor.execute("SELECT sim_id, number, price, original_price, category FROM market_sims WHERE id = ? AND seller_id = ?", (listing_id, user_id))
     listing = cursor.fetchone()
     if not listing:
         conn.close()
         return web.json_response({"error": "Лот не найден"}, status=400)
 
-    sim_id, number, price, category = listing
+    sim_id, number, sale_price, orig_price, category = listing
     cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
     if cursor.fetchone()[0] >= 5:
         conn.close()
         return web.json_response({"error": "В инвентаре нет свободного места для возврата сим-карты"}, status=400)
 
-    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, price, category))
+    if orig_price is None:
+        orig_price = sale_price
+
+    # Возвращаем сим-карту в инвентарь с ее первоначальной (original_price) стоимостью
+    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, orig_price, category))
     cursor.execute("DELETE FROM market_sims WHERE id = ?", (listing_id,))
     conn.commit()
     conn.close()
