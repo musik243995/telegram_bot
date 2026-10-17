@@ -2006,18 +2006,25 @@ async def api_exchange_sim(request):
     cursor = conn.cursor()
     
     # Проверяем, существует ли сим-карта в инвентаре игрока
-    cursor.execute("SELECT price, category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
+    cursor.execute("SELECT category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
     row = cursor.fetchone()
     if not row:
         conn.close()
         return web.json_response({"error": "Сим-карта не найдена"}, status=400)
 
-    category = row[1]
+    category = row[0]
     
-    # Фиксированная сумма обмена (можете изменить под легендарку или категорию)
-    exchange_price = 222_000_000 if category == "legendary" else row[0]
+    # Фиксированная сумма обмена в зависимости от категории
+    exchange_prices = {
+        "common": 500_000,
+        "rare": 5_000_000,
+        "epic": 30_000_000,
+        "legendary": 222_000_000
+    }
+    
+    exchange_price = exchange_prices.get(category, 500_000)
 
-    # Удаляем симку из инвентаря, чтобы исключить повторный обмен
+    # Удаляем симку из инвентаря
     cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
     
     # Начисляем баланс
