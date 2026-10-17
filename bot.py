@@ -2168,35 +2168,38 @@ async def api_save_sim(request):
     data = await request.json()
     user_id = data.get("user_id")
     number = data.get("number")
-    price = int(data.get("price", 0))  # Принимаем цену из Web App
     category = data.get("category")
 
-    # Жесткая страховка: если категория легендарная, цена всегда 200 млн
-    if category == 'legendary':
-        price = 200_000_000
+    # Жесткие базовые цены для сохранения
+    base_prices = {
+        "common": 500_000,
+        "rare": 5_000_000,
+        "epic": 30_000_000,
+        "legendary": 222_000_000
+    }
+    price = base_prices.get(category, 500_000)
 
     conn = get_db()
     cursor = conn.cursor()
-    
-    cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
-    in_inv = cursor.fetchone()
-    cursor.execute("SELECT 1 FROM market_sims WHERE number = ?", (number,))
-    in_mkt = cursor.fetchone()
-    
-    if in_inv or in_mkt:
-        conn.close()
-        return web.json_response({"error": "Этот номер уже кому-то принадлежит или продается!"}, status=400)
 
+    # Проверка на дубликаты номера
+    cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
+    if cursor.fetchone():
+        conn.close()
+        return web.json_response({"error": "Этот номер уже занят!"}, status=400)
+
+    # Проверка лимита (максимум 5 сим-карт)
     cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
-    count = cursor.fetchone()[0]
-    if count >= 5:
+    if cursor.fetchone()[0] >= 5:
         conn.close()
         return web.json_response({"error": "Лимит номеров (максимум 5)"}, status=400)
 
-    # Сохраняем в базу данных ровно ту цену, которая пришла
-    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, price, category))
+    # Записываем в БД жестко зафиксированную цену
+    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", 
+                   (user_id, number, price, category))
     conn.commit()
     conn.close()
+
     return web.json_response({"success": True})
 
 async def api_sell_sim(request):
