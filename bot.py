@@ -2134,7 +2134,6 @@ async def api_save_sim(request):
     number = data.get("number")
     category = data.get("category")
 
-    # Награды в коинах по категориям
     coin_rewards = {
         "common": 1,
         "rare": 10,
@@ -2146,24 +2145,19 @@ async def api_save_sim(request):
     conn = get_db()
     cursor = conn.cursor()
 
-    # Проверка на дубликаты номера
     cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
     if cursor.fetchone():
         conn.close()
         return web.json_response({"error": "Этот номер уже занят!"}, status=400)
 
-    # Проверка лимита (максимум 5 сим-карт)
     cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
     if cursor.fetchone()[0] >= 5:
         conn.close()
         return web.json_response({"error": "Лимит номеров (максимум 5)"}, status=400)
 
-    # Сохраняем симку в инвентарь (в поле price записываем коины для отображения)
+    # Сохраняем симку в инвентарь (храним категорию и награду)
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", 
                    (user_id, number, earned_coins, category))
-    
-    # Начисляем коины пользователю
-    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (earned_coins, user_id))
     
     conn.commit()
     conn.close()
