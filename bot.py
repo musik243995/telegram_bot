@@ -1973,17 +1973,15 @@ def generate_unique_sim(cursor, category_name):
                 digits = "".join(combined)
                 
             number = f"+888{digits}"
-            # ЖЕСТКО фиксируем цену легендарки ровно в 200 млн, чтобы она не менялась
-            price = 200_000_000 
+            price = 200_000_000  # Цена продажи легендарной симки
         else:
             number = f"+888{random.randint(10000000, 99999999)}"
-            # Примерные цены для других категорий
             prices_map = {
-                "Обычные": random.randint(500_000, 1_500_000),
-                "Редкие": random.randint(2_000_000, 15_000_000),
-                "Эпик": random.randint(10_000_000, 75_000_000)
+                "Обычные": 500_000,       # Цена продажи обычной
+                "Редкие": 5_000_000,       # Цена продажи редкой
+                "Эпик": 25_000_000         # Цена продажи эпической
             }
-            price = prices_map.get(category_name, 1_000_000)
+            price = prices_map.get(category_name, 500_000)
             
         cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
         exists_in_inv = cursor.fetchone()
@@ -1992,7 +1990,6 @@ def generate_unique_sim(cursor, category_name):
         exists_in_market = cursor.fetchone()
         
         if not exists_in_inv and not exists_in_market:
-            # Возвращаем и номер, и точную цену
             return number, price
 
 # --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ И РЫНКА ---
