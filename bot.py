@@ -1957,9 +1957,7 @@ async def admin_reset_user(message: Message):
 def generate_unique_sim(cursor, category_name):
     while True:
         if category_name == "Легендарный":
-            # Вероятности для легендарной категории:
-            # 50% - рандом, 30% - 4 одинаковые, 15% - 5 цифр, 10% - 6 цифр, 4% - 7 цифр, 1% - 8 цифр
-            roll = random.choices([1, 4, 5, 6, 7, 8], weights=[50, 30, 15, 10, 4, 1])[0]
+            roll = random.choices([1, 4, 5, 6, 7, 8], weights=[65, 25, 10, 5, 2, 0.5])[0]
             
             if roll == 1:
                 digits = "".join([str(random.randint(0, 9)) for _ in range(8)])
@@ -1973,11 +1971,18 @@ def generate_unique_sim(cursor, category_name):
                 digits = "".join(combined)
                 
             number = f"+888{digits}"
+            # ЖЕСТКО фиксируем цену легендарки ровно в 200 млн, чтобы она не менялась
+            price = 200_000_000 
         else:
-            # Для остальных категорий (обычные, редкие, эпические) оставляем стандартную генерацию
             number = f"+888{random.randint(10000000, 99999999)}"
+            # Примерные цены для других категорий
+            prices_map = {
+                "Обычные": random.randint(500_000, 1_500_000),
+                "Редкие": random.randint(2_000_000, 15_000_000),
+                "Эпик": random.randint(10_000_000, 75_000_000)
+            }
+            price = prices_map.get(category_name, 1_000_000)
             
-        # Проверка на уникальность (чтобы номер не повторялся у игроков и на рынке)
         cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
         exists_in_inv = cursor.fetchone()
         
@@ -1985,7 +1990,8 @@ def generate_unique_sim(cursor, category_name):
         exists_in_market = cursor.fetchone()
         
         if not exists_in_inv and not exists_in_market:
-            return number
+            # Возвращаем и номер, и точную цену
+            return number, price
 
 # --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ И РЫНКА ---
 async def index_handler(request):
@@ -2123,13 +2129,16 @@ async def api_save_sim(request):
     data = await request.json()
     user_id = data.get("user_id")
     number = data.get("number")
-    price = data.get("price")
+    price = int(data.get("price", 0))  # Принимаем цену из Web App
     category = data.get("category")
+
+    # Жесткая страховка: если категория легендарная, цена всегда 200 млн
+    if category == 'legendary':
+        price = 200_000_000
 
     conn = get_db()
     cursor = conn.cursor()
     
-    # 🛡 Защита: проверяем, не принадлежит ли уже этот номер кому-то в инвентаре или на рынке
     cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
     in_inv = cursor.fetchone()
     cursor.execute("SELECT 1 FROM market_sims WHERE number = ?", (number,))
@@ -2145,6 +2154,7 @@ async def api_save_sim(request):
         conn.close()
         return web.json_response({"error": "Лимит номеров (максимум 5)"}, status=400)
 
+    # Сохраняем в базу данных ровно ту цену, которая пришла
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, price, category))
     conn.commit()
     conn.close()
