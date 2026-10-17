@@ -159,7 +159,8 @@ def init_db():
             ref_count INTEGER DEFAULT 0,
             stolen INTEGER DEFAULT 0,
             has_pet INTEGER DEFAULT 0,
-            has_connections INTEGER DEFAULT 0
+            has_connections INTEGER DEFAULT 0,
+            coins INTEGER DEFAULT 0
         )
     """)
     cursor.execute("""
@@ -255,6 +256,7 @@ def init_db():
         cursor.execute("ALTER TABLE users ADD COLUMN has_pet INTEGER DEFAULT 0")
         cursor.execute("ALTER TABLE users ADD COLUMN has_connections INTEGER DEFAULT 0")
         cursor.execute("ALTER TABLE users ADD COLUMN has_phone INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0")
         conn.commit()
     except sqlite3.OperationalError:
         pass
@@ -1997,54 +1999,16 @@ def generate_unique_sim(cursor, category_name):
 async def index_handler(request):
     return web.FileResponse("index.html")
 
-async def api_exchange_sim(request):
-    data = await request.json()
-    user_id = data.get("user_id")
-    sim_id = data.get("sim_id")
-
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Проверяем, существует ли сим-карта в инвентаре игрока
-    cursor.execute("SELECT category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return web.json_response({"error": "Сим-карта не найдена"}, status=400)
-
-    category = row[0]
-    
-    # Фиксированная сумма обмена в зависимости от категории
-    exchange_prices = {
-        "common": 500_000,
-        "rare": 5_000_000,
-        "epic": 30_000_000,
-        "legendary": 222_000_000
-    }
-    
-    exchange_price = exchange_prices.get(category, 500_000)
-
-    # Удаляем симку из инвентаря
-    cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
-    
-    # Начисляем баланс
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (exchange_price, user_id))
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    new_bal = cursor.fetchone()[0]
-    
-    conn.commit()
-    conn.close()
-    return web.json_response({"success": True, "new_balance": new_bal, "added": exchange_price})
-
 async def api_get_data(request):
     user_id = int(request.query.get("user_id", 0))
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     balance = row[0] if row else 10000
+    coins = row[1] if row else 0
     conn.close()
-    return web.json_response({"balance": balance})
+    return web.json_response({"balance": balance, "coins": coins})
 
 async def api_get_inventory(request):
     user_id = int(request.query.get("user_id", 0))
@@ -2170,14 +2134,14 @@ async def api_save_sim(request):
     number = data.get("number")
     category = data.get("category")
 
-    # Жесткие базовые цены для сохранения
-    base_prices = {
-        "common": 500_000,
-        "rare": 5_000_000,
-        "epic": 30_000_000,
-        "legendary": 222_000_000
+    # Награды в коинах по категориям
+    coin_rewards = {
+        "common": 1,
+        "rare": 10,
+        "epic": 50,
+        "legendary": 400
     }
-    price = base_prices.get(category, 500_000)
+    earned_coins = coin_rewards.get(category, 1)
 
     conn = get_db()
     cursor = conn.cursor()
@@ -2194,39 +2158,95 @@ async def api_save_sim(request):
         conn.close()
         return web.json_response({"error": "Лимит номеров (максимум 5)"}, status=400)
 
-    # Записываем в БД жестко зафиксированную цену
+    # Сохраняем симку в инвентарь (в поле price записываем коины для отображения)
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", 
-                   (user_id, number, price, category))
+                   (user_id, number, earned_coins, category))
+    
+    # Начисляем коины пользователю
+    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (earned_coins, user_id))
+    
     conn.commit()
     conn.close()
 
-    return web.json_response({"success": True})
+    return web.json_response({"success": True, "earned_coins": earned_coins})
 
 async def api_sell_sim(request):
     data = await request.json()
     user_id = data.get("user_id")
-    sim_id = data.get("sim_id")
-    client_price = data.get("price") # Принимаем цену от фронтенда
+    category = data.get("category")
+
+    coin_rewards = {
+        "common": 1,
+        "rare": 10,
+        "epic": 50,
+        "legendary": 400
+    }
+    earned_coins = coin_rewards.get(category, 1)
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT price FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return web.json_response({"error": "Номер не найден"}, status=400)
-
-    # Используем цену из запроса (если передана), иначе из базы
-    price = int(client_price) if client_price is not None else row[0]
-
-    cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    new_bal = cursor.fetchone()[0]
+    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (earned_coins, user_id))
+    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
+    new_coins = cursor.fetchone()[0]
     conn.commit()
     conn.close()
-    return web.json_response({"success": True, "new_balance": new_bal})
+    return web.json_response({"success": True, "new_coins": new_coins, "earned_coins": earned_coins})
 
+async def api_exchange_sim_coins(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    sim_id = data.get("sim_id")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
+    sim = cursor.fetchone()
+    
+    if not sim:
+        conn.close()
+        return web.json_response({"error": "Сим-карта не найдена"}, status=400)
+    
+    category = sim[0]
+    coin_rewards = {
+        "common": 1,
+        "rare": 10,
+        "epic": 50,
+        "legendary": 400
+    }
+    earned_coins = coin_rewards.get(category, 1)
+
+    cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
+    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (earned_coins, user_id))
+    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
+    new_coins = cursor.fetchone()[0]
+
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "new_coins": new_coins, "added_coins": earned_coins})
+
+async def api_exchange_all_coins(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row or not row[0] or row[0] <= 0:
+        conn.close()
+        return web.json_response({"error": "У вас нет коинов для обмена!"}, status=400)
+
+    coins_to_exchange = row[0]
+    added_balance = coins_to_exchange * 50_000
+
+    cursor.execute("UPDATE users SET coins = 0, balance = balance + ? WHERE user_id = ?", (added_balance, user_id))
+    cursor.execute("SELECT balance, coins FROM users WHERE user_id = ?", (user_id,))
+    res = cursor.fetchone()
+    new_balance, new_coins = res[0], res[1]
+
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "new_balance": new_balance, "new_coins": new_coins, "added_balance": added_balance})
 # --- API РЫНКА СИМ-КАРТ ---
 async def api_market_get_listings(request):
     conn = get_db()
@@ -2440,7 +2460,8 @@ async def web_server():
     app.router.add_get("/api/get_sims", api_get_sims)
     app.router.add_post("/api/save_sim", api_save_sim)
     app.router.add_post("/api/sell_sim", api_sell_sim)
-    app.router.add_post("/api/exchange_sim", api_exchange_sim)
+    app.router.add_post("/api/exchange_sim_coins", api_exchange_sim_coins)
+    app.router.add_post("/api/exchange_all_coins", api_exchange_all_coins)
 
     # --- ЭНДПОИНТЫ РЫНКА СИМ-КАРТ ---
     app.router.add_get("/api/market/get_listings", api_market_get_listings)

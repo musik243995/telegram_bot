@@ -51,6 +51,7 @@
 
         .balance-box { display: flex; flex-direction: column; align-items: flex-end; }
         .balance { font-weight: bold; color: #4ade80; font-size: 1.05rem; text-shadow: 0 0 10px rgba(74, 222, 128, 0.4); }
+        .coins-display { font-weight: bold; color: #fbbf24; font-size: 0.9rem; text-shadow: 0 0 8px rgba(251, 191, 36, 0.4); margin-top: 2px; }
         .phone-status-header { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
 
         .view-section { display: none; }
@@ -214,6 +215,7 @@
         <div>🎲 Игровой Центр</div>
         <div class="balance-box">
             <div class="balance" id="user-balance">0 ¢</div>
+            <div class="coins-display" id="user-coins">🪙 0 коинов</div>
             <div class="phone-status-header" id="header-phone-status">Телефон: ???</div>
         </div>
     </header>
@@ -320,28 +322,28 @@
                         <div class="sim-cat-card" onclick="rollSimCard('common')">
                             <div>
                                 <div class="sim-cat-title">Обычные</div>
-                                <div class="sim-cat-price">1 000 000 ¢</div>
+                                <div class="sim-cat-price">500 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">Рандомные числа</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('rare')">
                             <div>
                                 <div class="sim-cat-title">Редкие</div>
-                                <div class="sim-cat-price">10 000 000 ¢</div>
+                                <div class="sim-cat-price">5 000 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">Парные цифры</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('epic')">
                             <div>
                                 <div class="sim-cat-title">Эпик</div>
-                                <div class="sim-cat-price">50 000 000 ¢</div>
+                                <div class="sim-cat-price">30 000 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">3-4 одинаковых</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('legendary')">
                             <div>
                                 <div class="sim-cat-title">Легендарный</div>
-                                <div class="sim-cat-price">250 000 000 ¢</div>
+                                <div class="sim-cat-price">222 000 000 ¢</div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--muted);">4-8 одинаковых</div>
                         </div>
@@ -356,13 +358,13 @@
                 </div>
                 <div class="sim-inventory-grid" id="sim-inventory-list"></div>
 
-                <!-- Блок обмена сим-карты под инвентарем -->
+                <!-- Блок обмена выбранной сим-карты из инвентаря на коины -->
                 <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #281d4a;">
-                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--muted); margin-bottom: 8px;">📇 ОБМЕН СИМ-КАРТЫ</div>
+                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--muted); margin-bottom: 8px;">📇 ОБМЕН СИМ-КАРТЫ ИЗ ИНВЕНТАРЯ НА КОИНЫ</div>
                     <select id="sim-exchange-select" style="width: 100%; padding: 10px; margin-bottom: 8px; border-radius: 8px; background: #0e0a1f; color: #fff; border: 1px solid #312e81; font-size: 0.85rem;">
                         <option value="">Выберите сим-карту для обмена...</option>
                     </select>
-                    <button class="open-btn" style="background: #10b981; padding: 10px; font-size: 0.9rem;" onclick="exchangeSelectedSim()">Обменять на 222 000 000 ¢</button>
+                    <button class="open-btn" style="background: #fbbf24; color: #000; padding: 10px; font-size: 0.9rem;" onclick="exchangeSelectedSimForCoins()">Обменять на коины</button>
                 </div>
             </div>
         </div>
@@ -376,12 +378,10 @@
                 <button class="market-tab-btn" id="market-tab-btn-sell" onclick="switchMarketTab('sell')">Выставить сим-карту</button>
             </div>
 
-            <!-- Вкладка 1: Просмотр сим-карт на рынке -->
             <div class="market-content-box active" id="market-box-browse">
                 <div class="market-list" id="market-listings-list"></div>
             </div>
 
-            <!-- Вкладка 2: Выставить свою сим-карту из инвентаря -->
             <div class="market-content-box" id="market-box-sell">
                 <div style="font-size: 0.85rem; color: var(--muted); margin-bottom: 10px;">Выберите сим-карту из инвентаря для выставления на рынок:</div>
                 <div class="sim-inventory-grid" id="market-my-sims-list"></div>
@@ -420,6 +420,11 @@
     <!-- ПРОФИЛЬ -->
     <div id="section-profile" class="view-section">
         <div class="profile-container">
+            <!-- Кнопка обмена всех коинов на баланс -->
+            <button class="open-btn" style="background: linear-gradient(135deg, #fbbf24, #d97706); color: #000; font-size: 0.95rem; padding: 12px; margin-bottom: 4px;" onclick="exchangeAllCoins()">
+                🪙 Обменять все коины на баланс (1 к 50 000)
+            </button>
+
             <div class="profile-card">
                 <div class="profile-user-info">
                     <div class="profile-avatar" id="user-avatar-box">👤</div>
@@ -535,6 +540,7 @@
         const firstName = tgUser?.first_name || 'Игрок';
 
         let userBalance = 0;
+        let userCoins = 0;
         let inventory = [];
         let selectedItemForSell = null;
         let activeCaseId = null;
@@ -693,8 +699,11 @@
                 const res = await fetch(`/api/get_data?user_id=${userId}`);
                 const data = await res.json();
                 userBalance = data.balance;
+                userCoins = data.coins || 0;
                 if (data.created_at) firstJoinDate = data.created_at;
+                
                 document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
                 document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
             } catch(e) { console.error(e); }
         }
@@ -745,10 +754,10 @@
 
         /* ==================== СИМ-КАРТЫ И НОМЕРА ==================== */
         const simConfig = {
-            common: { price: 1000000, minPrice: 500000, maxPrice: 1500000 },
-            rare: { price: 10000000, minPrice: 2000000, maxPrice: 15000000 },
-            epic: { price: 50000000, minPrice: 10000000, maxPrice: 75000000 },
-            legendary: { price: 250000000, minPrice: 200000000, maxPrice: 200000000 }
+            common: { price: 500000, coins: 1 },
+            rare: { price: 5000000, coins: 10 },
+            epic: { price: 30000000, coins: 50 },
+            legendary: { price: 222000000, coins: 400 }
         };
 
         function getMaxRepeatingDigits(digits) {
@@ -828,29 +837,14 @@
                 maxCount = getMaxRepeatingDigits(digits);
             }
 
-            let finalPrice = 500000;
-            if (category === 'rare') finalPrice = 5000000;
-            if (category === 'epic') finalPrice = 30000000;
-            if (category === 'legendary') finalPrice = 222000000;
+            let finalPrice = simConfig[category].price;
 
-        async function autoSavePreviousSimIfNeeded() {
-            if (currentRolledSim) {
-                if (savedSims.length < 5) {
-                    try {
-                        await fetch('/api/save_sim', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                user_id: userId,
-                                number: currentRolledSim.number,
-                                price: currentRolledSim.price,
-                                category: currentRolledSim.category
-                            })
-                        });
-                    } catch(e) {}
-                }
-                currentRolledSim = null;
-            }
+            return {
+                number: `+888 ${digits.slice(0, 4)} ${digits.slice(4)}`,
+                price: finalPrice,
+                category: category,
+                coins: simConfig[category].coins
+            };
         }
 
         async function rollSimCard(category) {
@@ -861,8 +855,6 @@
                 alert('❌ Недостаточно средств для прокрутки!');
                 return;
             }
-
-            await autoSavePreviousSimIfNeeded();
 
             userBalance -= conf.price;
             document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
@@ -881,16 +873,12 @@
                if (counter > 25) {
                     clearInterval(rollInterval);
                     const generated = generateSimNumber(category);
-                    currentRolledSim = {
-                        number: generated.number,
-                        price: generated.price,
-                        category: category
-                    };
+                    currentRolledSim = generated;
                     displayEl.innerText = currentRolledSim.number;
                     document.getElementById('sim-result-price-label').innerText = `Стоимость: ${currentRolledSim.price.toLocaleString()} ¢`;
+                    
                     const sellBtn = document.getElementById('sim-sell-btn');
                     const saveBtn = document.getElementById('sim-save-btn');
-                    
                     sellBtn.style.background = '#ef4444';
                     sellBtn.innerText = 'Продать';
                     saveBtn.style.background = '#3b82f6';
@@ -946,14 +934,15 @@
             select.innerHTML = '<option value="">Выберите сим-карту для обмена...</option>';
             
             sims.forEach(sim => {
+                const coinsVal = simConfig[sim.category]?.coins || (sim.category === 'common' ? 1 : sim.category === 'rare' ? 10 : sim.category === 'epic' ? 50 : 400);
                 const option = document.createElement('option');
                 option.value = sim.id;
-                option.textContent = `${sim.number} (${sim.category || 'Обычная'})`;
+                option.textContent = `${sim.number} (${sim.category || 'Обычная'}) — ${coinsVal} коинов`;
                 select.appendChild(option);
             });
         }
 
-        async function exchangeSelectedSim() {
+        async function exchangeSelectedSimForCoins() {
             const select = document.getElementById('sim-exchange-select');
             const simId = select ? select.value : null;
             
@@ -963,7 +952,7 @@
             }
 
             try {
-                const res = await fetch('/api/exchange_sim', {
+                const res = await fetch('/api/exchange_sim_coins', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ user_id: userId, sim_id: simId })
@@ -975,14 +964,38 @@
                     return;
                 }
 
-                alert(`✅ Успешно! Вы обменяли сим-карту на ${data.added.toLocaleString()} ¢`);
-                userBalance = data.new_balance;
-                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+                alert(`✅ Успешно! Вы обменяли сим-карту на +${data.added_coins} коинов`);
+                userCoins = data.new_coins;
+                document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
                 updatePhoneTabUI();
             } catch (e) {
                 console.error(e);
                 alert('❌ Ошибка соединения с сервером');
+            }
+        }
+
+        async function exchangeAllCoins() {
+            try {
+                const res = await fetch('/api/exchange_all_coins', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const data = await res.json();
+                if(data.error) {
+                    alert(data.error);
+                    return;
+                }
+                userBalance = data.new_balance;
+                userCoins = data.new_coins;
+
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
+
+                alert(`🎉 Успешно обменяно! Начислено на баланс: +${data.added_balance.toLocaleString()} ¢`);
+            } catch(e) {
+                alert('❌ Ошибка обмена коинов');
             }
         }
 
@@ -1006,7 +1019,7 @@
                 <div class="sim-inv-item">
                     <div>
                         <div style="font-weight: bold; color: #fbbf24; font-size: 0.95rem;">${sim.number}</div>
-                        <div style="font-size: 0.75rem; color: #4ade80;">${sim.price.toLocaleString()} ¢</div>
+                        <div style="font-size: 0.75rem; color: #4ade80;">${sim.price.toLocaleString()} ¢ (${sim.category || 'common'})</div>
                     </div>
                     <div style="display: flex; gap: 6px;">
                         <button class="open-btn" style="background: #10b981; padding: 6px 10px; font-size: 0.75rem;" onclick="equipSimNumber('${sim.number}')">Одеть</button>
