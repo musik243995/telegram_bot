@@ -740,11 +740,11 @@
 
         /* ==================== СИМ-КАРТЫ И НОМЕРА ==================== */
         const simConfig = {
-            common: { price: 1000000, minPrice: 500000, maxPrice: 1500000 },
-            rare: { price: 10000000, minPrice: 2000000, maxPrice: 15000000 },
-            epic: { price: 50000000, minPrice: 10000000, maxPrice: 75000000 },
-            legendary: { price: 250000000, minPrice: 50000000, maxPrice: 300000000 }
-        };
+    common: { price: 1000000, minPrice: 500000, maxPrice: 1500000 },
+    rare: { price: 10000000, minPrice: 2000000, maxPrice: 15000000 },
+    epic: { price: 50000000, minPrice: 10000000, maxPrice: 75000000 },
+    legendary: { price: 250000000, minPrice: 200000000, maxPrice: 200000000 } // Фиксируем цену на 200 млн
+};
 
         function getMaxRepeatingDigits(digits) {
             let counts = {};
@@ -786,44 +786,41 @@
                 arr.sort(() => Math.random() - 0.5);
                 digits = arr.join('');
                 maxCount = getMaxRepeatingDigits(digits);
-            } else if (category === 'legendary') {
-                // Шансы для легендарной категории: 50% рандом, 30% - 4 цифры, 15% - 5 цифр, 10% - 6 цифр, 4% - 7 цифр, 1% - 8 цифр
-                const rand = Math.random() * 100;
-                let roll = 1; // по умолчанию рандом (50%)
-                
-                if (rand < 50) {
-                    roll = 1; // рандомные цифры (50%)
-                } else if (rand < 80) {
-                    roll = 4; // 4 одинаковые (30%)
-                } else if (rand < 95) {
-                    roll = 5; // 5 цифр (15%)
-                } else if (rand < 99) {
-                    roll = 6; // 6 цифр (4%)
-                } else {
-                    roll = 8; // 8 цифр (1%)
-                }
+            } // <--- Убедитесь, что здесь закрывается блок эпика
 
-                if (roll === 1) {
-                    for (let i = 0; i < 8; i++) {
-                        digits += Math.floor(Math.random() * 10);
-                    }
-                } else {
-                    let digitChar = String(Math.floor(Math.random() * 10));
-                    let repPart = digitChar.repeat(roll);
-                    let randPart = "";
-                    for (let i = 0; i < (8 - roll); i++) {
-                        randPart += Math.floor(Math.random() * 10);
-                    }
-                    let combined = (repPart + randPart).split('');
-                    for (let i = combined.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [combined[i], combined[j]] = [combined[j], combined[i]];
-                    }
-                    digits = combined.join('');
-                }
-                maxCount = getMaxRepeatingDigits(digits);
+            maxCount = getMaxRepeatingDigits(digits);
+        } // <--- И здесь закрывается общий блок выбора категории
+
+        // Базовая цена по умолчанию (если легендарный — ровно 200 млн)
+        let finalPrice = 200000000;
+
+        if (category !== 'legendary') {
+            const conf = simConfig[category];
+            let priceRange = conf.maxPrice - conf.minPrice;
+            let baseCalculatedPrice = conf.minPrice + Math.random() * priceRange;
+
+            if (maxCount >= 7) {
+                baseCalculatedPrice *= (1.3 + Math.random() * 0.2);
+            } else if (maxCount >= 5) {
+                baseCalculatedPrice *= (1.0 + Math.random() * 0.2);
+            } else if (maxCount === 4) {
+                baseCalculatedPrice *= (0.9 + Math.random() * 0.2); 
+            } else {
+                baseCalculatedPrice *= (0.8 + Math.random() * 0.2);
             }
 
+            finalPrice = Math.floor(baseCalculatedPrice);
+            if (finalPrice < conf.minPrice) finalPrice = conf.minPrice;
+            if (finalPrice > conf.maxPrice) finalPrice = conf.maxPrice;
+        }
+
+        return {
+            number: `+888 ${digits.slice(0, 4)} ${digits.slice(4)}`,
+            price: finalPrice,
+            category: category,
+            maxRep: maxCount
+        };
+            
             const conf = simConfig[category];
             let priceRange = conf.maxPrice - conf.minPrice;
             let baseCalculatedPrice = conf.minPrice + Math.random() * priceRange;
