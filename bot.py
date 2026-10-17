@@ -1997,6 +1997,38 @@ def generate_unique_sim(cursor, category_name):
 async def index_handler(request):
     return web.FileResponse("index.html")
 
+async def api_exchange_sim(request):
+    data = await request.json()
+    user_id = data.get("user_id")
+    sim_id = data.get("sim_id")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Проверяем, существует ли сим-карта в инвентаре игрока
+    cursor.execute("SELECT price, category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return web.json_response({"error": "Сим-карта не найдена"}, status=400)
+
+    category = row[1]
+    
+    # Фиксированная сумма обмена (можете изменить под легендарку или категорию)
+    exchange_price = 222_000_000 if category == "legendary" else row[0]
+
+    # Удаляем симку из инвентаря, чтобы исключить повторный обмен
+    cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
+    
+    # Начисляем баланс
+    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (exchange_price, user_id))
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    new_bal = cursor.fetchone()[0]
+    
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "new_balance": new_bal, "added": exchange_price})
+
 async def api_get_data(request):
     user_id = int(request.query.get("user_id", 0))
     conn = get_db()
@@ -2398,6 +2430,7 @@ async def web_server():
     app.router.add_get("/api/get_sims", api_get_sims)
     app.router.add_post("/api/save_sim", api_save_sim)
     app.router.add_post("/api/sell_sim", api_sell_sim)
+    app.router.add_post("/api/exchange_sim", api_exchange_sim)
 
     # --- ЭНДПОИНТЫ РЫНКА СИМ-КАРТ ---
     app.router.add_get("/api/market/get_listings", api_market_get_listings)

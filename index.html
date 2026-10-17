@@ -355,6 +355,15 @@
                     <span>СОХРАНЕННЫЕ НОМЕРА (<span id="sim-inv-count">0</span>/5)</span>
                 </div>
                 <div class="sim-inventory-grid" id="sim-inventory-list"></div>
+
+                <!-- Блок обмена сим-карты под инвентарем -->
+                <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #281d4a;">
+                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--muted); margin-bottom: 8px;">📇 ОБМЕН СИМ-КАРТЫ</div>
+                    <select id="sim-exchange-select" style="width: 100%; padding: 10px; margin-bottom: 8px; border-radius: 8px; background: #0e0a1f; color: #fff; border: 1px solid #312e81; font-size: 0.85rem;">
+                        <option value="">Выберите сим-карту для обмена...</option>
+                    </select>
+                    <button class="open-btn" style="background: #10b981; padding: 10px; font-size: 0.9rem;" onclick="exchangeSelectedSim()">Обменять на 222 000 000 ¢</button>
+                </div>
             </div>
         </div>
     </div>
@@ -369,17 +378,13 @@
 
             <!-- Вкладка 1: Просмотр сим-карт на рынке -->
             <div class="market-content-box active" id="market-box-browse">
-                <div class="market-list" id="market-listings-list">
-                    <!-- Сюда динамически подгружаются выставленные симки -->
-                </div>
+                <div class="market-list" id="market-listings-list"></div>
             </div>
 
             <!-- Вкладка 2: Выставить свою сим-карту из инвентаря -->
             <div class="market-content-box" id="market-box-sell">
                 <div style="font-size: 0.85rem; color: var(--muted); margin-bottom: 10px;">Выберите сим-карту из инвентаря для выставления на рынок:</div>
-                <div class="sim-inventory-grid" id="market-my-sims-list">
-                    <!-- Сюда подгружаются ваши симки с кнопкой "Выставить" -->
-                </div>
+                <div class="sim-inventory-grid" id="market-my-sims-list"></div>
             </div>
         </div>
     </div>
@@ -960,23 +965,50 @@
             document.getElementById('sim-active-display').innerText = '+888 00000000';
         }
 
-        async function sellSavedSim(simId) {
-            const simObj = savedSims.find(s => s.id === simId);
-            const priceToSend = simObj ? simObj.price : null;
-
-            const res = await fetch('/api/sell_sim', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, sim_id: simId, price: priceToSend})
+        function populateSimDropdown(sims) {
+            const select = document.getElementById('sim-exchange-select');
+            if (!select) return;
+            select.innerHTML = '<option value="">Выберите сим-карту для обмена...</option>';
+            
+            sims.forEach(sim => {
+                const option = document.createElement('option');
+                option.value = sim.id;
+                option.textContent = `${sim.number} (${sim.category || 'Обычная'})`;
+                select.appendChild(option);
             });
-            const data = await res.json();
-            if(data.error) { alert(data.error); return; }
+        }
 
-            userBalance = data.new_balance;
-            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
-            updatePhoneTabUI();
-            alert('✅ Сим-карта из инвентаря успешно продана!');
+        async function exchangeSelectedSim() {
+            const select = document.getElementById('sim-exchange-select');
+            const simId = select ? select.value : null;
+            
+            if (!simId) {
+                alert('❌ Сначала выберите сим-карту из списка!');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/exchange_sim', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId, sim_id: simId })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                alert(`✅ Успешно! Вы обменяли сим-карту на ${data.added.toLocaleString()} ¢`);
+                userBalance = data.new_balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+                updatePhoneTabUI();
+            } catch (e) {
+                console.error(e);
+                alert('❌ Ошибка соединения с сервером');
+            }
         }
 
         function equipSimNumber(numStr) {
@@ -991,6 +1023,7 @@
 
             if(savedSims.length === 0) {
                 listEl.innerHTML = `<div style="text-align: center; color: var(--muted); font-size: 0.85rem; padding: 10px;">Нет сохраненных номеров</div>`;
+                populateSimDropdown([]);
                 return;
             }
 
@@ -1002,10 +1035,11 @@
                     </div>
                     <div style="display: flex; gap: 6px;">
                         <button class="open-btn" style="background: #10b981; padding: 6px 10px; font-size: 0.75rem;" onclick="equipSimNumber('${sim.number}')">Одеть</button>
-                        <button class="open-btn" style="background: #ef4444; padding: 6px 10px; font-size: 0.75rem;" onclick="sellSavedSim(${sim.id})">Продать</button>
                     </div>
                 </div>
             `).join('');
+
+            populateSimDropdown(savedSims);
         }
 
         async function updatePhoneTabUI() {
