@@ -403,6 +403,8 @@
         </div>
     </div>
 
+    <div id="section-profile" class="view-section">
+        <div class="profile-container">
             <div class="profile-card">
                 <div class="profile-user-info">
                     <div class="profile-avatar" id="user-avatar-box">👤</div>
@@ -766,18 +768,6 @@
             epic: { price: 50000000, coins: 50 },
             legendary: { price: 250000000, coins: 400 }
         };
-
-        function getMaxRepeatingDigits(digits) {
-            let counts = {};
-            for (let char of digits) {
-                counts[char] = (counts[char] || 0) + 1;
-            }
-            let maxCount = 0;
-            for (let char in counts) {
-                if (counts[char] > maxCount) maxCount = counts[char];
-            }
-            return maxCount;
-        }
 
         function generateSimNumber(category) {
             let digits = '';

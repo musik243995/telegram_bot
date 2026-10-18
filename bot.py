@@ -585,7 +585,7 @@ async def shop_buy_callback(callback: CallbackQuery):
 
     if balance < cost:
         conn.close()
-        await callback.answer("У тя денег нету, ты шо 🤡", show_alert=True)
+        await callback.answer("У тя денег нет, ты шо 🤡", show_alert=True)
         return
 
     cursor.execute(f"UPDATE users SET balance = balance - ?, {field_name} = 1 WHERE user_id = ?", (cost, user_id))
