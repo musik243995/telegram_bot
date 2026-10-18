@@ -2243,38 +2243,6 @@ async def api_exchange_sim_coins(request):
     conn.close()
     return web.json_response({"success": True, "new_coins": new_coins, "added_coins": earned_coins})
 
-async def api_exchange_all_coins(request):
-    try:
-        data = await request.json()
-        user_id = int(data.get("user_id", 0))
-        coins_to_exchange = int(data.get("amount", 0))
-    except (TypeError, ValueError):
-        return web.json_response({"error": "Укажите правильное количество коинов!"}, status=400)
-    if user_id <= 0 or coins_to_exchange <= 0:
-        return web.json_response({"error": "Введите количество коинов больше нуля!"}, status=400)
-
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            UPDATE users
-            SET coins = COALESCE(coins, 0) - ?, balance = COALESCE(balance, 0) + ?
-            WHERE user_id = ? AND COALESCE(coins, 0) >= ?
-        """, (coins_to_exchange, coins_to_exchange * 500_000, user_id, coins_to_exchange))
-        if cursor.rowcount == 0:
-            conn.rollback()
-            return web.json_response({"error": "Недостаточно коинов для обмена!"}, status=400)
-        added_balance = coins_to_exchange * 500_000
-        cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
-        row = cursor.fetchone()
-        conn.commit()
-        return web.json_response({"success": True, "new_balance": row[0], "new_coins": row[1], "added_balance": added_balance})
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
 async def api_market_get_listings(request):
     conn = get_db()
     cursor = conn.cursor()
@@ -2507,7 +2475,6 @@ async def web_server():
     app.router.add_post("/api/save_sim", api_save_sim)
     app.router.add_post("/api/sell_sim", api_sell_sim)
     app.router.add_post("/api/exchange_sim_coins", api_exchange_sim_coins)
-    app.router.add_post("/api/exchange_all_coins", api_exchange_all_coins)
 
     app.router.add_get("/api/market/get_listings", api_market_get_listings)
     app.router.add_post("/api/market/list_sim", api_market_list_sim)

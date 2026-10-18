@@ -403,16 +403,6 @@
         </div>
     </div>
 
-    <div id="section-profile" class="view-section">
-        <div class="profile-container">
-            <div style="background:#17112b; padding:12px; border-radius:12px; margin-bottom:10px;">
-                <div style="font-weight:bold; margin-bottom:8px; color:#fbbf24;">🪙 ОБМЕН КОИНОВ НА ДЕНЬГИ</div>
-                <div style="font-size:0.85rem; color:#aaa; margin-bottom:8px;">1 коин = 500 000 ¢</div>
-                <input id="exchange-coins-amount" type="number" min="1" step="1" placeholder="Сколько коинов обменять?" style="width:100%; box-sizing:border-box; padding:12px; margin-bottom:8px; border-radius:8px; background:#0e0a1f; color:white; border:1px solid #fbbf24; font-size:1rem;">
-                <div id="exchange-coins-preview" style="font-size:0.9rem; color:#4ade80; margin-bottom:8px;">К получению: 0 ¢</div>
-                <button class="open-btn" style="background:linear-gradient(135deg,#fbbf24,#d97706); color:#000; font-size:0.95rem; padding:12px;" onclick="exchangeAllCoins()">💰 Обменять коины</button>
-            </div>
-
             <div class="profile-card">
                 <div class="profile-user-info">
                     <div class="profile-avatar" id="user-avatar-box">👤</div>
@@ -981,50 +971,6 @@
                 console.error(e);
                 alert('❌ Ошибка соединения с сервером');
             }
-        }
-
-        async function exchangeAllCoins() {
-            const input = document.getElementById('exchange-coins-amount');
-            const amount = Number(input.value);
-            if (!Number.isSafeInteger(amount) || amount <= 0) {
-                alert('❌ Введи целое количество коинов больше нуля!');
-                return;
-            }
-            if (amount > Number(userCoins)) {
-                alert(`❌ У тебя только ${userCoins} коинов!`);
-                return;
-            }
-            if (!confirm(`Обменять ${amount} коинов на ${(amount * 500000).toLocaleString('ru-RU')} ¢?`)) return;
-            try {
-                const res = await fetch('/api/exchange_all_coins', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({user_id: userId, amount})
-                });
-                const data = await res.json();
-                if (!res.ok || data.error) { alert(data.error || '❌ Не удалось обменять коины'); return; }
-                userBalance = data.new_balance;
-                userCoins = data.new_coins;
-                document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
-                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
-                document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
-                input.value = '';
-                document.getElementById('exchange-coins-preview').innerText = 'К получению: 0 ¢';
-                alert(`Обмен выполнен!\nСписано коинов: ${amount}\nНачислено денег: ${data.added_balance.toLocaleString('ru-RU')} ¢`);
-            } catch (e) {
-                console.error(e);
-                alert('❌ Ошибка обмена коинов');
-            }
-        }
-
-        const exchangeAmountInput = document.getElementById('exchange-coins-amount');
-        if (exchangeAmountInput) {
-            exchangeAmountInput.addEventListener('input', function () {
-                const amount = Number(this.value);
-                document.getElementById('exchange-coins-preview').innerText =
-                    Number.isSafeInteger(amount) && amount > 0
-                    ? 'К получению: ' + (amount * 500000).toLocaleString('ru-RU') + ' ¢'
-                    : 'К получению: 0 ¢';
-            });
         }
 
         function equipSimNumber(numStr) {
