@@ -1143,7 +1143,7 @@ def get_company_data_and_keyboard(user_id):
         ).replace(",", " ")
         
         # Сделайте так:
-        kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="claim_comp_profit")]]
+        kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="company_get_profit")]]
         if upgrade_btn: kb_rows.append([upgrade_btn])
         keyboard = InlineKeyboardMarkup(inline_keyboard=kb_rows)
         return text, keyboard
