@@ -57,7 +57,6 @@
         .view-section { display: none; }
         .view-section.active { display: block; }
 
-        /* КЕЙСЫ */
         .cases-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         .case-card { background: #120e24; border-radius: 18px; overflow: hidden; border: 1px solid #2a224c; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.2s; }
         .case-card:active { transform: scale(0.96); border-color: #8b5cf6; }
@@ -79,7 +78,6 @@
         .roulette-item { min-width: 90px; height: 90px; background: #1a1528; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #3b3363; }
         .roulette-item span { font-size: 0.7rem; margin-top: 5px; color: var(--muted); text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 80px; }
 
-        /* АПГРЕЙДЕР */
         .upgrader-wrapper { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         .upgrader-circle-area { position: relative; width: 220px; height: 220px; margin: 10px auto 5px auto; display: flex; align-items: center; justify-content: center; }
         .upgrader-spinner-arrow-wrap { position: absolute; inset: 0; z-index: 10; transition: transform 3.5s cubic-bezier(0.1, 0.9, 0.2, 1); pointer-events: none; }
@@ -120,7 +118,6 @@
         .upgrader-item-card:hover { border-color: #8b5cf6; }
         .upgrader-item-card.selected { border-color: #10b981; background: #152420; }
 
-        /* СИМ-КАРТЫ И ТЕЛЕФОНЫ */
         .phone-section-wrap { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         .phone-shop-card { background: var(--card); border: 1px solid #312e81; border-radius: 18px; padding: 16px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
         .sim-card-spin-box { background: #120c24; border: 2px solid #3b3363; border-radius: 20px; padding: 20px; text-align: center; position: relative; overflow: hidden; }
@@ -133,7 +130,6 @@
         .sim-inventory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px; }
         .sim-inv-item { background: #120c24; border: 1px solid #312e81; border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
 
-        /* РЫНОК СИМ-КАРТ */
         .market-section-wrap { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         .market-tabs { display: grid; grid-template-columns: 1fr 1fr; background: #130d28; padding: 4px; border-radius: 12px; border: 1px solid #281d4a; }
         .market-tab-btn { background: transparent; border: none; color: #716c96; padding: 10px; font-weight: 800; font-size: 0.85rem; border-radius: 8px; cursor: pointer; transition: 0.2s; }
@@ -147,7 +143,6 @@
         .market-item-num { font-weight: 900; color: #fbbf24; font-size: 0.95rem; }
         .market-item-price { font-size: 0.8rem; color: #4ade80; font-weight: bold; }
 
-        /* КРАШ */
         .crash-container { background: var(--card); border: 2px solid #312e81; border-radius: 16px; padding: 15px; max-width: 440px; margin: 0 auto; box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
         .crash-big-screen { position: relative; width: 100%; height: 320px; background: radial-gradient(circle at center, #1a103c 0%, #09070f 100%); border-radius: 14px; border: 2px solid #3b3363; overflow: hidden; }
         .crash-multiplier-display { position: absolute; top: 20px; right: 20px; font-size: 2.5rem; font-weight: 900; color: #ffffff; z-index: 10; text-shadow: 0 0 15px rgba(168, 85, 247, 0.6); }
@@ -171,7 +166,6 @@
         .btn-cashout { background: linear-gradient(135deg, #f59e0b, #d97706); color: black; animation: cashoutPulse 0.5s infinite alternate; }
         @keyframes cashoutPulse { from { box-shadow: 0 0 10px #f59e0b; } to { box-shadow: 0 0 25px #f59e0b; } }
 
-        /* ПРОФИЛЬ */
         .profile-container { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         .profile-card { background: var(--card); border: 1px solid #2d264e; border-radius: 20px; padding: 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
         .profile-user-info { display: flex; align-items: center; gap: 12px; }
@@ -199,7 +193,6 @@
         .btn-yes { background: linear-gradient(135deg, #ef4444, #dc2626); }
         .btn-no { background: linear-gradient(135deg, #475569, #334155); }
 
-        /* НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ */
         .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #0b0818; border-top: 1px solid #231d42; display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding: 0 4px; }
         .nav-btn { background: transparent; border: none; color: #716c96; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 600; cursor: pointer; width: 16.66%; height: 100%; gap: 3px; }
         .nav-btn svg { width: 22px; height: 22px; stroke: #716c96; }
@@ -220,7 +213,6 @@
         </div>
     </header>
 
-    <!-- КЕЙСЫ -->
     <div id="section-cases" class="view-section active">
         <div id="view-cases-list" class="view-section active">
             <div class="cases-grid" id="cases-grid"></div>
@@ -240,7 +232,6 @@
         </div>
     </div>
 
-    <!-- АПГРЕЙДЕР -->
     <div id="section-upgrader" class="view-section">
         <div class="upgrader-wrapper">
             <div class="upgrader-circle-area">
@@ -295,7 +286,6 @@
         </div>
     </div>
 
-    <!-- ТЕЛЕФОН И СИМ-КАРТЫ -->
     <div id="section-phone" class="view-section">
         <div class="phone-section-wrap">
             <div class="phone-shop-card" id="phone-purchase-box">
@@ -309,9 +299,9 @@
                 <div class="sim-screen-number" id="sim-active-display">+888 00000000</div>
                 
                 <div id="sim-result-actions" style="display: none; margin-top: 10px;">
-                    <div id="sim-result-price-label" style="font-size: 0.9rem; font-weight: bold; color: #4ade80; margin-bottom: 8px;">Стоимость: 0 ¢</div>
+                    <div id="sim-result-price-label" style="font-size: 0.9rem; font-weight: bold; color: #fbbf24; margin-bottom: 8px;">Награда: 0 коинов</div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="open-btn" id="sim-sell-btn" style="background: #ef4444; padding: 10px; font-size: 0.9rem;" onclick="sellCurrentRolledSim()">Продать</button>
+                        <button class="open-btn" id="sim-sell-btn" style="background: #fbbf24; color: #000; padding: 10px; font-size: 0.9rem;" onclick="sellCurrentRolledSim()">Обменять на коины</button>
                         <button class="open-btn" id="sim-save-btn" style="background: #3b82f6; padding: 10px; font-size: 0.9rem;" onclick="saveCurrentSim()">Сохранить</button>
                     </div>
                 </div>
@@ -324,41 +314,39 @@
                                 <div class="sim-cat-title">Обычные</div>
                                 <div class="sim-cat-price">1 000 000 ¢</div>
                             </div>
-                            <div style="font-size: 0.7rem; color: var(--muted);">Рандомные числа</div>
+                            <div style="font-size: 0.7rem; color: #fbbf24;">🎁 1 коин</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('rare')">
                             <div>
                                 <div class="sim-cat-title">Редкие</div>
                                 <div class="sim-cat-price">10 000 000 ¢</div>
                             </div>
-                            <div style="font-size: 0.7rem; color: var(--muted);">Парные цифры</div>
+                            <div style="font-size: 0.7rem; color: #fbbf24;">🎁 10 коинов</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('epic')">
                             <div>
                                 <div class="sim-cat-title">Эпик</div>
                                 <div class="sim-cat-price">50 000 000 ¢</div>
                             </div>
-                            <div style="font-size: 0.7rem; color: var(--muted);">3-4 одинаковых</div>
+                            <div style="font-size: 0.7rem; color: #fbbf24;">🎁 50 коинов</div>
                         </div>
                         <div class="sim-cat-card" onclick="rollSimCard('legendary')">
                             <div>
                                 <div class="sim-cat-title">Легендарный</div>
                                 <div class="sim-cat-price">250 000 000 ¢</div>
                             </div>
-                            <div style="font-size: 0.7rem; color: var(--muted);">4-8 одинаковых</div>
+                            <div style="font-size: 0.7rem; color: #fbbf24;">🎁 400 коинов</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- ИНВЕНТАРЬ НОМЕРОВ -->
             <div class="profile-inventory-section" id="sim-inventory-section" style="display: none;">
                 <div class="profile-inv-header">
                     <span>СОХРАНЕННЫЕ НОМЕРА (<span id="sim-inv-count">0</span>/5)</span>
                 </div>
                 <div class="sim-inventory-grid" id="sim-inventory-list"></div>
 
-                <!-- Блок обмена выбранной сим-карты из инвентаря на коины -->
                 <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #281d4a;">
                     <div style="font-size: 0.8rem; font-weight: bold; color: var(--muted); margin-bottom: 8px;">📇 ОБМЕН СИМ-КАРТЫ ИЗ ИНВЕНТАРЯ НА КОИНЫ</div>
                     <select id="sim-exchange-select" style="width: 100%; padding: 10px; margin-bottom: 8px; border-radius: 8px; background: #0e0a1f; color: #fff; border: 1px solid #312e81; font-size: 0.85rem;">
@@ -370,7 +358,6 @@
         </div>
     </div>
 
-    <!-- РЫНОК СИМ-КАРТ -->
     <div id="section-market" class="view-section">
         <div class="market-section-wrap">
             <div class="market-tabs">
@@ -389,7 +376,6 @@
         </div>
     </div>
 
-    <!-- КРАШ (РАКЕТА) -->
     <div id="section-crash" class="view-section">
         <div class="crash-container">
             <div class="crash-big-screen" id="crash-screen">
@@ -417,7 +403,6 @@
         </div>
     </div>
 
-    <!-- ПРОФИЛЬ -->
     <div id="section-profile" class="view-section">
         <div class="profile-container">
             <div style="background:#17112b; padding:12px; border-radius:12px; margin-bottom:10px;">
@@ -465,7 +450,6 @@
         </div>
     </div>
 
-    <!-- НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ -->
     <div class="bottom-nav">
         <button class="nav-btn active" id="nav-cases-btn" onclick="switchNavTab('cases')">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -519,13 +503,12 @@
         </button>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ПРОДАЖИ -->
     <div class="modal" id="sell-modal">
         <div class="modal-content">
             <h3>Продажа предмета</h3>
             <p id="modal-item-name" style="margin: 10px 0; color: var(--muted);"></p>
             <p style="font-weight: bold; color: #4ade80;" id="modal-item-price"></p>
-            <p>Вы точно хотите продать этот предмет?</p>
+            <p id="modal-item-notice">Вы точно хотите продать этот предмет?</p>
             <div class="modal-btns">
                 <button class="btn-yes" onclick="confirmSell()">Да</button>
                 <button class="btn-no" onclick="closeModal()">Нет</button>
@@ -621,7 +604,8 @@
                     { name: "Хороший ПК", price: 250, chance: 5, emoji: "🖥️", item_type: "electronics" }
                 ],
                 dropListText: "<b>Что может выпасть:</b><br>📱 Планшет (50 коинов — 45%)<br>📲 Телефон (100 коинов — 25%)<br>💻 Ноутбук (150 коинов — 15%)<br>🖥️ Хороший ПК (250 коинов — 5%)<br><span style=\"color:#fbbf24\">10% — без предмета</span>"
-            }        ];
+            }
+        ];
 
         function getAllPossibleItems() {
             let list = [];
@@ -786,12 +770,11 @@
             }, 4100);
         }
 
-        /* ==================== СИМ-КАРТЫ И НОМЕРА ==================== */
         const simConfig = {
-            common: { price: 1000000, sellPrice: 500000, coins: 1 },
-            rare: { price: 10000000, sellPrice: 5000000, coins: 10 },
-            epic: { price: 50000000, sellPrice: 25000000, coins: 50 },
-            legendary: { price: 250000000, sellPrice: 200000000, coins: 400 }
+            common: { price: 1000000, coins: 1 },
+            rare: { price: 10000000, coins: 10 },
+            epic: { price: 50000000, coins: 50 },
+            legendary: { price: 250000000, coins: 400 }
         };
 
         function getMaxRepeatingDigits(digits) {
@@ -808,11 +791,9 @@
 
         function generateSimNumber(category) {
             let digits = '';
-            let maxCount = 1;
             
             if (category === 'common') {
                 for(let i=0; i<8; i++) digits += Math.floor(Math.random() * 10);
-                maxCount = getMaxRepeatingDigits(digits);
             } else if (category === 'rare') {
                 let base = Math.floor(Math.random() * 10);
                 let indices = [];
@@ -824,7 +805,6 @@
                 for(let i=0; i<8; i++) arr.push(Math.floor(Math.random() * 10));
                 indices.forEach(idx => arr[idx] = base);
                 digits = arr.join('');
-                maxCount = getMaxRepeatingDigits(digits);
             } else if (category === 'epic') {
                 let repeatCount = Math.random() < 0.6 ? 3 : 4;
                 let base = Math.floor(Math.random() * 10);
@@ -833,34 +813,22 @@
                 for(let i=0; i<repeatCount; i++) arr[i] = base;
                 arr.sort(() => Math.random() - 0.5);
                 digits = arr.join('');
-                maxCount = getMaxRepeatingDigits(digits);
             } else if (category === 'legendary') {
                 const rand = Math.random() * 100;
                 let roll = 1;
-                
-                if (rand < 50) {
-                    roll = 1;
-                } else if (rand < 80) {
-                    roll = 4;
-                } else if (rand < 95) {
-                    roll = 5;
-                } else if (rand < 99) {
-                    roll = 6;
-                } else {
-                    roll = 8;
-                }
+                if (rand < 50) roll = 1;
+                else if (rand < 80) roll = 4;
+                else if (rand < 95) roll = 5;
+                else if (rand < 99) roll = 6;
+                else roll = 8;
 
                 if (roll === 1) {
-                    for (let i = 0; i < 8; i++) {
-                        digits += Math.floor(Math.random() * 10);
-                    }
+                    for (let i = 0; i < 8; i++) digits += Math.floor(Math.random() * 10);
                 } else {
                     let digitChar = String(Math.floor(Math.random() * 10));
                     let repPart = digitChar.repeat(roll);
                     let randPart = "";
-                    for (let i = 0; i < (8 - roll); i++) {
-                        randPart += Math.floor(Math.random() * 10);
-                    }
+                    for (let i = 0; i < (8 - roll); i++) randPart += Math.floor(Math.random() * 10);
                     let combined = (repPart + randPart).split('');
                     for (let i = combined.length - 1; i > 0; i--) {
                         const j = Math.floor(Math.random() * (i + 1));
@@ -868,29 +836,28 @@
                     }
                     digits = combined.join('');
                 }
-                maxCount = getMaxRepeatingDigits(digits);
             }
 
-            let finalPrice = simConfig[category].sellPrice;
+            let earnedCoins = simConfig[category].coins;
 
             return {
                 number: `+888 ${digits.slice(0, 4)} ${digits.slice(4)}`,
-                price: finalPrice,
+                price: earnedCoins,
                 category: category,
-                coins: simConfig[category].coins
+                coins: earnedCoins
             };
         }
 
         async function rollSimCard(category) {
             const conf = simConfig[category];
-            if(!conf) return;
+            const spinCost = category === 'common' ? 1000000 : category === 'rare' ? 10000000 : category === 'epic' ? 50000000 : 250000000;
 
-            if (userBalance < conf.price) {
+            if (userBalance < spinCost) {
                 alert('❌ Недостаточно средств для прокрутки!');
                 return;
             }
 
-            userBalance -= conf.price;
+            userBalance -= spinCost;
             document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
             document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
 
@@ -909,12 +876,13 @@
                     const generated = generateSimNumber(category);
                     currentRolledSim = generated;
                     displayEl.innerText = currentRolledSim.number;
-                    document.getElementById('sim-result-price-label').innerText = `Стоимость продажи: ${currentRolledSim.price.toLocaleString()} ¢`;
+                    document.getElementById('sim-result-price-label').innerText = `Награда: +${currentRolledSim.coins} коинов`;
                     
                     const sellBtn = document.getElementById('sim-sell-btn');
                     const saveBtn = document.getElementById('sim-save-btn');
-                    sellBtn.style.background = '#ef4444';
-                    sellBtn.innerText = 'Продать';
+                    sellBtn.style.background = '#fbbf24';
+                    sellBtn.style.color = '#000';
+                    sellBtn.innerText = 'Обменять на коинов';
                     saveBtn.style.background = '#3b82f6';
                     saveBtn.innerText = 'Сохранить';
 
@@ -952,11 +920,18 @@
 
         async function sellCurrentRolledSim() {
             if(!currentRolledSim) return;
-            userBalance += currentRolledSim.price;
-            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+            const res = await fetch('/api/sell_sim', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId, category: currentRolledSim.category})
+            });
+            const data = await res.json();
+            if(data.error) { alert(data.error); return; }
 
-            alert(`✅ Сим-карта продана за ${currentRolledSim.price.toLocaleString()} ¢!`);
+            userCoins = data.new_coins;
+            document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
+
+            alert(`✅ Сим-карта обменена на +${data.earned_coins} коинов!`);
             currentRolledSim = null;
             document.getElementById('sim-result-actions').style.display = 'none';
             document.getElementById('sim-active-display').innerText = '+888 00000000';
@@ -968,7 +943,7 @@
             select.innerHTML = '<option value="">Выберите сим-карту для обмена...</option>';
             
             sims.forEach(sim => {
-                const coinsVal = simConfig[sim.category]?.coins || (sim.category === 'common' ? 1 : sim.category === 'rare' ? 10 : sim.category === 'epic' ? 50 : 400);
+                const coinsVal = simConfig[sim.category]?.coins || 1;
                 const option = document.createElement('option');
                 option.value = sim.id;
                 option.textContent = `${sim.number} (${sim.category || 'Обычная'}) — ${coinsVal} коинов`;
@@ -1034,9 +1009,7 @@
                 document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
                 input.value = '';
                 document.getElementById('exchange-coins-preview').innerText = 'К получению: 0 ¢';
-                alert(`Обмен выполнен!
-Списано коинов: ${amount}
-Начислено денег: ${data.added_balance.toLocaleString('ru-RU')} ¢`);
+                alert(`Обмен выполнен!\nСписано коинов: ${amount}\nНачислено денег: ${data.added_balance.toLocaleString('ru-RU')} ¢`);
             } catch (e) {
                 console.error(e);
                 alert('❌ Ошибка обмена коинов');
@@ -1074,7 +1047,7 @@
                 <div class="sim-inv-item">
                     <div>
                         <div style="font-weight: bold; color: #fbbf24; font-size: 0.95rem;">${sim.number}</div>
-                        <div style="font-size: 0.75rem; color: #4ade80;">${sim.price.toLocaleString()} ¢ (${sim.category || 'common'})</div>
+                        <div style="font-size: 0.75rem; color: #fbbf24;">${sim.price} коинов (${sim.category || 'common'})</div>
                     </div>
                     <div style="display: flex; gap: 6px;">
                         <button class="open-btn" style="background: #10b981; padding: 6px 10px; font-size: 0.75rem;" onclick="equipSimNumber('${sim.number}')">Одеть</button>
@@ -1127,7 +1100,6 @@
             alert('🎉 Поздравляем с покупкой телефона!');
         }
 
-        /* ==================== РЫНОК СИМ-КАРТ ==================== */
         let marketListings = [];
 
         async function initMarketView() {
@@ -1201,7 +1173,7 @@
                     <div class="sim-inv-item">
                         <div>
                             <div style="font-weight: bold; color: #fbbf24; font-size: 0.95rem;">${sim.number}</div>
-                            <div style="font-size: 0.75rem; color: #4ade80;">Рекомендованная: ${sim.price.toLocaleString()} ¢</div>
+                            <div style="font-size: 0.75rem; color: #4ade80;">Награда: ${sim.price} коинов</div>
                         </div>
                         <button class="open-btn" style="background: #8b5cf6; padding: 6px 12px; font-size: 0.8rem;" onclick="promptListSim(${sim.id}, '${sim.number}')">Выставить</button>
                     </div>
@@ -1210,7 +1182,7 @@
         }
 
         async function promptListSim(simId, simNumber) {
-            let priceInput = prompt(`Введите цену продажи для сим-карты ${simNumber}:`, "5000000");
+            let priceInput = prompt(`Введите цену продажи для сим-карты ${simNumber} (в ¢):`, "5000000");
             if(!priceInput) return;
             let price = parseInt(priceInput);
             if(isNaN(price) || price <= 0) {
@@ -1244,8 +1216,8 @@
                 if(!res.ok || data.error) { alert(data.error || 'Ошибка покупки'); return; }
                 userBalance = data.new_balance;
                 document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
-                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
-                alert("Вы успешно купил сим-карту");
+                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
+                alert("Вы успешно купили сим-карту");
                 loadMarketListings();
             } catch(e) {
                 alert("❌ Ошибка при покупке");
@@ -1268,7 +1240,6 @@
             }
         }
 
-        /* --- АПГРЕЙДЕР ЛОГИКА СО ВРАЩАЮЩЕЙСЯ СТРЕЛОЧКОЙ --- */
         async function initUpgraderView() {
             const res = await fetch(`/api/get_inventory?user_id=${userId}`);
             inventory = await res.json();
@@ -1499,7 +1470,6 @@
             }, duration + 100);
         }
 
-        /* --- ПРОФИЛЬ --- */
         async function loadProfile() {
             document.getElementById('user-display-name').innerText = firstName;
             document.getElementById('user-display-id').innerText = `${username} • ID ${userId}`;
@@ -1529,9 +1499,9 @@
                 }
                 grid.innerHTML = inventory.map((item, idx) => `
                     <div class="inv-item" onclick="openSellModal(${idx})">
-                        <div style="font-size: 2rem;">🎁</div>
+                        <div style="font-size: 2rem;">${item.emoji || '🎁'}</div>
                         <div style="font-weight: bold; font-size: 0.85rem; margin: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</div>
-                        <div style="color: #4ade80; font-size: 0.8rem; font-weight: bold;">${item.price.toLocaleString()} ¢</div>
+                        <div style="color: ${item.item_type === 'electronics' ? '#fbbf24' : '#4ade80'}; font-size: 0.8rem; font-weight: bold;">${item.price.toLocaleString()} ${item.item_type === 'electronics' ? 'коинов' : '¢'}</div>
                     </div>
                 `).join('');
             } catch(e) { console.error(e); }
@@ -1540,7 +1510,9 @@
         function openSellModal(index) {
             selectedItemForSell = inventory[index];
             document.getElementById('modal-item-name').innerText = selectedItemForSell.name;
-            document.getElementById('modal-item-price').innerText = `Цена продажи: ${selectedItemForSell.price.toLocaleString()} ¢`;
+            const isElectronics = selectedItemForSell.item_type === 'electronics';
+            document.getElementById('modal-item-price').innerText = `Награда: ${selectedItemForSell.price.toLocaleString()} ${isElectronics ? 'коинов' : '¢'}`;
+            document.getElementById('modal-item-notice').innerText = isElectronics ? 'Обменять этот предмет на коины?' : 'Вы точно хотите продать этот предмет?';
             document.getElementById('sell-modal').style.display = 'flex';
         }
 
@@ -1559,14 +1531,15 @@
             const data = await res.json();
             if(data.success) {
                 userBalance = data.new_balance;
+                userCoins = data.new_coins;
                 document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
                 document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
                 closeModal();
                 loadInventory();
-            } else { alert('Ошибка при продаже'); }
+            } else { alert('Ошибка при обмене/продаже'); }
         }
 
-        /* --- КРАШ (РАКЕТА) --- */
         let crashState = 'IDLE';
         let currentMultiplier = 1.00;
         let targetCrashPoint = 2.00;

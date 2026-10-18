@@ -24,6 +24,7 @@ dp.include_router(router)
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
     waiting_for_balance_change = State()
+    waiting_for_coin_exchange = State()
 
 # --- АНТИСПАМ ФИЛЬТРЫ ---
 original_send_message = bot.send_message
@@ -62,7 +63,7 @@ ADMIN_IDS = [1222239198, 8390540110, 8565202662, 7145763697]
 RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
 
 # --- РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ ---
-MAINTENANCE_MODE = False  # Переключатель (True = включено, False = выключено)
+MAINTENANCE_MODE = False
 
 @router.message(Command("tech_on"))
 async def enable_maintenance(message: Message):
@@ -78,7 +79,6 @@ async def disable_maintenance(message: Message):
     MAINTENANCE_MODE = False
     await message.answer("✅ **Режим тех. работ ВЫКЛЮЧЕН.** Бот доступен всем.", parse_mode="MARKDOWN")
 
-# Названия квартир для флипинга
 APARTMENT_NAMES = [
     "Убитая хрущевка на окраине", "Сталинка в центре под ремонт", 
     "Студия в новостройке с черновой отделкой", "Элитный пентхаус с видом на парк", 
@@ -112,6 +112,7 @@ def get_other_keyboard():
     kb = [
         [KeyboardButton(text="🎁 Бонус"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📜 Квесты"), KeyboardButton(text="📖 Помощь")],
+        [KeyboardButton(text="🪙 Обменять койны на баланс")],
         [KeyboardButton(text="🔙 Назад")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
@@ -277,7 +278,6 @@ def log_user_action(user_id, username, action_type, details):
     except Exception as e:
         print(f"Ошибка логирования: {e}")
 
-# --- СИСТЕМА КВЕСТОВ ---
 def get_current_quest_day():
     epoch_days = int(time.time() // 86400)
     return (epoch_days % 3) + 1
@@ -328,11 +328,9 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
     user = message.from_user
     user_id, username = user.id, user.username or user.first_name
     
-    # --- ПРОВЕРКА ТЕХ. РАБОТ ---
     if MAINTENANCE_MODE and user_id not in ADMIN_IDS:
         await message.answer("🛠 **В боте ведутся технические работы!**\nПопробуйте зайти позже.", parse_mode="MARKDOWN")
         return False
-    # ---------------------------
 
     conn = get_db()
     try:
@@ -417,7 +415,6 @@ def parse_sum(text_val):
     try: return int(float(text_val) * multiplier)
     except: return None
 
-# --- СТАРТ И МЕНЮ ---
 @router.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject):
     if not await check_ban_and_register(message, command): return
@@ -437,6 +434,66 @@ async def text_cabbage_menu(message: Message):
 async def text_other_menu(message: Message):
     if not await check_ban_and_register(message): return
     await message.answer("⚙ Раздел «Прочее»:\nВыберите нужный раздел из меню ниже.", reply_markup=get_other_keyboard())
+
+# --- ОБМЕН КОИНОВ НА БАЛАНС ЧЕРЕЗ БОТА ---
+@router.message(F.text.casefold().in_(["🪙 обменять койны на баланс", "обменять койны на баланс", "обменять коины на баланс"]))
+async def start_coin_exchange(message: Message, state: FSMContext):
+    if not await check_ban_and_register(message): return
+    await message.answer(
+        "Сколько вы хотите поменять койнов на баланс?\n(1койн-500000¢)\n\n(Введите число или /cancel для отмены)",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.set_state(AdminStates.waiting_for_coin_exchange)
+
+@router.message(AdminStates.waiting_for_coin_exchange)
+async def process_coin_exchange(message: Message, state: FSMContext):
+    if not await check_ban_and_register(message): return
+    user_id = message.from_user.id
+    
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await smart_answer(message, "❌ Отменено.")
+        return
+
+    try:
+        coins_to_exchange = int(message.text.strip().replace(" ", ""))
+    except ValueError:
+        await message.answer("❌ Пожалуйста, введите корректное число койнов!")
+        return
+
+    if coins_to_exchange <= 0:
+        await message.answer("❌ Количество должно быть больше нуля!")
+        return
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        current_coins = row[0] if row else 0
+
+        if current_coins < coins_to_exchange:
+            await message.answer(f"❌ У вас недостаточно койнов! У вас в наличии: {current_coins} койнов.")
+            return
+
+        added_balance = coins_to_exchange * 500_000
+
+        cursor.execute("""
+            UPDATE users 
+            SET coins = COALESCE(coins, 0) - ?, balance = balance + ? 
+            WHERE user_id = ? AND COALESCE(coins, 0) >= ?
+        """, (coins_to_exchange, added_balance, user_id, coins_to_exchange))
+        conn.commit()
+
+        await message.answer(f"Вам начислено {added_balance:,}¢ за {coins_to_exchange} койнов".replace(",", " "))
+        await state.clear()
+        await smart_answer(message, "🏠 Главное меню игры:")
+    except Exception as e:
+        conn.rollback()
+        await message.answer("❌ Произошла ошибка при обмене.")
+        await state.clear()
+    finally:
+        conn.close()
 
 HELP_TEXT = (
     "📖 Инструкция по игре:\n\n"
@@ -463,7 +520,6 @@ async def cmd_help(message: Message):
     if not await check_ban_and_register(message): return
     await message.answer(HELP_TEXT, parse_mode="MARKDOWN")
 
-# --- ДОНАТ ---
 @router.message(F.text.casefold().in_(["донат", "⭐ донат"]))
 async def text_donate(message: Message):
     if not await check_ban_and_register(message): return
@@ -476,7 +532,6 @@ async def text_donate(message: Message):
     )
     await message.answer(text, parse_mode="MARKDOWN")
 
-# --- МАГАЗИН УЛУЧШЕНИЙ ---
 @router.message(F.text.casefold().in_(["магазин", "🏪 магазин"]))
 async def text_shop(message: Message):
     if not await check_ban_and_register(message): return
@@ -551,7 +606,6 @@ async def shop_buy_callback(callback: CallbackQuery):
         pass
     await callback.answer("🎉 Успешная покупка!", show_alert=True)
 
-# --- ФУНКЦИЯ «ОБРАНИТЬ» (РАЗДАЧА ДЕНЕГ) ---
 ACTIVE_DROPS = {}
 
 @router.message(F.text.regexp(r"(?i)^обранить\s+(\d+[ккмилн]*)\s+(\d+)$"))
@@ -640,7 +694,6 @@ async def callback_claim_drop(callback: CallbackQuery):
             pass
         del ACTIVE_DROPS[drop_id]
 
-# --- КВЕСТЫ ---
 @router.message(F.text.casefold().in_(["📜 квесты", "квесты"]))
 async def text_quests(message: Message):
     if not await check_ban_and_register(message): return
@@ -660,7 +713,6 @@ async def text_quests(message: Message):
     text = f"📜 Ежедневные квесты (День {day_num}/3):\n\n1. {q1} — {mark(1)}\n2. {q2} — {mark(2)}\n3. {q3} — {mark(3)}"
     await message.answer(text, parse_mode="MARKDOWN")
 
-# --- НЫЧКА ---
 @router.message(F.text.casefold().in_(["🥷 нычка", "нычка", "заначка"]))
 async def text_nyachka_menu(message: Message):
     if not await check_ban_and_register(message): return
@@ -709,7 +761,6 @@ async def nyachka_actions(message: Message):
         conn.close()
         await message.answer(f"🥷 Забрано из нычки: {amount:,} ¢".replace(",", " "))
 
-# --- БАНДА ---
 @router.message(F.text.casefold().in_(["🔫 банда", "банда"]))
 async def text_gang_menu(message: Message):
     if not await check_ban_and_register(message): return
@@ -813,13 +864,13 @@ async def callback_gang_rob(callback: CallbackQuery):
         conn.close()
         await callback.answer("🚨 Вас поймала полиция!", show_alert=True)
 
-# --- ПРОФИЛЬ И ТОП ---
+# --- ПРОФИЛЬ (ВКЛЮЧАЯ КОИНЫ) ---
 def format_profile(user_data):
-    user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat = user_data
+    user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins = user_data
     badge = " 🎬" if is_creat == 1 else ""
     return (
         f"👤 Профиль игрока: {display_name}{badge}\n\n"
-        f"💵 Баланс наличными: {balance:,} ¢\n"
+        f"💵 Баланс наличными: {balance:,} ¢ ({coins} койнов)\n"
         f"🏦 В банке: {bank_balance:,} ¢\n"
         f"📈 Вложено во флипинг: {invested:,} ¢\n"
         f"🏢 Недвижимость: {apt_count}/10 шт.\n"
@@ -832,16 +883,16 @@ async def msg_profile(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
     u = cursor.fetchone()
-    custom_name, uname, balance, bank_balance, invested, is_creat = u if u else (None, "user", 10000, 0, 0, 0)
+    custom_name, uname, balance, bank_balance, invested, is_creat, coins = u if u else (None, "user", 10000, 0, 0, 0, 0)
     display_name = custom_name if custom_name else (uname if uname else message.from_user.first_name)
     cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
     apt_count = cursor.fetchone()[0]
     cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
     ref_count = cursor.fetchone()[0] or 0
     conn.close()
-    await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat)))
+    await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins)))
 
 @router.message(F.text.casefold() == "чекнуть")
 async def msg_check_profile(message: Message):
@@ -852,20 +903,20 @@ async def msg_check_profile(message: Message):
     target_id = message.reply_to_message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator FROM users WHERE user_id = ?", (target_id,))
+    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator, COALESCE(coins, 0) FROM users WHERE user_id = ?", (target_id,))
     u = cursor.fetchone()
     if not u:
         await message.answer("❌ Игрок не найден.")
         conn.close()
         return
-    custom_name, uname, balance, bank_balance, invested, is_creat = u
+    custom_name, uname, balance, bank_balance, invested, is_creat, coins = u
     display_name = custom_name if custom_name else (uname if uname else message.reply_to_message.from_user.first_name)
     cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (target_id,))
     apt_count = cursor.fetchone()[0]
     cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (target_id,))
     ref_count = cursor.fetchone()[0] or 0
     conn.close()
-    await smart_answer(message, format_profile((target_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat)))
+    await smart_answer(message, format_profile((target_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins)))
 
 @router.message(F.text.regexp(r"(?i)^\+ник\s+.+$"))
 async def set_custom_nickname(message: Message):
@@ -909,7 +960,6 @@ async def text_top(message: Message):
         
     await smart_answer(message, text)
 
-# --- РАБОТА ---
 @router.message(F.text.casefold().in_(["👷 работа", "работа", "ферма"]))
 async def text_work(message: Message):
     if not await check_ban_and_register(message): return
@@ -1039,7 +1089,6 @@ async def sell_resources(callback: CallbackQuery):
     except: pass
     await callback.answer(f"💰 Продано на {payout:,} ¢!".replace(",", " "), show_alert=True)
 
-# --- КОМПАНИИ ПО ФЛИПИНГУ ---
 COMPANY_LEVELS = {
     1: {"name": "Стартовое агентство", "cost": 100_000_000, "income": 2_500_000, "next_cost": 250_000_000, "next_income": 10_000_000},
     2: {"name": "Районная сеть филиалов", "cost": 250_000_000, "income": 10_000_000, "next_cost": 500_000_000, "next_income": 25_000_000},
@@ -1194,7 +1243,6 @@ async def callback_upgrade_company(callback: CallbackQuery):
     try: await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
     except: pass
 
-# --- КАЗИНО ---
 @router.message(F.text.casefold().in_(["🎰 казино", "казино"]))
 async def text_casino(message: Message):
     if not await check_ban_and_register(message): return
@@ -1394,7 +1442,6 @@ async def game_basketball(message: Message):
     if won: await message.answer(f"🏀 Гол! +{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
     else: await message.answer(f"🏀 Мимо! -{amount:,} ¢\nБаланс: {new_bal:,} ¢".replace(",", " "))
 
-# --- БАНК И ПЕРЕВОДЫ ---
 @router.message(F.text.casefold().in_(["🏦 банк", "баланс"]))
 async def text_bank(message: Message):
     if not await check_ban_and_register(message): return
@@ -1500,7 +1547,6 @@ async def transfer_money(message: Message):
                 print(f"BIG TRANSFER NOTIFY ERROR: {e}")
     await message.answer(f"✅ Успешно переведено {formatted_amount} ¢ игроку {target_name}!")
 
-# --- ФЛИПИНГ И КВАРТИРЫ ---
 @router.message(F.text.casefold().in_(["💸 флипинг", "флипинг"]))
 async def text_flipping(message: Message):
     if not await check_ban_and_register(message): return
@@ -1664,7 +1710,6 @@ async def sell_apartment(callback: CallbackQuery):
 
     await callback.answer(f"💰 Продано за {sell_price:,} ¢ (Разница: {diff_sign} ¢)".replace(",", " "), show_alert=True)
 
-# --- БОНУС И РЕФЕРАЛЫ ---
 @router.message(F.text.casefold().in_(["🎁 бонус", "бонус"]))
 async def text_bonus(message: Message):
     if not await check_ban_and_register(message): return
@@ -1708,7 +1753,6 @@ async def text_referral(message: Message):
         reply_markup=kb
     )
 
-# --- ПРОМОКОДЫ И КРЕАТОРЫ ---
 @router.message(F.text.regexp(r"(?i)^промокод\s+\w+$"))
 async def activate_promo_code(message: Message):
     if not await check_ban_and_register(message): return
@@ -1786,7 +1830,6 @@ async def create_promo_universal(message: Message):
     conn.close()
     await message.answer(f"✅ Промокод {code} создан на {reward:,} ¢ (активаций: {activations})!".replace(",", " "))
 
-# --- АДМИН-ПАНЕЛЬ ---
 @router.message(F.text.casefold().in_(["админ", "/admin"]))
 async def cmd_admin_panel(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
@@ -1961,42 +2004,6 @@ async def admin_reset_user(message: Message):
     conn.close()
     await message.answer(f"🔄 Игрок @{uname} обнулен.")
 
-def generate_unique_sim(cursor, category_name):
-    while True:
-        if category_name == "Легендарный":
-            roll = random.choices([1, 4, 5, 6, 7, 8], weights=[65, 25, 10, 5, 2, 0.5])[0]
-            
-            if roll == 1:
-                digits = "".join([str(random.randint(0, 9)) for _ in range(8)])
-            else:
-                rep_char = str(random.randint(0, 9))
-                rep_part = rep_char * roll
-                rand_part = "".join([str(random.randint(0, 9)) for _ in range(8 - roll)])
-                
-                combined = list(rep_part + rand_part)
-                random.shuffle(combined)
-                digits = "".join(combined)
-                
-            number = f"+888{digits}"
-            price = 200_000_000  # Продажа легендарной симки
-        else:
-            number = f"+888{random.randint(10000000, 99999999)}"
-            prices_map = {
-                "Обычные": 500_000,       # Продажа обычной
-                "Редкие": 5_000_000,       # Продажа редкой
-                "Эпик": 25_000_000         # Продажа эпической
-            }
-            price = prices_map.get(category_name, 500_000)
-            
-        cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
-        exists_in_inv = cursor.fetchone()
-        
-        cursor.execute("SELECT 1 FROM market_sims WHERE number = ?", (number,))
-        exists_in_market = cursor.fetchone()
-        
-        if not exists_in_inv and not exists_in_market:
-            return number, price
-
 # --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ И РЫНКА ---
 async def index_handler(request):
     return web.FileResponse("index.html")
@@ -2062,7 +2069,6 @@ async def api_open_case(request):
         conn.close()
         return web.json_response({"error": "Недостаточно средств для открытия кейса"}, status=400)
 
-    # Указанные вероятности электроники дают 90%; оставшиеся 10% — пустой дроп.
     roll = random.randint(1, 100)
     current_sum = 0
     won_item = None
@@ -2094,21 +2100,27 @@ async def api_sell_item(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT price FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (item_id, user_id))
+    cursor.execute("SELECT price, COALESCE(item_type, 'normal') FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (item_id, user_id))
     item = cursor.fetchone()
     if not item:
         conn.close()
         return web.json_response({"success": False})
 
-    price = item[0]
+    price, item_type = item[0], item[1]
     cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (item_id,))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    new_bal = cursor.fetchone()[0]
+    
+    if item_type == "electronics":
+        cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (price, user_id))
+    else:
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
+
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    new_bal, new_coins = row[0], row[1]
     conn.commit()
     conn.close()
 
-    return web.json_response({"success": True, "new_balance": new_bal})
+    return web.json_response({"success": True, "new_balance": new_bal, "new_coins": new_coins})
 
 async def api_buy_phone(request):
     data = await request.json()
@@ -2169,7 +2181,6 @@ async def api_save_sim(request):
         conn.close()
         return web.json_response({"error": "Лимит номеров (максимум 5)"}, status=400)
 
-    # Сохраняем симку в инвентарь (храним категорию и награду)
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", 
                    (user_id, number, earned_coins, category))
     
@@ -2264,7 +2275,6 @@ async def api_exchange_all_coins(request):
     finally:
         conn.close()
 
-# --- API РЫНКА СИМ-КАРТ ---
 async def api_market_get_listings(request):
     conn = get_db()
     cursor = conn.cursor()
@@ -2290,7 +2300,6 @@ async def api_market_list_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    # Считываем также оригинальную цену сим-карты (price) из инвентаря
     cursor.execute("SELECT number, price, category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
     sim = cursor.fetchone()
     if not sim:
@@ -2303,7 +2312,6 @@ async def api_market_list_sim(request):
     seller_name = u[0] if u and u[0] else (u[1] if u and u[1] else "Игрок")
 
     cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
-    # Сохраняем цену продажи в price, а старую цену в original_price
     cursor.execute(
         "INSERT INTO market_sims (seller_id, seller_name, sim_id, number, price, original_price, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (user_id, seller_name, sim_id, number, price, orig_price, category)
@@ -2341,7 +2349,6 @@ async def api_market_buy_sim(request):
         conn.close()
         return web.json_response({"error": "В вашем инвентаре нет свободного места (максимум 5 сим-карт)"}, status=400)
 
-    # Перевод денег и перенос симки
     cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, seller_id))
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, price, category))
@@ -2365,7 +2372,6 @@ async def api_market_cancel_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    # Достаем из базы рынка сохраненную original_price
     cursor.execute("SELECT sim_id, number, price, original_price, category FROM market_sims WHERE id = ? AND seller_id = ?", (listing_id, user_id))
     listing = cursor.fetchone()
     if not listing:
@@ -2381,7 +2387,6 @@ async def api_market_cancel_sim(request):
     if orig_price is None:
         orig_price = sale_price
 
-    # Возвращаем сим-карту в инвентарь с ее первоначальной (original_price) стоимостью
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, orig_price, category))
     cursor.execute("DELETE FROM market_sims WHERE id = ?", (listing_id,))
     conn.commit()
@@ -2504,7 +2509,6 @@ async def web_server():
     app.router.add_post("/api/exchange_sim_coins", api_exchange_sim_coins)
     app.router.add_post("/api/exchange_all_coins", api_exchange_all_coins)
 
-    # --- ЭНДПОИНТЫ РЫНКА СИМ-КАРТ ---
     app.router.add_get("/api/market/get_listings", api_market_get_listings)
     app.router.add_post("/api/market/list_sim", api_market_list_sim)
     app.router.add_post("/api/market/buy_sim", api_market_buy_sim)
@@ -2527,7 +2531,6 @@ async def main():
         )
     )
     
-    # Запускаем веб-сервер и поллинг бота параллельно
     await asyncio.gather(
         web_server(),
         dp.start_polling(bot)
@@ -2535,4 +2538,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
