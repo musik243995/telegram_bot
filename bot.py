@@ -2229,7 +2229,7 @@ async def api_exchange_all_coins(request):
 
     coins_to_exchange = row[0]
     
-    # 1 коин = ровно 500 000 ¢ (чтобы 400 коинов давали 200 000 000 ¢)
+    # Убедитесь, что здесь стоит именно 500_000, а не 1_500_000 или другое число
     added_balance = coins_to_exchange * 500_000  
 
     cursor.execute("UPDATE users SET coins = 0, balance = balance + ? WHERE user_id = ?", (added_balance, user_id))
