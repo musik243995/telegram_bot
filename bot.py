@@ -1548,6 +1548,7 @@ async def transfer_money(message: Message):
                 print(f"BIG TRANSFER NOTIFY ERROR: {e}")
     await message.answer(f"✅ Успешно переведено {formatted_amount} ¢ игроку {target_name}!")
 
+# --- ФЛИПИНГ И КВАРТИРЫ ---
 @router.message(F.text.casefold().in_(["💸 флипинг", "флипинг"]))
 async def text_flipping(message: Message):
     if not await check_ban_and_register(message): return
@@ -1557,6 +1558,7 @@ async def text_flipping(message: Message):
     cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
     apt_count = cursor.fetchone()[0]
     conn.close()
+    
     price = random.randint(1_000_000, 100_000_000)
     apt_name = random.choice(APARTMENT_NAMES)
 
@@ -1567,8 +1569,9 @@ async def text_flipping(message: Message):
         f"📊 У вас недвижимости: {apt_count}/10 шт."
     ).replace(",", " ")
 
+    safe_name = apt_name.replace(" ", "_")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-         [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{price}_{apt_name[:12]}"),
+         [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{safe_name}_{price}"),
          InlineKeyboardButton(text="⏭ Другой вариант", callback_data="refresh_flip")]
     ])
     await message.answer(text, reply_markup=keyboard, parse_mode="MARKDOWN")
@@ -1591,18 +1594,22 @@ async def refresh_flipping(callback: CallbackQuery):
         f"📊 У вас недвижимости: {apt_count}/10 шт."
     ).replace(",", " ")
 
+    safe_name = apt_name.replace(" ", "_")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{price}_{apt_name[:12]}"),
+        [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{safe_name}_{price}"),
          InlineKeyboardButton(text="⏭ Другой вариант", callback_data="refresh_flip")]
     ])
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+    try: await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+    except: pass
 
 @router.callback_query(F.data.startswith("buy_apt_"))
 async def buy_apartment(callback: CallbackQuery):
     user_id = callback.from_user.id
     parts = callback.data.split("_")
-    price = int(parts[2])
-    apt_name = " ".join(parts[3:]) if len(parts) > 3 else "Квартира"
+    
+    # Считываем цену из конца строки, а название собираем из середины
+    price = int(parts[-1])
+    apt_name = "_".join(parts[2:-1]).replace("_", " ")
 
     conn = get_db()
     cursor = conn.cursor()
@@ -1615,7 +1622,7 @@ async def buy_apartment(callback: CallbackQuery):
         return
 
     cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
-    apt_count = cursor.fetchone()[0] if cursor.fetchone() else 0
+    apt_count = cursor.fetchone()[0]
     if apt_count >= 10:
         await callback.answer("❌ Лимит недвижимости (максимум 10)!", show_alert=True)
         conn.close()
@@ -1639,8 +1646,10 @@ async def buy_apartment(callback: CallbackQuery):
         f"💰 Цена покупки: {new_price:,} ¢\n\n"
         f"📊 У вас недвижимости: {new_apt_count}/10 шт."
     ).replace(",", " ")
+    
+    new_safe_name = new_apt_name.replace(" ", "_")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{new_price}_{new_apt_name[:12]}"),
+        [InlineKeyboardButton(text="🛒 Купить квартиру", callback_data=f"buy_apt_{new_safe_name}_{new_price}"),
          InlineKeyboardButton(text="⏭ Другой вариант", callback_data="refresh_flip")]
     ])
     try: await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
