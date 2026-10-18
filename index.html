@@ -420,10 +420,13 @@
     <!-- ПРОФИЛЬ -->
     <div id="section-profile" class="view-section">
         <div class="profile-container">
-            <!-- Кнопка обмена всех коинов на баланс с правильным текстом -->
-            <button class="open-btn" style="background: linear-gradient(135deg, #fbbf24, #d97706); color: #000; font-size: 0.95rem; padding: 12px; margin-bottom: 4px;" onclick="exchangeAllCoins()">
-                🪙 Обменять все коины на баланс (1 коин = 500к)
-            </button>
+            <div style="background:#17112b; padding:12px; border-radius:12px; margin-bottom:10px;">
+                <div style="font-weight:bold; margin-bottom:8px; color:#fbbf24;">🪙 ОБМЕН КОИНОВ НА ДЕНЬГИ</div>
+                <div style="font-size:0.85rem; color:#aaa; margin-bottom:8px;">1 коин = 500 000 ¢</div>
+                <input id="exchange-coins-amount" type="number" min="1" step="1" placeholder="Сколько коинов обменять?" style="width:100%; box-sizing:border-box; padding:12px; margin-bottom:8px; border-radius:8px; background:#0e0a1f; color:white; border:1px solid #fbbf24; font-size:1rem;">
+                <div id="exchange-coins-preview" style="font-size:0.9rem; color:#4ade80; margin-bottom:8px;">К получению: 0 ¢</div>
+                <button class="open-btn" style="background:linear-gradient(135deg,#fbbf24,#d97706); color:#000; font-size:0.95rem; padding:12px;" onclick="exchangeAllCoins()">💰 Обменять коины</button>
+            </div>
 
             <div class="profile-card">
                 <div class="profile-user-info">
@@ -608,18 +611,39 @@
                     { name: "Пин Хаус", price: 20000000, chance: 5, emoji: "🌇" }
                 ],
                 dropListText: "<b>Что может выпасть:</b><br>🛖 Ключи от маленького домика (3.500.000¢ — 45%)<br>🏠 Средний домик (6.500.000¢ — 35%)<br>🏡 Большой дом (12.500.000¢ — 15%)<br>🌇 Пин Хаус (20.000.000¢ — 5%)"
-            }
-        ];
+            },
+            {
+                id: 5, name: "Кейс электроника", price: 150, currency: "coins", img: "https://cdn-icons-png.flaticon.com/512/3659/3659898.png",
+                items: [
+                    { name: "Планшет", price: 50, chance: 45, emoji: "📱", item_type: "electronics" },
+                    { name: "Телефон", price: 100, chance: 25, emoji: "📲", item_type: "electronics" },
+                    { name: "Ноутбук", price: 150, chance: 15, emoji: "💻", item_type: "electronics" },
+                    { name: "Хороший ПК", price: 250, chance: 5, emoji: "🖥️", item_type: "electronics" }
+                ],
+                dropListText: "<b>Что может выпасть:</b><br>📱 Планшет (50 коинов — 45%)<br>📲 Телефон (100 коинов — 25%)<br>💻 Ноутбук (150 коинов — 15%)<br>🖥️ Хороший ПК (250 коинов — 5%)<br><span style=\"color:#fbbf24\">10% — без предмета</span>"
+            }        ];
 
         function getAllPossibleItems() {
             let list = [];
-            casesData.forEach(c => {
+            casesData.filter(c => c.currency !== 'coins').forEach(c => {
                 c.items.forEach(it => {
                     if(!list.some(x => x.name === it.name)) list.push(it);
                 });
             });
             list.sort((a,b) => a.price - b.price);
             return list;
+        }
+
+        const electronicsUpgradeItems = [
+            { name: "Планшет", price: 50, chance: 45, emoji: "📱", item_type: "electronics" },
+            { name: "Телефон", price: 100, chance: 25, emoji: "📲", item_type: "electronics" },
+            { name: "Ноутбук", price: 150, chance: 15, emoji: "💻", item_type: "electronics" },
+            { name: "Хороший ПК", price: 250, chance: 5, emoji: "🖥️", item_type: "electronics" }
+        ];
+
+        function getUpgradeTargetItems(item = upgraderSelectedMyItem) {
+            if (item && item.item_type === 'electronics') return electronicsUpgradeItems;
+            return getAllPossibleItems();
         }
 
         function initCasesList() {
@@ -629,7 +653,7 @@
                     <div class="case-image-wrapper"><img src="${c.img}" alt="${c.name}" class="case-img"></div>
                     <div class="case-details-box">
                         <div class="case-title">${c.name}</div>
-                        <div class="case-price">${c.price.toLocaleString()} ¢</div>
+                        <div class="case-price">${c.price.toLocaleString('ru-RU')} ${c.currency === 'coins' ? '🪙 коинов' : '¢'}</div>
                     </div>
                 </div>
             `).join('');
@@ -668,7 +692,7 @@
         function openCaseRoom(caseId) {
             activeCaseId = caseId;
             const c = casesData.find(x => x.id === caseId);
-            document.getElementById('room-case-title').innerText = `${c.name} (${c.price.toLocaleString()} ¢)`;
+            document.getElementById('room-case-title').innerText = `${c.name} (${c.price.toLocaleString('ru-RU')} ${c.currency === 'coins' ? 'коинов' : '¢'})`;
             document.getElementById('room-drop-list').innerHTML = c.dropListText;
             document.getElementById('win-notification').innerText = '';
             document.getElementById('view-cases-list').classList.remove('active');
@@ -711,7 +735,10 @@
         async function openCurrentCase() {
             if(!activeCaseId) return;
             const caseItem = casesData.find(c => c.id === activeCaseId);
-            if(userBalance < caseItem.price) { alert('❌ Недостаточно средств!'); return; }
+            if(caseItem.currency === 'coins' ? userCoins < caseItem.price : userBalance < caseItem.price) {
+                alert(caseItem.currency === 'coins' ? '❌ Недостаточно коинов!' : '❌ Недостаточно средств!');
+                return;
+            }
 
             const res = await fetch('/api/open_case', {
                 method: 'POST',
@@ -719,21 +746,23 @@
                 body: JSON.stringify({user_id: userId, case_id: activeCaseId})
             });
             const data = await res.json();
-            if(data.error) { alert(data.error); return; }
+            if(!res.ok || data.error) { alert(data.error || 'Ошибка открытия кейса'); return; }
 
             userBalance = data.new_balance;
-            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+            userCoins = data.new_coins || 0;
+            document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
+            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
+            document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
             casesOpenedCount++;
 
             const track = document.getElementById('roulette-track');
-            const wonItem = caseItem.items.find(i => i.name === data.item_name) || caseItem.items[0];
+            const wonItem = caseItem.items.find(i => i.name === data.item_name) || null;
             
             let itemsHtml = '';
             let winningIndex = 25;
             for(let i=0; i<35; i++) {
                 let item = (i === winningIndex) ? wonItem : caseItem.items[Math.floor(Math.random() * caseItem.items.length)];
-                itemsHtml += `<div class="roulette-item">${item.emoji}<span>${item.name}</span></div>`;
+                itemsHtml += item ? `<div class="roulette-item">${item.emoji}<span>${item.name}</span></div>` : `<div class="roulette-item">❌<span>Пусто</span></div>`;
             }
             track.innerHTML = itemsHtml;
             track.style.transition = 'none';
@@ -747,8 +776,13 @@
             }, 50);
 
             setTimeout(() => {
-                document.getElementById('win-notification').innerText = `🎉 Вы выиграли: ${wonItem.emoji} ${wonItem.name} (${wonItem.price.toLocaleString()} ¢)!`;
+                if (wonItem) {
+                    document.getElementById('win-notification').innerText = `🎉 Вы выиграли: ${wonItem.emoji} ${wonItem.name} (${wonItem.price.toLocaleString('ru-RU')} ${caseItem.currency === 'coins' ? 'коинов' : '¢'})!`;
+                } else {
+                    document.getElementById('win-notification').innerText = '😕 Не повезло: в этот раз предмет не выпал.';
+                }
                 loadInventory();
+                initUpgraderView();
             }, 4100);
         }
 
@@ -975,28 +1009,49 @@
         }
 
         async function exchangeAllCoins() {
+            const input = document.getElementById('exchange-coins-amount');
+            const amount = Number(input.value);
+            if (!Number.isSafeInteger(amount) || amount <= 0) {
+                alert('❌ Введи целое количество коинов больше нуля!');
+                return;
+            }
+            if (amount > Number(userCoins)) {
+                alert(`❌ У тебя только ${userCoins} коинов!`);
+                return;
+            }
+            if (!confirm(`Обменять ${amount} коинов на ${(amount * 500000).toLocaleString('ru-RU')} ¢?`)) return;
             try {
                 const res = await fetch('/api/exchange_all_coins', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ user_id: userId })
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, amount})
                 });
                 const data = await res.json();
-                if(data.error) {
-                    alert(data.error);
-                    return;
-                }
+                if (!res.ok || data.error) { alert(data.error || '❌ Не удалось обменять коины'); return; }
                 userBalance = data.new_balance;
                 userCoins = data.new_coins;
-
-                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
+                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
                 document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
-
-                alert(`🎉 Успешно обменяно! Начислено на баланс: +${data.added_balance.toLocaleString()} ¢`);
-            } catch(e) {
+                input.value = '';
+                document.getElementById('exchange-coins-preview').innerText = 'К получению: 0 ¢';
+                alert(`Обмен выполнен!
+Списано коинов: ${amount}
+Начислено денег: ${data.added_balance.toLocaleString('ru-RU')} ¢`);
+            } catch (e) {
+                console.error(e);
                 alert('❌ Ошибка обмена коинов');
             }
+        }
+
+        const exchangeAmountInput = document.getElementById('exchange-coins-amount');
+        if (exchangeAmountInput) {
+            exchangeAmountInput.addEventListener('input', function () {
+                const amount = Number(this.value);
+                document.getElementById('exchange-coins-preview').innerText =
+                    Number.isSafeInteger(amount) && amount > 0
+                    ? 'К получению: ' + (amount * 500000).toLocaleString('ru-RU') + ' ¢'
+                    : 'К получению: 0 ¢';
+            });
         }
 
         function equipSimNumber(numStr) {
@@ -1171,7 +1226,7 @@
                 });
                 const data = await res.json();
                 if(data.error) { alert(data.error); return; }
-                alert("✅ Сим-карта успешно выставлена на рынок!");
+                alert("Вы успешно выставили сим-карту на рынок");
                 switchMarketTab('browse');
             } catch(e) {
                 alert("❌ Ошибка соединения с сервером");
@@ -1186,11 +1241,11 @@
                     body: JSON.stringify({ user_id: userId, listing_id: listingId })
                 });
                 const data = await res.json();
-                if(data.error) { alert(data.error); return; }
+                if(!res.ok || data.error) { alert(data.error || 'Ошибка покупки'); return; }
                 userBalance = data.new_balance;
-                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
                 document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
-                alert("🎉 Вы успешно купили сим-карту!");
+                alert("Вы успешно купил сим-карту");
                 loadMarketListings();
             } catch(e) {
                 alert("❌ Ошибка при покупке");
@@ -1206,7 +1261,7 @@
                 });
                 const data = await res.json();
                 if(data.error) { alert(data.error); return; }
-                alert("✅ Сим-карта снята с рынка и возвращена в инвентарь!");
+                alert("Вы успешно сняли сим-карту с рынка");
                 loadMarketListings();
             } catch(e) {
                 alert("❌ Ошибка при снятии с рынка");
@@ -1240,7 +1295,7 @@
 
             if(upgraderSelectedMyItem) {
                 betCard.classList.add('selected');
-                document.getElementById('upgrader-bet-desc').innerHTML = `🎁 ${upgraderSelectedMyItem.name}<br><span style="color:#4ade80; font-size:0.75rem;">${upgraderSelectedMyItem.price.toLocaleString()}¢</span>`;
+                document.getElementById('upgrader-bet-desc').innerHTML = `🎁 ${upgraderSelectedMyItem.name}<br><span style="color:#4ade80; font-size:0.75rem;">${upgraderSelectedMyItem.price.toLocaleString('ru-RU')} ${upgraderSelectedMyItem.item_type === 'electronics' ? 'коинов' : '¢'}</span>`;
             } else {
                 betCard.classList.remove('selected');
                 document.getElementById('upgrader-bet-desc').innerText = 'Выбери предметы';
@@ -1248,7 +1303,7 @@
 
             if(upgraderSelectedTargetItem) {
                 targetCard.classList.add('selected');
-                document.getElementById('upgrader-target-desc').innerHTML = `${upgraderSelectedTargetItem.emoji || '🎯'} ${upgraderSelectedTargetItem.name}<br><span style="color:#fbbf24; font-size:0.75rem;">${upgraderSelectedTargetItem.price.toLocaleString()}¢</span>`;
+                document.getElementById('upgrader-target-desc').innerHTML = `${upgraderSelectedTargetItem.emoji || '🎯'} ${upgraderSelectedTargetItem.name}<br><span style="color:#fbbf24; font-size:0.75rem;">${upgraderSelectedTargetItem.price.toLocaleString('ru-RU')} ${upgraderSelectedTargetItem.item_type === 'electronics' ? 'коинов' : '¢'}</span>`;
             } else {
                 targetCard.classList.remove('selected');
                 document.getElementById('upgrader-target-desc').innerText = 'Выбери цель';
@@ -1291,8 +1346,13 @@
             document.getElementById('upgrader-status-msg').innerText = '';
 
             let targetPriceNeeded = (upgraderSelectedMyItem.price * 100) / targetPct;
-            let allItems = getAllPossibleItems().filter(i => i.price > upgraderSelectedMyItem.price);
-            if(allItems.length === 0) return;
+            let allItems = getUpgradeTargetItems(upgraderSelectedMyItem).filter(i => i.price > upgraderSelectedMyItem.price);
+            if(allItems.length === 0) {
+                upgraderSelectedTargetItem = null;
+                renderUpgraderCards();
+                updateUpgraderCircle();
+                return;
+            }
 
             let closestItem = allItems[0];
             let minDiff = Math.abs(allItems[0].price - targetPriceNeeded);
@@ -1321,11 +1381,11 @@
                     <div class="upgrader-item-card ${upgraderSelectedMyItem && upgraderSelectedMyItem.id === item.id ? 'selected' : ''}" onclick="selectMyItemForUpgrade(${idx})">
                         <div style="font-size: 1.5rem;">${item.emoji || '🎁'}</div>
                         <div style="font-weight: bold; font-size: 0.8rem; margin: 3px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</div>
-                        <div style="color: #4ade80; font-size: 0.75rem; font-weight: bold;">${item.price.toLocaleString()} ¢</div>
+                        <div style="color: #4ade80; font-size: 0.75rem; font-weight: bold;">${item.price.toLocaleString('ru-RU')} ${item.item_type === 'electronics' ? 'коинов' : '¢'}</div>
                     </div>
                 `).join('') + `</div>`;
             } else {
-                let allItems = getAllPossibleItems();
+                let allItems = getUpgradeTargetItems(upgraderSelectedMyItem);
                 if(upgraderSelectedMyItem) {
                     allItems = allItems.filter(i => i.price > upgraderSelectedMyItem.price);
                 }
@@ -1341,7 +1401,7 @@
                         <div class="upgrader-item-card ${upgraderSelectedTargetItem && upgraderSelectedTargetItem.name === item.name ? 'selected' : ''}" onclick="selectTargetItemForUpgrade('${item.name}')">
                             <div style="font-size: 1.5rem;">${item.emoji || '🎯'}</div>
                             <div style="font-weight: bold; font-size: 0.8rem; margin: 3px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</div>
-                            <div style="color: #fbbf24; font-size: 0.75rem; font-weight: bold;">${item.price.toLocaleString()} ¢ (${chance}%)</div>
+                            <div style="color: #fbbf24; font-size: 0.75rem; font-weight: bold;">${item.price.toLocaleString('ru-RU')} ${item.item_type === 'electronics' ? 'коинов' : '¢'} (${chance}%)</div>
                         </div>
                     `;
                 }).join('') + `</div>`;
@@ -1355,7 +1415,7 @@
         }
 
         function selectTargetItemForUpgrade(name) {
-            const allItems = getAllPossibleItems();
+            const allItems = getUpgradeTargetItems(upgraderSelectedMyItem);
             upgraderSelectedTargetItem = allItems.find(i => i.name === name);
             renderUpgraderCards();
             updateUpgraderCircle();
@@ -1408,6 +1468,7 @@
                             from_item_id: upgraderSelectedMyItem.id,
                             target_item_name: upgraderSelectedTargetItem.name,
                             target_item_price: upgraderSelectedTargetItem.price,
+                            target_item_type: upgraderSelectedTargetItem.item_type || 'normal',
                             won: isWon
                         })
                     });

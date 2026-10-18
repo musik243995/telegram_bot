@@ -250,6 +250,11 @@ def init_db():
             sold INTEGER DEFAULT 0
         )
     """)
+    try:
+        cursor.execute("ALTER TABLE user_inventory ADD COLUMN item_type TEXT DEFAULT 'normal'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN stolen INTEGER DEFAULT 0")
@@ -2011,64 +2016,76 @@ async def api_get_inventory(request):
     user_id = int(request.query.get("user_id", 0))
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, item_name, price FROM user_inventory WHERE user_id = ? AND sold = 0", (user_id,))
-    items = [{"id": r[0], "name": r[1], "price": r[2]} for r in cursor.fetchall()]
+    cursor.execute("SELECT id, item_name, price, COALESCE(item_type, 'normal') FROM user_inventory WHERE user_id = ? AND sold = 0", (user_id,))
+    items = [{"id": r[0], "name": r[1], "price": r[2], "item_type": r[3], "emoji": "💻" if r[3] == "electronics" else "🎁"} for r in cursor.fetchall()]
     conn.close()
     return web.json_response(items)
 
 async def api_open_case(request):
-    data = await request.json()
-    user_id = data.get("user_id")
-    case_id = data.get("case_id")
+    try:
+        data = await request.json()
+        user_id = int(data.get("user_id", 0))
+        case_id = int(data.get("case_id", 0))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Некорректные данные"}, status=400)
 
     cases_config = {
-        1: {"price": 5000000, "items": [
+        1: {"price": 5000000, "currency": "balance", "items": [
             ("Ключи от однушки", 500000, 45), ("Ключи от двушки", 2500000, 35),
-            ("Ключи от трешки", 7500000, 15), ("Ключи от 4комнатной", 10000000, 5)
-        ]},
-        2: {"price": 15000000, "items": [
-            ("Жигуль", 5000000, 45), ("Камри", 10000000, 35),
-            ("БМВ", 20000000, 15), ("БУГАТИ", 25000000, 5)
-        ]},
-        3: {"price": 25000000, "items": [
-            ("Кп по кв", 15000000, 45), ("Кп по мш", 20000000, 35),
-            ("Кп по дм", 30000000, 15), ("Кп по флт", 40000000, 5)
-        ]},
-        4: {"price": 10000000, "items": [
-            ("Ключи от маленького домика", 3500000, 45), ("Средний домик", 6500000, 35),
-            ("Большой дом", 12500000, 15), ("Пин Хаус", 20000000, 5)
-        ]}
+            ("Ключи от трешки", 7500000, 15), ("Ключи от 4комнатной", 10000000, 5)]},
+        2: {"price": 15000000, "currency": "balance", "items": [
+            ("Жигуль", 5000000, 45), ("Камри", 10000000, 35), ("БМВ", 20000000, 15), ("БУГАТИ", 25000000, 5)]},
+        3: {"price": 25000000, "currency": "balance", "items": [
+            ("Кп по кв", 15000000, 45), ("Кп по мш", 20000000, 35), ("Кп по дм", 30000000, 15), ("Кп по флт", 40000000, 5)]},
+        4: {"price": 10000000, "currency": "balance", "items": [
+            ("Ключи от маленького домика", 3500000, 45), ("Средний домик", 6500000, 35), ("Большой дом", 12500000, 15), ("Пин Хаус", 20000000, 5)]},
+        5: {"price": 150, "currency": "coins", "item_type": "electronics", "items": [
+            ("Планшет", 50, 45), ("Телефон", 100, 25), ("Ноутбук", 150, 15), ("Хороший ПК", 250, 5)]}
     }
-
-    if case_id not in cases_config:
+    case_info = cases_config.get(case_id)
+    if not case_info:
         return web.json_response({"error": "Кейс не найден"}, status=400)
 
-    case_info = cases_config[case_id]
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    currency = case_info["currency"]
+    balance_field = "coins" if currency == "coins" else "balance"
+    cursor.execute(f"SELECT COALESCE({balance_field}, 0) FROM users WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     if not row or row[0] < case_info["price"]:
         conn.close()
-        return web.json_response({"error": "Недостаточно средств"}, status=400)
+        return web.json_response({"error": "Недостаточно коинов" if currency == "coins" else "Недостаточно средств"}, status=400)
 
-    new_balance = row[0] - case_info["price"]
-    cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
+    cursor.execute(f"UPDATE users SET {balance_field} = COALESCE({balance_field}, 0) - ? WHERE user_id = ? AND COALESCE({balance_field}, 0) >= ?", (case_info["price"], user_id, case_info["price"]))
+    if cursor.rowcount == 0:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"error": "Недостаточно средств для открытия кейса"}, status=400)
 
-    rand_val = random.randint(1, 100)
+    # Указанные вероятности электроники дают 90%; оставшиеся 10% — пустой дроп.
+    roll = random.randint(1, 100)
     current_sum = 0
-    won_item_name, won_item_price = case_info["items"][0][0], case_info["items"][0][1]
+    won_item = None
     for name, price, chance in case_info["items"]:
         current_sum += chance
-        if rand_val <= current_sum:
-            won_item_name, won_item_price = name, price
+        if roll <= current_sum:
+            won_item = (name, price)
             break
 
-    cursor.execute("INSERT INTO user_inventory (user_id, item_name, price) VALUES (?, ?, ?)", (user_id, won_item_name, won_item_price))
+    if won_item:
+        name, price = won_item
+        item_type = case_info.get("item_type", "normal")
+        cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (?, ?, ?, 0, ?)", (user_id, name, price, item_type))
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+    balances = cursor.fetchone()
     conn.commit()
     conn.close()
-
-    return web.json_response({"new_balance": new_balance, "item_name": won_item_name, "item_price": won_item_price})
+    return web.json_response({
+        "new_balance": balances[0], "new_coins": balances[1],
+        "item_name": won_item[0] if won_item else None,
+        "item_price": won_item[1] if won_item else 0,
+        "item_type": case_info.get("item_type", "normal"), "currency": currency
+    })
 
 async def api_sell_item(request):
     data = await request.json()
@@ -2216,30 +2233,36 @@ async def api_exchange_sim_coins(request):
     return web.json_response({"success": True, "new_coins": new_coins, "added_coins": earned_coins})
 
 async def api_exchange_all_coins(request):
-    data = await request.json()
-    user_id = data.get("user_id")
+    try:
+        data = await request.json()
+        user_id = int(data.get("user_id", 0))
+        coins_to_exchange = int(data.get("amount", 0))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Укажите правильное количество коинов!"}, status=400)
+    if user_id <= 0 or coins_to_exchange <= 0:
+        return web.json_response({"error": "Введите количество коинов больше нуля!"}, status=400)
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    if not row or not row[0] or row[0] <= 0:
+    try:
+        cursor.execute("""
+            UPDATE users
+            SET coins = COALESCE(coins, 0) - ?, balance = COALESCE(balance, 0) + ?
+            WHERE user_id = ? AND COALESCE(coins, 0) >= ?
+        """, (coins_to_exchange, coins_to_exchange * 500_000, user_id, coins_to_exchange))
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return web.json_response({"error": "Недостаточно коинов для обмена!"}, status=400)
+        added_balance = coins_to_exchange * 500_000
+        cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.commit()
+        return web.json_response({"success": True, "new_balance": row[0], "new_coins": row[1], "added_balance": added_balance})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
         conn.close()
-        return web.json_response({"error": "У вас нет коинов для обмена!"}, status=400)
-
-    coins_to_exchange = row[0]
-    
-    # Убедитесь, что здесь стоит именно 500_000, а не 1_500_000 или другое число
-    added_balance = coins_to_exchange * 500_000  
-
-    cursor.execute("UPDATE users SET coins = 0, balance = balance + ? WHERE user_id = ?", (added_balance, user_id))
-    cursor.execute("SELECT balance, coins FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
-    new_balance, new_coins = res[0], res[1]
-
-    conn.commit()
-    conn.close()
-    return web.json_response({"success": True, "new_balance": new_balance, "new_coins": new_coins, "added_balance": added_balance})
 
 # --- API РЫНКА СИМ-КАРТ ---
 async def api_market_get_listings(request):
@@ -2329,7 +2352,11 @@ async def api_market_buy_sim(request):
 
     conn.commit()
     conn.close()
-    return web.json_response({"success": True, "new_balance": new_balance})
+    try:
+        await bot.send_message(seller_id, f"✅ Вы успешно продали сим-карту {number} за {price:,} ¢.".replace(",", " "))
+    except Exception as e:
+        print(f"Не удалось отправить продавцу уведомление о продаже: {e}")
+    return web.json_response({"success": True, "new_balance": new_balance, "seller_notified": True})
 
 async def api_market_cancel_sim(request):
     data = await request.json()
@@ -2362,29 +2389,49 @@ async def api_market_cancel_sim(request):
     return web.json_response({"success": True})
 
 async def api_upgrader(request):
-    data = await request.json()
-    user_id = data.get("user_id")
-    from_item_id = data.get("from_item_id")
-    target_name = data.get("target_item_name")
-    target_price = data.get("target_item_price")
-    client_won = data.get("won", False)
+    try:
+        data = await request.json()
+        user_id = int(data.get("user_id", 0))
+        from_item_id = int(data.get("from_item_id", 0))
+        target_name = str(data.get("target_item_name", ""))
+        target_price = int(data.get("target_item_price", 0))
+        client_won = bool(data.get("won", False))
+        target_type = str(data.get("target_item_type", "normal"))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Некорректные данные апгрейда"}, status=400)
+
+    electronics = {"Планшет": 50, "Телефон": 100, "Ноутбук": 150, "Хороший ПК": 250}
+    if target_type == "electronics":
+        if target_name not in electronics or electronics[target_name] != target_price:
+            return web.json_response({"error": "Недопустимая цель апгрейда"}, status=400)
+    elif target_type != "normal":
+        return web.json_response({"error": "Недопустимый тип предмета"}, status=400)
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, price FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (from_item_id, user_id))
-    item = cursor.fetchone()
-    if not item:
+    try:
+        cursor.execute("SELECT id, price, COALESCE(item_type, 'normal') FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (from_item_id, user_id))
+        item = cursor.fetchone()
+        if not item:
+            return web.json_response({"error": "Исходный предмет не найден"}, status=400)
+        source_type = item[2]
+        if source_type == "electronics" and target_type != "electronics":
+            return web.json_response({"error": "Электронику можно улучшать только до другой электроники за коины"}, status=400)
+        if source_type != "electronics" and target_type == "electronics":
+            return web.json_response({"error": "Обычные предметы нельзя улучшать до электроники"}, status=400)
+
+        cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ? AND user_id = ? AND sold = 0", (from_item_id, user_id))
+        if cursor.rowcount == 0:
+            return web.json_response({"error": "Предмет уже использован"}, status=400)
+        if client_won:
+            cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (?, ?, ?, 0, ?)", (user_id, target_name, target_price, target_type))
+        conn.commit()
+        return web.json_response({"success": True, "won": client_won})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
         conn.close()
-        return web.json_response({"error": "Исходный предмет не найден"}, status=400)
-
-    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (from_item_id,))
-
-    if client_won:
-        cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold) VALUES (?, ?, ?, 0)", (user_id, target_name, target_price))
-
-    conn.commit()
-    conn.close()
-    return web.json_response({"success": True, "won": client_won})
 
 async def api_crash_bet(request):
     data = await request.json()
