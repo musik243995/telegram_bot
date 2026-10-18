@@ -2228,7 +2228,9 @@ async def api_exchange_all_coins(request):
         return web.json_response({"error": "У вас нет коинов для обмена!"}, status=400)
 
     coins_to_exchange = row[0]
-    added_balance = coins_to_exchange * 50_000
+    
+    # 1 коин = ровно 500 000 ¢ (чтобы 400 коинов давали 200 000 000 ¢)
+    added_balance = coins_to_exchange * 500_000  
 
     cursor.execute("UPDATE users SET coins = 0, balance = balance + ? WHERE user_id = ?", (added_balance, user_id))
     cursor.execute("SELECT balance, coins FROM users WHERE user_id = ?", (user_id,))
@@ -2238,6 +2240,7 @@ async def api_exchange_all_coins(request):
     conn.commit()
     conn.close()
     return web.json_response({"success": True, "new_balance": new_balance, "new_coins": new_coins, "added_balance": added_balance})
+
 # --- API РЫНКА СИМ-КАРТ ---
 async def api_market_get_listings(request):
     conn = get_db()
