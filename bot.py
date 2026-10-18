@@ -1142,7 +1142,8 @@ def get_company_data_and_keyboard(user_id):
             f"{next_upgrade_text}"
         ).replace(",", " ")
         
-        kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="claim_company_profit")]]
+        # Сделайте так:
+        kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="claim_comp_profit")]]
         if upgrade_btn: kb_rows.append([upgrade_btn])
         keyboard = InlineKeyboardMarkup(inline_keyboard=kb_rows)
         return text, keyboard
@@ -1174,7 +1175,7 @@ async def callback_buy_company(callback: CallbackQuery):
     try: await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
     except: pass
 
-@router.callback_query(F.data == "claim_company_profit")
+@router.callback_query(F.data == "company_get_profit")
 async def callback_claim_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
