@@ -1,11 +1,14 @@
 import random
 import time
 import os
+import hmac
+import hashlib
+import json
 import asyncio
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
-from urllib.parse import quote
+from urllib.parse import quote, parse_qsl
 from aiogram import F, Bot, Dispatcher, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile
 from aiogram.filters import Command, CommandObject
@@ -256,7 +259,7 @@ def log_user_action(user_id, username, action_type, details):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO user_logs (user_id, username, action_type, action_details) VALUES (?, ?, ?, ?)", (user_id, username, action_type, details))
+        cursor.execute("INSERT INTO user_logs (user_id, username, action_type, action_details) VALUES (%s, %s, %s, %s)", (user_id, username, action_type, details))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -271,11 +274,11 @@ def update_quest_progress(user_id, quest_type, amount=1):
     today_str = datetime.now().strftime("%Y-%m-%d")
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT progress, completed FROM user_quests WHERE user_id = ? AND day_num = ? AND quest_id = ?", (user_id, day_num, quest_type))
+    cursor.execute("SELECT progress, completed FROM user_quests WHERE user_id = %s AND day_num = %s AND quest_id = %s", (user_id, day_num, quest_type))
     row = cursor.fetchone()
     
     if not row:
-        cursor.execute("INSERT INTO user_quests (user_id, day_num, quest_id, progress, completed, last_reset_date) VALUES (?, ?, ?, 0, 0, ?)", (user_id, day_num, quest_type, today_str))
+        cursor.execute("INSERT INTO user_quests (user_id, day_num, quest_id, progress, completed, last_reset_date) VALUES (%s, %s, %s, 0, 0, %s)", (user_id, day_num, quest_type, today_str))
         progress, completed = 0, 0
     else:
         progress, completed = row
@@ -301,10 +304,10 @@ def update_quest_progress(user_id, quest_type, amount=1):
         elif quest_type == 3 and new_progress >= 1_000_000: reward, is_done = 1_500_000, 1
 
     if is_done == 1 and completed == 0:
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
-        cursor.execute("UPDATE user_quests SET progress = ?, completed = 1 WHERE user_id = ? AND day_num = ? AND quest_id = ?", (new_progress, user_id, day_num, quest_type))
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (reward, user_id))
+        cursor.execute("UPDATE user_quests SET progress = %s, completed = 1 WHERE user_id = %s AND day_num = %s AND quest_id = %s", (new_progress, user_id, day_num, quest_type))
     else:
-        cursor.execute("UPDATE user_quests SET progress = ? WHERE user_id = ? AND day_num = ? AND quest_id = ?", (new_progress, user_id, day_num, quest_type))
+        cursor.execute("UPDATE user_quests SET progress = %s WHERE user_id = %s AND day_num = %s AND quest_id = %s", (new_progress, user_id, day_num, quest_type))
     conn.commit()
     conn.close()
 
@@ -316,9 +319,10 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
         await message.answer("🛠 **В боте ведутся технические работы!**\nПопробуйте зайти позже.", parse_mode="MARKDOWN")
         return False
 
-    with get_db() as conn:
+    conn = get_db()
+    try:
         cursor = conn.cursor()
-        cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT banned FROM users WHERE user_id = %s", (user_id,))
         res = cursor.fetchone()
 
         if res is None:
@@ -327,22 +331,23 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
                 try:
                     potential_ref = int(command.args.replace("ref_", ""))
                     if potential_ref != user_id:
-                        cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
+                        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (potential_ref,))
                         if cursor.fetchone(): 
                             ref_id = potential_ref
                 except Exception:
                     pass
 
             cursor.execute(
-                "INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)",
+                "INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (%s, %s, 10000, %s, %s)",
                 (user_id, username, time.time(), ref_id)
             )
             if ref_id != 0:
                 cursor.execute(
-                    "UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?",
+                    "UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = %s",
                     (ref_id,)
                 )
 
+            conn.commit()
             if ref_id != 0:
                 try:
                     await bot.send_message(
@@ -358,14 +363,17 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
             return False
 
         else:
-            cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+            cursor.execute("UPDATE users SET username = %s WHERE user_id = %s", (username, user_id))
+            conn.commit()
             return True
+    finally:
+        conn.close()
 
 async def is_creator(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT is_creator FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT is_creator FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     conn.close()
     return row and row[0] == 1
@@ -457,7 +465,7 @@ async def process_coin_exchange(message: Message, state: FSMContext):
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
         row = cursor.fetchone()
         current_coins = row[0] if row else 0
 
@@ -469,8 +477,8 @@ async def process_coin_exchange(message: Message, state: FSMContext):
 
         cursor.execute("""
             UPDATE users 
-            SET coins = COALESCE(coins, 0) - ?, balance = balance + ? 
-            WHERE user_id = ? AND COALESCE(coins, 0) >= ?
+            SET coins = COALESCE(coins, 0) - %s, balance = balance + %s 
+            WHERE user_id = %s AND COALESCE(coins, 0) >= %s
         """, (coins_to_exchange, added_balance, user_id, coins_to_exchange))
         conn.commit()
 
@@ -527,7 +535,7 @@ async def text_shop(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT has_pet, has_connections FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT has_pet, has_connections FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     conn.close()
     
@@ -559,7 +567,7 @@ async def shop_buy_callback(callback: CallbackQuery):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(f"SELECT balance, {field_name} FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute(f"SELECT balance, {field_name} FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -577,10 +585,10 @@ async def shop_buy_callback(callback: CallbackQuery):
         await callback.answer("У тя денег нет, ты шо 🤡", show_alert=True)
         return
 
-    cursor.execute(f"UPDATE users SET balance = balance - ?, {field_name} = 1 WHERE user_id = ?", (cost, user_id))
+    cursor.execute(f"UPDATE users SET balance = balance - %s, {field_name} = 1 WHERE user_id = %s", (cost, user_id))
     conn.commit()
 
-    cursor.execute(f"SELECT has_pet, has_connections FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute(f"SELECT has_pet, has_connections FROM users WHERE user_id = %s", (user_id,))
     r_new = cursor.fetchone()
     conn.close()
 
@@ -617,13 +625,13 @@ async def cmd_obran(message: Message, command: CommandObject):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     if not row or row[0] < amount:
         conn.close()
         return await message.answer("❌ У вас недостаточно наличных для этой раздачи!")
 
-    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, user_id))
+    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (amount, user_id))
     conn.commit()
     conn.close()
 
@@ -670,7 +678,7 @@ async def callback_claim_drop(callback: CallbackQuery):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (drop["per_user"], user_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (drop["per_user"], user_id))
     conn.commit()
     conn.close()
 
@@ -690,7 +698,7 @@ async def text_quests(message: Message):
     day_num = get_current_quest_day()
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT quest_id, progress, completed FROM user_quests WHERE user_id = ? AND day_num = ?", (user_id, day_num))
+    cursor.execute("SELECT quest_id, progress, completed FROM user_quests WHERE user_id = %s AND day_num = %s", (user_id, day_num))
     rows = {r[0]: (r[1], r[2]) for r in cursor.fetchall()}
     conn.close()
 
@@ -708,7 +716,7 @@ async def text_nyachka_menu(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT nyachka FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT nyachka FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     nyachka = row[0] if row and row[0] is not None else 0
     conn.close()
@@ -726,7 +734,7 @@ async def nyachka_actions(message: Message):
         return
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, nyachka FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, nyachka FROM users WHERE user_id = %s", (user_id,))
     u_row = cursor.fetchone()
     bal, nyach = u_row[0], (u_row[1] or 0)
     
@@ -735,7 +743,7 @@ async def nyachka_actions(message: Message):
             await message.answer("❌ Недостаточно наличных!")
             conn.close()
             return
-        cursor.execute("UPDATE users SET balance = balance - ?, nyachka = nyachka + ? WHERE user_id = ?", (amount, amount, user_id))
+        cursor.execute("UPDATE users SET balance = balance - %s, nyachka = nyachka + %s WHERE user_id = %s", (amount, amount, user_id))
         conn.commit()
         conn.close()
         update_quest_progress(user_id, 3, amount if get_current_quest_day() == 2 else 1)
@@ -745,7 +753,7 @@ async def nyachka_actions(message: Message):
             await message.answer("❌ В нычке нет столько!")
             conn.close()
             return
-        cursor.execute("UPDATE users SET nyachka = nyachka - ?, balance = balance + ? WHERE user_id = ?", (amount, amount, user_id))
+        cursor.execute("UPDATE users SET nyachka = nyachka - %s, balance = balance + %s WHERE user_id = %s", (amount, amount, user_id))
         conn.commit()
         conn.close()
         await message.answer(f"🥷 Забрано из нычки: {amount:,} ¢".replace(",", " "))
@@ -756,7 +764,7 @@ async def text_gang_menu(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT gang_name FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT gang_name FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     gang = row[0] if row else None
     conn.close()
@@ -777,7 +785,7 @@ async def callback_join_gang(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET gang_name = 'Уличные волки' WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET gang_name = 'Уличные волки' WHERE user_id = %s", (user_id,))
     conn.commit()
     conn.close()
     
@@ -816,7 +824,7 @@ async def callback_gang_back(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT gang_name FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT gang_name FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     conn.close()
     gang = row[0] if row else None
@@ -844,7 +852,7 @@ async def callback_gang_rob(callback: CallbackQuery):
     cursor = conn.cursor()
     if success:
         payout = 1_500_000
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (payout, user_id))
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (payout, user_id))
         conn.commit()
         conn.close()
         update_quest_progress(user_id, 1, 1)
@@ -872,13 +880,13 @@ async def msg_profile(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     u = cursor.fetchone()
     custom_name, uname, balance, bank_balance, invested, is_creat, coins = u if u else (None, "user", 10000, 0, 0, 0, 0)
     display_name = custom_name if custom_name else (uname if uname else message.from_user.first_name)
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = %s", (user_id,))
     apt_count = cursor.fetchone()[0]
-    cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT ref_count FROM users WHERE user_id = %s", (user_id,))
     ref_count = cursor.fetchone()[0] or 0
     conn.close()
     await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins)))
@@ -892,7 +900,7 @@ async def msg_check_profile(message: Message):
     target_id = message.reply_to_message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator, COALESCE(coins, 0) FROM users WHERE user_id = ?", (target_id,))
+    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator, COALESCE(coins, 0) FROM users WHERE user_id = %s", (target_id,))
     u = cursor.fetchone()
     if not u:
         await message.answer("❌ Игрок не найден.")
@@ -900,9 +908,9 @@ async def msg_check_profile(message: Message):
         return
     custom_name, uname, balance, bank_balance, invested, is_creat, coins = u
     display_name = custom_name if custom_name else (uname if uname else message.reply_to_message.from_user.first_name)
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (target_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = %s", (target_id,))
     apt_count = cursor.fetchone()[0]
-    cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (target_id,))
+    cursor.execute("SELECT ref_count FROM users WHERE user_id = %s", (target_id,))
     ref_count = cursor.fetchone()[0] or 0
     conn.close()
     await smart_answer(message, format_profile((target_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins)))
@@ -919,7 +927,7 @@ async def set_custom_nickname(message: Message):
         return
     user_id = message.from_user.id
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute("UPDATE users SET custom_name = ? WHERE user_id = ?", (new_name, user_id))
+    cursor.execute("UPDATE users SET custom_name = %s WHERE user_id = %s", (new_name, user_id))
     conn.commit(); conn.close()
     log_user_action(user_id, message.from_user.username or message.from_user.first_name, "Профиль", f"Установил ник: {new_name}")
     await message.answer(f"✅ Твой ник теперь: {new_name}\n🏆 В топе будет показываться именно он.")
@@ -929,7 +937,7 @@ async def text_top(message: Message):
     if not await check_ban_and_register(message): return
     conn = get_db()
     cursor = conn.cursor()
-    placeholders = ','.join(['?'] * len(ADMIN_IDS)) if ADMIN_IDS else '0'
+    placeholders = ','.join(['%s'] * len(ADMIN_IDS)) if ADMIN_IDS else '0'
     cursor.execute(
         f"SELECT custom_name, username, (balance + bank_balance + invested) as total, is_creator "
         f"FROM users WHERE user_id NOT IN ({placeholders}) ORDER BY total DESC LIMIT 10", 
@@ -955,7 +963,7 @@ async def text_work(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s", (user_id,))
     u = cursor.fetchone()
     conn.close()
     balance, bottles, metal, stolen = (u[0], u[1], u[2], u[3] or 0) if u else (10000, 0, 0, 0)
@@ -984,8 +992,8 @@ async def work_bottles(callback: CallbackQuery):
     work_cooldowns[f"b_{user_id}"] = now
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET bottles = bottles + 1 WHERE user_id = ?", (user_id,))
-    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET bottles = bottles + 1 WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s", (user_id,))
     bal, b, m, st = cursor.fetchone()
     conn.commit(); conn.close()
     update_quest_progress(user_id, 2, 1)
@@ -1010,8 +1018,8 @@ async def work_metal(callback: CallbackQuery):
         return
     work_cooldowns[f"m_{user_id}"] = now
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute("UPDATE users SET metal = metal + 1 WHERE user_id = ?", (user_id,))
-    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET metal = metal + 1 WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s", (user_id,))
     bal, b, m, st = cursor.fetchone()
     conn.commit(); conn.close()
     update_quest_progress(user_id, 1, 1)
@@ -1036,8 +1044,8 @@ async def work_steal(callback: CallbackQuery):
         return
     work_cooldowns[f"s_{user_id}"] = now
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute("UPDATE users SET stolen = COALESCE(stolen, 0) + 1 WHERE user_id = ?", (user_id,))
-    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET stolen = COALESCE(stolen, 0) + 1 WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s", (user_id,))
     bal, b, m, st = cursor.fetchone()
     conn.commit(); conn.close()
     log_user_action(user_id, callback.from_user.username or callback.from_user.first_name, "Работа", "Украл 1 предмет стоимостью 10 000 ¢")
@@ -1055,7 +1063,7 @@ async def work_steal(callback: CallbackQuery):
 async def sell_resources(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     if not row:
         conn.close(); await callback.answer("❌ Игрок не найден!", show_alert=True); return
@@ -1063,8 +1071,8 @@ async def sell_resources(callback: CallbackQuery):
     if b == 0 and m == 0 and st == 0:
         conn.close(); await callback.answer("❌ Нет ресурсов для продажи!", show_alert=True); return
     payout = (b * 1000) + (m * 5000) + (st * 10000)
-    cursor.execute("UPDATE users SET balance = balance + ?, bottles = 0, metal = 0, stolen = 0 WHERE user_id = ?", (payout, user_id))
-    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET balance = balance + %s, bottles = 0, metal = 0, stolen = 0 WHERE user_id = %s", (payout, user_id))
+    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s", (user_id,))
     new_bal, nb, nm, ns = cursor.fetchone()
     conn.commit(); conn.close()
     log_user_action(user_id, callback.from_user.username or callback.from_user.first_name, "Работа", f"Продал ресурсы на {payout:,} ¢")
@@ -1089,7 +1097,7 @@ COMPANY_LEVELS = {
 def get_company_data_and_keyboard(user_id):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = %s", (user_id,))
     comp = cursor.fetchone()
     conn.close()
     
@@ -1148,15 +1156,20 @@ async def callback_buy_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT 1 FROM user_companies WHERE user_id = %s", (user_id,))
+    if cursor.fetchone():
+        conn.close()
+        await callback.answer("⚠️ У вас уже есть компания!", show_alert=True)
+        return
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     bal = cursor.fetchone()[0]
     cost = 100_000_000
     if bal < cost:
         await callback.answer("❌ У вас недостаточно наличных для покупки компании (нужно 100 млн ¢)!", show_alert=True)
         conn.close()
         return
-    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (cost, user_id))
-    cursor.execute("INSERT OR REPLACE INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (?, 1, ?, 0)", (user_id, time.time()))
+    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (cost, user_id))
+    cursor.execute("INSERT INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (%s, 1, %s, 0) ON CONFLICT (user_id) DO UPDATE SET level = 1, last_claim = EXCLUDED.last_claim, earned_balance = 0", (user_id, time.time()))
     conn.commit()
     conn.close()
     await callback.answer("🎉 Вы успешно купили компанию по флипингу 1 уровня!", show_alert=True)
@@ -1169,7 +1182,7 @@ async def callback_claim_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = %s", (user_id,))
     comp = cursor.fetchone()
     if not comp:
         await callback.answer("❌ У вас нет компании.", show_alert=True)
@@ -1186,8 +1199,8 @@ async def callback_claim_company(callback: CallbackQuery):
         await callback.answer("❌ Пока еще ничего не накопилось!", show_alert=True)
         conn.close()
         return
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (total_to_claim, user_id))
-    cursor.execute("UPDATE user_companies SET last_claim = ?, earned_balance = 0 WHERE user_id = ?", (now, user_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (total_to_claim, user_id))
+    cursor.execute("UPDATE user_companies SET last_claim = %s, earned_balance = 0 WHERE user_id = %s", (now, user_id))
     conn.commit()
     conn.close()
     await callback.answer(f"💶 Вы успешно забрали прибыль: +{total_to_claim:,} ¢!".replace(",", " "), show_alert=True)
@@ -1200,7 +1213,7 @@ async def callback_upgrade_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = %s", (user_id,))
     comp = cursor.fetchone()
     if not comp:
         await callback.answer("❌ У вас нет компании.", show_alert=True)
@@ -1218,14 +1231,14 @@ async def callback_upgrade_company(callback: CallbackQuery):
     total_earned = earned_bal + accrued
     next_level = level + 1
     upgrade_cost = COMPANY_LEVELS[next_level]["cost"]
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     bal = cursor.fetchone()[0]
     if bal < upgrade_cost:
         await callback.answer(f"❌ Недостаточно средств для прокачки! Нужно {upgrade_cost:,} ¢".replace(",", " "), show_alert=True)
         conn.close()
         return
-    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (upgrade_cost, user_id))
-    cursor.execute("UPDATE user_companies SET level = ?, last_claim = ?, earned_balance = ? WHERE user_id = ?", (next_level, now, total_earned, user_id))
+    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (upgrade_cost, user_id))
+    cursor.execute("UPDATE user_companies SET level = %s, last_claim = %s, earned_balance = %s WHERE user_id = %s", (next_level, now, total_earned, user_id))
     conn.commit()
     conn.close()
     await callback.answer(f"📈 Компания успешно прокачана до {next_level} уровня!", show_alert=True)
@@ -1286,7 +1299,7 @@ async def casino_roulette(message: Message):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     bal = cursor.fetchone()[0]
 
     amount = bal if raw_amount_str in ["вб", "все", "all"] else parse_sum(raw_amount_str)
@@ -1317,9 +1330,9 @@ async def casino_roulette(message: Message):
         except: pass
 
     net_profit = payout - amount if won else -amount
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net_profit, user_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (net_profit, user_id))
     conn.commit()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
 
@@ -1341,7 +1354,7 @@ async def casino_poker(message: Message):
     amount = parse_sum(args[1])
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     bal = cursor.fetchone()[0]
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Ошибка ставки.")
@@ -1350,9 +1363,9 @@ async def casino_poker(message: Message):
 
     won = random.choice([True, False])
     net = amount if won else -amount
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (net, user_id))
     conn.commit()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
 
@@ -1373,7 +1386,7 @@ async def game_darts(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     bal = cursor.fetchone()[0]
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Неверная ставка.")
@@ -1388,9 +1401,9 @@ async def game_darts(message: Message):
     mult = 2 if mode == "центр" else 3
     net = (amount * mult) - amount if won else -amount
 
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (net, user_id))
     conn.commit()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
 
@@ -1410,7 +1423,7 @@ async def game_basketball(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     bal = cursor.fetchone()[0]
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Неверная ставка.")
@@ -1422,9 +1435,9 @@ async def game_basketball(message: Message):
     won = msg_dice.dice.value in [4, 5]
     net = amount if won else -amount
 
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (net, user_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (net, user_id))
     conn.commit()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     new_bal = cursor.fetchone()[0]
     conn.close()
 
@@ -1438,7 +1451,7 @@ async def text_bank(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, bank_balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, bank_balance FROM users WHERE user_id = %s", (user_id,))
     u = cursor.fetchone()
     conn.close()
     balance, bank_balance = (u[0], u[1]) if u else (10000, 0)
@@ -1452,12 +1465,12 @@ async def bank_deposit(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     if cursor.fetchone()[0] < amount:
         await message.answer("❌ Недостаточно налички.")
         conn.close()
         return
-    cursor.execute("UPDATE users SET balance = balance - ?, bank_balance = bank_balance + ? WHERE user_id = ?", (amount, amount, user_id))
+    cursor.execute("UPDATE users SET balance = balance - %s, bank_balance = bank_balance + %s WHERE user_id = %s", (amount, amount, user_id))
     conn.commit()
     conn.close()
     await message.answer(f"✅ Вложено в банк: {amount:,} ¢".replace(",", " "))
@@ -1470,12 +1483,12 @@ async def bank_withdraw(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT bank_balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT bank_balance FROM users WHERE user_id = %s", (user_id,))
     if cursor.fetchone()[0] < amount:
         await message.answer("❌ В банке нет столько.")
         conn.close()
         return
-    cursor.execute("UPDATE users SET bank_balance = bank_balance - ?, balance = balance + ? WHERE user_id = ?", (amount, amount, user_id))
+    cursor.execute("UPDATE users SET bank_balance = bank_balance - %s, balance = balance + %s WHERE user_id = %s", (amount, amount, user_id))
     conn.commit()
     conn.close()
     await message.answer(f"✅ Снято со счета: {amount:,} ¢".replace(",", " "))
@@ -1487,7 +1500,7 @@ async def transfer_money(message: Message):
     sender_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (sender_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (sender_id,))
     sender_bal = cursor.fetchone()[0]
 
     if message.reply_to_message and message.reply_to_message.from_user:
@@ -1501,7 +1514,7 @@ async def transfer_money(message: Message):
             return
         target_username = args[1].replace("@", "").lower()
         amount = sender_bal if args[2].lower() in ["вб", "все", "all"] else parse_sum(args[2])
-        cursor.execute("SELECT user_id, custom_name, username FROM users WHERE LOWER(username) = ?", (target_username,))
+        cursor.execute("SELECT user_id, custom_name, username FROM users WHERE LOWER(username) = %s", (target_username,))
         t_row = cursor.fetchone()
         if not t_row:
             await message.answer("❌ Игрок не найден.")
@@ -1514,8 +1527,8 @@ async def transfer_money(message: Message):
         conn.close()
         return
 
-    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, sender_id))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_id))
+    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (amount, sender_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (amount, target_id))
     conn.commit()
     conn.close()
     sender_name = message.from_user.full_name
@@ -1544,7 +1557,7 @@ async def text_flipping(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = %s", (user_id,))
     apt_count = cursor.fetchone()[0]
     conn.close()
     
@@ -1574,7 +1587,7 @@ async def refresh_flipping(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = %s", (user_id,))
     apt_count = cursor.fetchone()[0]
     conn.close()
 
@@ -1604,7 +1617,7 @@ async def buy_apartment(callback: CallbackQuery):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     res = cursor.fetchone()
     bal = res[0] if res else 0
     if bal < price:
@@ -1612,15 +1625,15 @@ async def buy_apartment(callback: CallbackQuery):
         conn.close()
         return
 
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = %s", (user_id,))
     apt_count = cursor.fetchone()[0]
     if apt_count >= 10:
         await callback.answer("❌ Лимит недвижимости (максимум 10)!", show_alert=True)
         conn.close()
         return
 
-    cursor.execute("UPDATE users SET balance = balance - ?, invested = invested + ? WHERE user_id = ?", (price, price, user_id))
-    cursor.execute("INSERT INTO user_apartments (user_id, apartment_name, price, buy_time) VALUES (?, ?, ?, ?)", 
+    cursor.execute("UPDATE users SET balance = balance - %s, invested = invested + %s WHERE user_id = %s", (price, price, user_id))
+    cursor.execute("INSERT INTO user_apartments (user_id, apartment_name, price, buy_time) VALUES (%s, %s, %s, %s)", 
                    (user_id, apt_name, price, time.time()))
     conn.commit()
 
@@ -1628,7 +1641,7 @@ async def buy_apartment(callback: CallbackQuery):
     new_apt_index = random.randint(0, len(APARTMENT_NAMES) - 1)
     new_apt_name = APARTMENT_NAMES[new_apt_index]
     
-    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = %s", (user_id,))
     new_apt_count = cursor.fetchone()[0]
     conn.close()
 
@@ -1653,7 +1666,7 @@ async def text_my_apartments(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = %s", (user_id,))
     apartments = cursor.fetchall()
     conn.close()
     if not apartments:
@@ -1674,7 +1687,7 @@ async def sell_apartment(callback: CallbackQuery):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT price FROM user_apartments WHERE id = ? AND user_id = ?", (apt_id, user_id))
+    cursor.execute("SELECT price FROM user_apartments WHERE id = %s AND user_id = %s", (apt_id, user_id))
     apt = cursor.fetchone()
     if not apt:
         await callback.answer("❌ Квартира не найдена.", show_alert=True)
@@ -1686,11 +1699,11 @@ async def sell_apartment(callback: CallbackQuery):
     sell_price = int(price * (1 + percent))
     if sell_price < 1: sell_price = 1
 
-    cursor.execute("DELETE FROM user_apartments WHERE id = ?", (apt_id,))
-    cursor.execute("UPDATE users SET balance = balance + ?, invested = invested - ? WHERE user_id = ?", (sell_price, price, user_id))
+    cursor.execute("DELETE FROM user_apartments WHERE id = %s", (apt_id,))
+    cursor.execute("UPDATE users SET balance = balance + %s, invested = invested - %s WHERE user_id = %s", (sell_price, price, user_id))
     conn.commit()
 
-    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT id, apartment_name, price FROM user_apartments WHERE user_id = %s", (user_id,))
     apartments = cursor.fetchall()
     conn.close()
 
@@ -1717,14 +1730,14 @@ async def text_bonus(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT last_bonus FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT last_bonus FROM users WHERE user_id = %s", (user_id,))
     last_bonus = cursor.fetchone()[0] or 0.0
     if time.time() - last_bonus < 86400:
         await message.answer("⏳ Бонус доступен раз в 24 часа!")
         conn.close()
         return
     
-    cursor.execute("UPDATE users SET balance = balance + 500000, last_bonus = ? WHERE user_id = ?", (time.time(), user_id))
+    cursor.execute("UPDATE users SET balance = balance + 500000, last_bonus = %s WHERE user_id = %s", (time.time(), user_id))
     conn.commit()
     conn.close()
     await message.answer("🎉 Бонус получен: +500 000 ¢!")
@@ -1735,7 +1748,7 @@ async def text_referral(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT ref_count FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     ref_count = row[0] if row and row[0] is not None else 0
     conn.close()
@@ -1762,13 +1775,13 @@ async def activate_promo_code(message: Message):
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT 1 FROM user_promo WHERE user_id = ? AND code = ?", (user_id, code))
+    cursor.execute("SELECT 1 FROM user_promo WHERE user_id = %s AND code = %s", (user_id, code))
     if cursor.fetchone():
         await message.answer("❌ Вы уже вводили этот промокод.")
         conn.close()
         return
 
-    cursor.execute("SELECT reward, activations_left FROM promo_codes WHERE code = ?", (code,))
+    cursor.execute("SELECT reward, activations_left FROM promo_codes WHERE code = %s", (code,))
     promo = cursor.fetchone()
     if not promo or promo[1] <= 0:
         await message.answer("❌ Промокод не найден или истек.")
@@ -1776,9 +1789,9 @@ async def activate_promo_code(message: Message):
         return
         
     reward = promo[0]
-    cursor.execute("INSERT INTO user_promo (user_id, code) VALUES (?, ?)", (user_id, code))
-    cursor.execute("UPDATE promo_codes SET activations_left = activations_left - 1 WHERE code = ?", (code,))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
+    cursor.execute("INSERT INTO user_promo (user_id, code) VALUES (%s, %s)", (user_id, code))
+    cursor.execute("UPDATE promo_codes SET activations_left = activations_left - 1 WHERE code = %s", (code,))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (reward, user_id))
     conn.commit()
     conn.close()
     
@@ -1802,7 +1815,7 @@ async def callback_creator_salary(callback: CallbackQuery):
     creator_salary_cooldowns[user_id] = now
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET balance = balance + 7500000 WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET balance = balance + 7500000 WHERE user_id = %s", (user_id,))
     conn.commit()
     conn.close()
     await callback.answer("💼 ЗП получена: +7.5 млн ¢!", show_alert=True)
@@ -1826,7 +1839,7 @@ async def create_promo_universal(message: Message):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO promo_codes (code, reward, activations_left) VALUES (?, ?, ?)", (code, reward, activations))
+    cursor.execute("INSERT INTO promo_codes (code, reward, activations_left) VALUES (%s, %s, %s) ON CONFLICT (code) DO UPDATE SET reward = EXCLUDED.reward, activations_left = EXCLUDED.activations_left", (code, reward, activations))
     conn.commit()
     conn.close()
     await message.answer(f"✅ Промокод {code} создан на {reward:,} ¢ (активаций: {activations})!".replace(",", " "))
@@ -1847,11 +1860,11 @@ async def admin_history(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
     username = message.text.split()[1].lstrip("@").lower()
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT user_id, custom_name, username FROM users WHERE LOWER(username) = ?", (username,))
+    cursor.execute("SELECT user_id, custom_name, username FROM users WHERE LOWER(username) = %s", (username,))
     user = cursor.fetchone()
     if not user:
         conn.close(); await message.answer("❌ Игрок с таким username не найден."); return
-    cursor.execute("SELECT action_type, action_details, timestamp FROM user_logs WHERE user_id = ? ORDER BY id DESC LIMIT 20", (user[0],))
+    cursor.execute("SELECT action_type, action_details, timestamp FROM user_logs WHERE user_id = %s ORDER BY id DESC LIMIT 20", (user[0],))
     logs = cursor.fetchall(); conn.close()
     name = user[1] or ("@" + user[2] if user[2] else str(user[0]))
     if not logs:
@@ -1928,14 +1941,14 @@ async def admin_balance_process(message: Message, state: FSMContext):
         cursor = conn.cursor()
         uid = int(target_raw) if target_raw.isdigit() else None
         if not uid:
-            cursor.execute("SELECT user_id FROM users WHERE username = ?", (target_raw.replace("@", ""),))
+            cursor.execute("SELECT user_id FROM users WHERE username = %s", (target_raw.replace("@", ""),))
             res = cursor.fetchone()
             if res: uid = res[0]
         if not uid:
             await message.answer("❌ Игрок не найден.")
             conn.close()
             return
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, uid))
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (amount, uid))
         conn.commit()
         conn.close()
         await state.clear()
@@ -1956,7 +1969,7 @@ async def admin_ban_user(message: Message):
     uname = message.text.split(maxsplit=1)[1].strip().replace("@", "")
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET banned = 1 WHERE username = ?", (uname,))
+    cursor.execute("UPDATE users SET banned = 1 WHERE username = %s", (uname,))
     conn.commit()
     conn.close()
     await message.answer(f"🚫 Игрок @{uname} забанен.")
@@ -1967,7 +1980,7 @@ async def admin_unban_user(message: Message):
     uname = message.text.split(maxsplit=1)[1].strip().replace("@", "")
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET banned = 0 WHERE username = ?", (uname,))
+    cursor.execute("UPDATE users SET banned = 0 WHERE username = %s", (uname,))
     conn.commit()
     conn.close()
     await message.answer(f"✅ Игрок @{uname} разбанен.")
@@ -1978,7 +1991,7 @@ async def admin_give_creator(message: Message):
     uname = message.text.split(maxsplit=2)[2].strip().replace("@", "")
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET is_creator = 1 WHERE username = ?", (uname,))
+    cursor.execute("UPDATE users SET is_creator = 1 WHERE username = %s", (uname,))
     conn.commit()
     conn.close()
     await message.answer(f"🎬 @{uname} назначен креатором.")
@@ -1989,7 +2002,7 @@ async def admin_take_creator(message: Message):
     uname = message.text.split(maxsplit=2)[2].strip().replace("@", "")
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET is_creator = 0 WHERE username = ?", (uname,))
+    cursor.execute("UPDATE users SET is_creator = 0 WHERE username = %s", (uname,))
     conn.commit()
     conn.close()
     await message.answer(f"❌ У @{uname} забран креатор.")
@@ -2000,20 +2013,57 @@ async def admin_reset_user(message: Message):
     uname = message.text.split(maxsplit=1)[1].strip().replace("@", "")
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET balance = 10000, bank_balance = 0, nyachka = 0, invested = 0, bottles = 0, metal = 0 WHERE username = ?", (uname,))
+    cursor.execute("UPDATE users SET balance = 10000, bank_balance = 0, nyachka = 0, invested = 0, bottles = 0, metal = 0 WHERE username = %s", (uname,))
     conn.commit()
     conn.close()
     await message.answer(f"🔄 Игрок @{uname} обнулен.")
 
 # --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ И РЫНКА ---
+INIT_DATA_MAX_AGE = 7 * 86400  # срок годности подписи initData (сек)
+
+def verify_init_data(init_data: str):
+    """Проверяет подпись Telegram initData. Возвращает user_id или None."""
+    if not init_data or not API_TOKEN:
+        return None
+    try:
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = parsed.pop("hash", None)
+        if not received_hash:
+            return None
+        auth_date = int(parsed.get("auth_date", 0))
+        if abs(time.time() - auth_date) > INIT_DATA_MAX_AGE:
+            return None
+        data_check_string = "\n".join(f"{key}={parsed[key]}" for key in sorted(parsed))
+        secret_key = hmac.new(b"WebAppData", API_TOKEN.encode(), hashlib.sha256).digest()
+        computed = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(computed, received_hash.lower()):
+            return None
+        user = json.loads(parsed.get("user", "{}"))
+        return int(user["id"])
+    except Exception:
+        return None
+
+def api_uid(request) -> int:
+    """user_id из проверенного initData (0 — если проверка не пройдена)."""
+    return verify_init_data(request.headers.get("X-Init-Data", "")) or 0
+
+@web.middleware
+async def telegram_auth_middleware(request, handler):
+    # Главная страница отдаётся без проверки: initData подставит сам Telegram
+    if request.path == "/":
+        return await handler(request)
+    if verify_init_data(request.headers.get("X-Init-Data", "")) is None:
+        return web.json_response({"error": "Не авторизовано"}, status=401)
+    return await handler(request)
+
 async def index_handler(request):
     return web.FileResponse("index.html")
 
 async def api_get_data(request):
-    user_id = int(request.query.get("user_id", 0))
+    user_id = api_uid(request)
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     balance = row[0] if row else 10000
     coins = row[1] if row else 0
@@ -2021,10 +2071,10 @@ async def api_get_data(request):
     return web.json_response({"balance": balance, "coins": coins})
 
 async def api_get_inventory(request):
-    user_id = int(request.query.get("user_id", 0))
+    user_id = api_uid(request)
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, item_name, price, COALESCE(item_type, 'normal') FROM user_inventory WHERE user_id = ? AND sold = 0", (user_id,))
+    cursor.execute("SELECT id, item_name, price, COALESCE(item_type, 'normal') FROM user_inventory WHERE user_id = %s AND sold = 0", (user_id,))
     items = [{"id": r[0], "name": r[1], "price": r[2], "item_type": r[3], "emoji": "💻" if r[3] == "electronics" else "🎁"} for r in cursor.fetchall()]
     conn.close()
     return web.json_response(items)
@@ -2032,7 +2082,7 @@ async def api_get_inventory(request):
 async def api_open_case(request):
     try:
         data = await request.json()
-        user_id = int(data.get("user_id", 0))
+        user_id = api_uid(request)
         case_id = int(data.get("case_id", 0))
     except (TypeError, ValueError):
         return web.json_response({"error": "Некорректные данные"}, status=400)
@@ -2058,13 +2108,13 @@ async def api_open_case(request):
     cursor = conn.cursor()
     currency = case_info["currency"]
     balance_field = "coins" if currency == "coins" else "balance"
-    cursor.execute(f"SELECT COALESCE({balance_field}, 0) FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute(f"SELECT COALESCE({balance_field}, 0) FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     if not row or row[0] < case_info["price"]:
         conn.close()
         return web.json_response({"error": "Недостаточно коинов" if currency == "coins" else "Недостаточно средств"}, status=400)
 
-    cursor.execute(f"UPDATE users SET {balance_field} = COALESCE({balance_field}, 0) - ? WHERE user_id = ? AND COALESCE({balance_field}, 0) >= ?", (case_info["price"], user_id, case_info["price"]))
+    cursor.execute(f"UPDATE users SET {balance_field} = COALESCE({balance_field}, 0) - %s WHERE user_id = %s AND COALESCE({balance_field}, 0) >= %s", (case_info["price"], user_id, case_info["price"]))
     if cursor.rowcount == 0:
         conn.rollback()
         conn.close()
@@ -2082,8 +2132,8 @@ async def api_open_case(request):
     if won_item:
         name, price = won_item
         item_type = case_info.get("item_type", "normal")
-        cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (?, ?, ?, 0, ?)", (user_id, name, price, item_type))
-    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+        cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s)", (user_id, name, price, item_type))
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     balances = cursor.fetchone()
     conn.commit()
     conn.close()
@@ -2096,26 +2146,26 @@ async def api_open_case(request):
 
 async def api_sell_item(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     item_id = data.get("item_id")
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT price, COALESCE(item_type, 'normal') FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (item_id, user_id))
+    cursor.execute("SELECT price, COALESCE(item_type, 'normal') FROM user_inventory WHERE id = %s AND user_id = %s AND sold = 0", (item_id, user_id))
     item = cursor.fetchone()
     if not item:
         conn.close()
         return web.json_response({"success": False})
 
     price, item_type = item[0], item[1]
-    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ?", (item_id,))
+    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = %s", (item_id,))
     
     if item_type == "electronics":
-        cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (price, user_id))
+        cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (price, user_id))
     else:
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, user_id))
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (price, user_id))
 
-    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     new_bal, new_coins = row[0], row[1]
     conn.commit()
@@ -2125,39 +2175,39 @@ async def api_sell_item(request):
 
 async def api_buy_phone(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     cost = 2500000
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, has_phone FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance, has_phone FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     if not row or row[0] < cost:
         conn.close()
         return web.json_response({"error": "Недостаточно средств"}, status=400)
 
     new_balance = row[0] - cost
-    cursor.execute("UPDATE users SET balance = ?, has_phone = 1 WHERE user_id = ?", (new_balance, user_id))
+    cursor.execute("UPDATE users SET balance = %s, has_phone = 1 WHERE user_id = %s", (new_balance, user_id))
     conn.commit()
     conn.close()
     return web.json_response({"success": True, "new_balance": new_balance})
 
 async def api_get_sims(request):
-    user_id = int(request.query.get("user_id", 0))
+    user_id = api_uid(request)
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT has_phone FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT has_phone FROM users WHERE user_id = %s", (user_id,))
     u_row = cursor.fetchone()
     has_phone = u_row[0] if u_row else 0
 
-    cursor.execute("SELECT id, number, price, category FROM user_sims WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT id, number, price, category FROM user_sims WHERE user_id = %s", (user_id,))
     sims = [{"id": r[0], "number": r[1], "price": r[2], "category": r[3]} for r in cursor.fetchall()]
     conn.close()
     return web.json_response({"has_phone": has_phone, "sims": sims})
 
 async def api_save_sim(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     number = data.get("number")
     category = data.get("category")
 
@@ -2172,17 +2222,17 @@ async def api_save_sim(request):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT 1 FROM user_sims WHERE number = ?", (number,))
+    cursor.execute("SELECT 1 FROM user_sims WHERE number = %s", (number,))
     if cursor.fetchone():
         conn.close()
         return web.json_response({"error": "Этот номер уже занят!"}, status=400)
 
-    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = %s", (user_id,))
     if cursor.fetchone()[0] >= 5:
         conn.close()
         return web.json_response({"error": "Лимит номеров (максимум 5)"}, status=400)
 
-    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", 
+    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (%s, %s, %s, %s)", 
                    (user_id, number, earned_coins, category))
     
     conn.commit()
@@ -2192,7 +2242,7 @@ async def api_save_sim(request):
 
 async def api_sell_sim(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     category = data.get("category")
 
     coin_rewards = {
@@ -2205,8 +2255,8 @@ async def api_sell_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (earned_coins, user_id))
-    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (earned_coins, user_id))
+    cursor.execute("SELECT coins FROM users WHERE user_id = %s", (user_id,))
     new_coins = cursor.fetchone()[0]
     conn.commit()
     conn.close()
@@ -2214,12 +2264,12 @@ async def api_sell_sim(request):
 
 async def api_exchange_sim_coins(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     sim_id = data.get("sim_id")
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
+    cursor.execute("SELECT category FROM user_sims WHERE id = %s AND user_id = %s", (sim_id, user_id))
     sim = cursor.fetchone()
     
     if not sim:
@@ -2235,9 +2285,9 @@ async def api_exchange_sim_coins(request):
     }
     earned_coins = coin_rewards.get(category, 1)
 
-    cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
-    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + ? WHERE user_id = ?", (earned_coins, user_id))
-    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM user_sims WHERE id = %s", (sim_id,))
+    cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (earned_coins, user_id))
+    cursor.execute("SELECT coins FROM users WHERE user_id = %s", (user_id,))
     new_coins = cursor.fetchone()[0]
 
     conn.commit()
@@ -2260,7 +2310,7 @@ async def api_market_get_listings(request):
 
 async def api_market_list_sim(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     sim_id = data.get("sim_id")
     price = int(data.get("price", 0))
 
@@ -2269,20 +2319,20 @@ async def api_market_list_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT number, price, category FROM user_sims WHERE id = ? AND user_id = ?", (sim_id, user_id))
+    cursor.execute("SELECT number, price, category FROM user_sims WHERE id = %s AND user_id = %s", (sim_id, user_id))
     sim = cursor.fetchone()
     if not sim:
         conn.close()
         return web.json_response({"error": "Сим-карта не найдена в инвентаре"}, status=400)
 
     number, orig_price, category = sim[0], sim[1], sim[2]
-    cursor.execute("SELECT custom_name, username FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT custom_name, username FROM users WHERE user_id = %s", (user_id,))
     u = cursor.fetchone()
     seller_name = u[0] if u and u[0] else (u[1] if u and u[1] else "Игрок")
 
-    cursor.execute("DELETE FROM user_sims WHERE id = ?", (sim_id,))
+    cursor.execute("DELETE FROM user_sims WHERE id = %s", (sim_id,))
     cursor.execute(
-        "INSERT INTO market_sims (seller_id, seller_name, sim_id, number, price, original_price, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO market_sims (seller_id, seller_name, sim_id, number, price, original_price, category) VALUES (%s, %s, %s, %s, %s, %s, %s)",
         (user_id, seller_name, sim_id, number, price, orig_price, category)
     )
     conn.commit()
@@ -2291,12 +2341,12 @@ async def api_market_list_sim(request):
 
 async def api_market_buy_sim(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     listing_id = data.get("listing_id")
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT seller_id, sim_id, number, price, category FROM market_sims WHERE id = ?", (listing_id,))
+    cursor.execute("SELECT seller_id, sim_id, number, price, category FROM market_sims WHERE id = %s", (listing_id,))
     listing = cursor.fetchone()
     if not listing:
         conn.close()
@@ -2307,23 +2357,23 @@ async def api_market_buy_sim(request):
         conn.close()
         return web.json_response({"error": "Нельзя купить свою собственную сим-карту"}, status=400)
 
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     buyer_row = cursor.fetchone()
     if not buyer_row or buyer_row[0] < price:
         conn.close()
         return web.json_response({"error": "Недостаточно средств для покупки"}, status=400)
 
-    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = %s", (user_id,))
     if cursor.fetchone()[0] >= 5:
         conn.close()
         return web.json_response({"error": "В вашем инвентаре нет свободного места (максимум 5 сим-карт)"}, status=400)
 
-    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, user_id))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (price, seller_id))
-    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, price, category))
-    cursor.execute("DELETE FROM market_sims WHERE id = ?", (listing_id,))
+    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (price, user_id))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (price, seller_id))
+    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (%s, %s, %s, %s)", (user_id, number, price, category))
+    cursor.execute("DELETE FROM market_sims WHERE id = %s", (listing_id,))
     
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     new_balance = cursor.fetchone()[0]
 
     conn.commit()
@@ -2336,19 +2386,19 @@ async def api_market_buy_sim(request):
 
 async def api_market_cancel_sim(request):
     data = await request.json()
-    user_id = data.get("user_id")
+    user_id = api_uid(request)
     listing_id = data.get("listing_id")
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT sim_id, number, price, original_price, category FROM market_sims WHERE id = ? AND seller_id = ?", (listing_id, user_id))
+    cursor.execute("SELECT sim_id, number, price, original_price, category FROM market_sims WHERE id = %s AND seller_id = %s", (listing_id, user_id))
     listing = cursor.fetchone()
     if not listing:
         conn.close()
         return web.json_response({"error": "Лот не найден"}, status=400)
 
     sim_id, number, sale_price, orig_price, category = listing
-    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT COUNT(*) FROM user_sims WHERE user_id = %s", (user_id,))
     if cursor.fetchone()[0] >= 5:
         conn.close()
         return web.json_response({"error": "В инвентаре нет свободного места для возврата сим-карты"}, status=400)
@@ -2356,8 +2406,8 @@ async def api_market_cancel_sim(request):
     if orig_price is None:
         orig_price = sale_price
 
-    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (?, ?, ?, ?)", (user_id, number, orig_price, category))
-    cursor.execute("DELETE FROM market_sims WHERE id = ?", (listing_id,))
+    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (%s, %s, %s, %s)", (user_id, number, orig_price, category))
+    cursor.execute("DELETE FROM market_sims WHERE id = %s", (listing_id,))
     conn.commit()
     conn.close()
     return web.json_response({"success": True})
@@ -2365,11 +2415,10 @@ async def api_market_cancel_sim(request):
 async def api_upgrader(request):
     try:
         data = await request.json()
-        user_id = int(data.get("user_id", 0))
+        user_id = api_uid(request)
         from_item_id = int(data.get("from_item_id", 0))
         target_name = str(data.get("target_item_name", ""))
         target_price = int(data.get("target_item_price", 0))
-        client_won = bool(data.get("won", False))
         target_type = str(data.get("target_item_type", "normal"))
     except (TypeError, ValueError):
         return web.json_response({"error": "Некорректные данные апгрейда"}, status=400)
@@ -2384,7 +2433,7 @@ async def api_upgrader(request):
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, price, COALESCE(item_type, 'normal') FROM user_inventory WHERE id = ? AND user_id = ? AND sold = 0", (from_item_id, user_id))
+        cursor.execute("SELECT id, price, COALESCE(item_type, 'normal') FROM user_inventory WHERE id = %s AND user_id = %s AND sold = 0", (from_item_id, user_id))
         item = cursor.fetchone()
         if not item:
             return web.json_response({"error": "Исходный предмет не найден"}, status=400)
@@ -2394,75 +2443,115 @@ async def api_upgrader(request):
         if source_type != "electronics" and target_type == "electronics":
             return web.json_response({"error": "Обычные предметы нельзя улучшать до электроники"}, status=400)
 
-        cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = ? AND user_id = ? AND sold = 0", (from_item_id, user_id))
+        source_price = item[1]
+        if target_price <= source_price:
+            return web.json_response({"error": "Цель должна быть дороже исходного предмета"}, status=400)
+
+        # Шанс считает сервер: (цена исхода / цена цели) * 100, максимум 100%
+        chance = (source_price / target_price) * 100
+        if chance > 100:
+            chance = 100.0
+        won = random.random() * 100 <= chance
+
+        cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = %s AND user_id = %s AND sold = 0", (from_item_id, user_id))
         if cursor.rowcount == 0:
             return web.json_response({"error": "Предмет уже использован"}, status=400)
-        if client_won:
-            cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (?, ?, ?, 0, ?)", (user_id, target_name, target_price, target_type))
+        if won:
+            cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s)", (user_id, target_name, target_price, target_type))
         conn.commit()
-        return web.json_response({"success": True, "won": client_won})
+        return web.json_response({"success": True, "won": won, "chance": chance})
     except Exception:
         conn.rollback()
         raise
     finally:
         conn.close()
 
+ACTIVE_CRASH_ROUNDS = {}  # user_id -> {"bet": int, "crash_point": float}
+
 async def api_crash_bet(request):
-    data = await request.json()
-    user_id = data.get("user_id")
-    bet = int(data.get("bet", 0))
-    action = data.get("action")
-    cashout_multiplier = float(data.get("multiplier", 1.0))
+    try:
+        data = await request.json()
+        user_id = api_uid(request)
+        action = data.get("action")
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Некорректные данные"}, status=400)
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return web.json_response({"error": "Пользователь не найден"}, status=400)
-    
-    balance = row[0]
 
     if action == "start":
-        if bet <= 0 or balance < bet:
+        try:
+            bet = int(data.get("bet", 0))
+        except (TypeError, ValueError):
+            bet = 0
+        if bet <= 0:
             conn.close()
-            return web.json_response({"error": "Недостаточно средств или неверная ставка"}, status=400)
-        
-        balance -= bet
-        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+            return web.json_response({"error": "Неверная ставка"}, status=400)
+
+        # Атомарное списание: баланс не уйдёт в минус при гонках
+        cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s", (bet, user_id, bet))
+        if cursor.rowcount == 0:
+            conn.rollback()
+            conn.close()
+            return web.json_response({"error": "Недостаточно средств"}, status=400)
+        cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+        new_balance = cursor.fetchone()[0]
         conn.commit()
         conn.close()
 
         r = random.random()
-        if r < 0.12: crash_point = 1.00
+        if r < 0.12:
+            crash_point = 1.00
         else:
             raw_val = random.random() ** 5
             crash_point = round(1.01 + raw_val * 14.0, 2)
-            if crash_point > 15.0: crash_point = 15.0
+            if crash_point > 15.0:
+                crash_point = 15.0
 
+        ACTIVE_CRASH_ROUNDS[user_id] = {"bet": bet, "crash_point": crash_point}
         return web.json_response({
-            "balance": balance,
+            "balance": new_balance,
             "crash_point": crash_point
         })
 
-    elif action == "cashout":
-        win_amount = int(bet * cashout_multiplier)
-        balance += win_amount
-        cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+    if action == "cashout":
+        rnd = ACTIVE_CRASH_ROUNDS.get(user_id)
+        if not rnd:
+            conn.close()
+            return web.json_response({"error": "Активной ставки нет"}, status=400)
+        try:
+            multiplier = float(data.get("multiplier", 1.0))
+        except (TypeError, ValueError):
+            multiplier = 0.0
+        # Сервер не выплатит больше точки крушения
+        if multiplier < 1.0 or multiplier > rnd["crash_point"] + 1e-9:
+            conn.close()
+            return web.json_response({"error": "Некорректный множитель"}, status=400)
+
+        win_amount = int(rnd["bet"] * multiplier)
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (win_amount, user_id))
+        cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+        row = cursor.fetchone()
         conn.commit()
         conn.close()
+        del ACTIVE_CRASH_ROUNDS[user_id]
 
         return web.json_response({
-            "balance": balance,
+            "balance": row[0],
             "win_amount": win_amount
         })
+
+    if action == "crash":
+        # Игрок проиграл — раунд закрывается без выплаты
+        ACTIVE_CRASH_ROUNDS.pop(user_id, None)
+        conn.close()
+        return web.json_response({"success": True})
 
     conn.close()
     return web.json_response({"error": "Неверное действие"}, status=400)
 
 async def web_server():
-    app = web.Application()
+    app = web.Application(middlewares=[telegram_auth_middleware])
     app.router.add_get("/", index_handler)
     app.router.add_get("/api/get_data", api_get_data)
     app.router.add_get("/api/get_inventory", api_get_inventory)

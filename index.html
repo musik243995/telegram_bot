@@ -512,6 +512,14 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
+        // Все запросы к API подписываем initData Telegram — сервер проверяет подпись
+        const rawFetch = window.fetch.bind(window);
+        window.fetch = (input, init = {}) => {
+            init = init || {};
+            init.headers = Object.assign({}, init.headers, { 'X-Init-Data': tg.initData || '' });
+            return rawFetch(input, init);
+        };
+
         const tgUser = tg.initDataUnsafe?.user;
         const userId = tgUser?.id || 1222239198;
         const username = tgUser?.username ? `@${tgUser.username}` : (tgUser ? `@${tgUser.first_name}` : '@user');
@@ -1343,8 +1351,33 @@
             let chance = (upgraderSelectedMyItem.price / upgraderSelectedTargetItem.price) * 100;
             if(chance > 100) chance = 100;
 
-            let randomRoll = Math.random() * 100;
-            let isWon = randomRoll <= chance;
+            // Результат бросает сервер — сначала узнаём его, потом крутим анимацию
+            let isWon = false;
+            try {
+                const res = await fetch('/api/upgrader', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        from_item_id: upgraderSelectedMyItem.id,
+                        target_item_name: upgraderSelectedTargetItem.name,
+                        target_item_price: upgraderSelectedTargetItem.price,
+                        target_item_type: upgraderSelectedTargetItem.item_type || 'normal'
+                    })
+                });
+                const srvData = await res.json();
+                if (srvData.error) {
+                    statusMsg.innerText = '❌ ' + srvData.error;
+                    isUpgradingSpin = false;
+                    return;
+                }
+                isWon = !!srvData.won;
+                loadInventory();
+            } catch (e) {
+                console.error(e);
+                statusMsg.innerText = '❌ Ошибка сети';
+                isUpgradingSpin = false;
+                return;
+            }
 
             let targetAngle = 0;
             let fullSpins = 5 * 360;
@@ -1365,22 +1398,8 @@
             spinnerWrap.style.transition = `transform ${duration}ms ${timing}`;
             spinnerWrap.style.transform = `rotate(${targetAngle}deg)`;
 
-            setTimeout(async () => {
+            setTimeout(() => {
                 try {
-                    const res = await fetch('/api/upgrader', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            user_id: userId,
-                            from_item_id: upgraderSelectedMyItem.id,
-                            target_item_name: upgraderSelectedTargetItem.name,
-                            target_item_price: upgraderSelectedTargetItem.price,
-                            target_item_type: upgraderSelectedTargetItem.item_type || 'normal',
-                            won: isWon
-                        })
-                    });
-                    const data = await res.json();
-
                     if(isWon) {
                         successfulUpgrades++;
                         statusMsg.innerText = `🎉 УСПЕХ! Вы получили ${upgraderSelectedTargetItem.name}!`;
@@ -1555,6 +1574,12 @@
                     
                     textDisplay.innerText = `${currentMultiplier.toFixed(2)}x КРАШ! 💥`;
                     textDisplay.style.color = '#ef4444';
+                    // Сообщаем серверу, что раунд проигран — он закроет ставку без выплаты
+                    fetch('/api/crash', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ action: 'crash' })
+                    }).catch(() => {});
                     rocket.innerHTML = '<div class="explosion-effect">💥</div>';
 
                     const btn = document.getElementById('crash-main-btn');
