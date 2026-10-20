@@ -1,8 +1,9 @@
 import random
 import time
 import os
-import sqlite3
 import asyncio
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from urllib.parse import quote
 from aiogram import F, Bot, Dispatcher, Router
@@ -129,11 +130,11 @@ def get_admin_keyboard():
     )
 
 # --- БАЗА ДАННЫХ ---
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 def get_db():
-    conn = sqlite3.connect("game.db", timeout=30.0)
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
+    # Подключение к Supabase (PostgreSQL)
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
 
 def init_db():
@@ -141,13 +142,13 @@ def init_db():
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
+            user_id BIGINT PRIMARY KEY,
             username TEXT,
             custom_name TEXT DEFAULT NULL,
-            balance INTEGER DEFAULT 10000,
-            bank_balance INTEGER DEFAULT 0,
-            nyachka INTEGER DEFAULT 0,
-            invested INTEGER DEFAULT 0,
+            balance BIGINT DEFAULT 10000,
+            bank_balance BIGINT DEFAULT 0,
+            nyachka BIGINT DEFAULT 0,
+            invested BIGINT DEFAULT 0,
             bottles INTEGER DEFAULT 0,
             metal INTEGER DEFAULT 0,
             banned INTEGER DEFAULT 0,
@@ -156,77 +157,73 @@ def init_db():
             last_bank_calc REAL,
             last_bonus REAL DEFAULT 0,
             last_salary REAL DEFAULT 0,
-            referrer_id INTEGER DEFAULT 0,
+            referrer_id BIGINT DEFAULT 0,
             ref_count INTEGER DEFAULT 0,
             stolen INTEGER DEFAULT 0,
             has_pet INTEGER DEFAULT 0,
             has_connections INTEGER DEFAULT 0,
-            coins INTEGER DEFAULT 0
+            has_phone INTEGER DEFAULT 0,
+            coins BIGINT DEFAULT 0
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_sims (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
             number TEXT,
-            price INTEGER,
+            price BIGINT,
             category TEXT
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS market_sims (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            seller_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            seller_id BIGINT,
             seller_name TEXT,
             sim_id INTEGER,
             number TEXT,
-            price INTEGER,
-            original_price INTEGER,
+            price BIGINT,
+            original_price BIGINT,
             category TEXT
         )
     """)
-    try:
-        cursor.execute("ALTER TABLE market_sims ADD COLUMN original_price INTEGER")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_apartments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
             apartment_name TEXT,
-            price INTEGER,
+            price BIGINT,
             buy_time REAL
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_companies (
-            user_id INTEGER PRIMARY KEY,
+            user_id BIGINT PRIMARY KEY,
             level INTEGER DEFAULT 1,
             last_claim REAL,
-            earned_balance INTEGER DEFAULT 0
+            earned_balance BIGINT DEFAULT 0
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS promo_codes (
             code TEXT PRIMARY KEY,
-            reward INTEGER,
+            reward BIGINT,
             activations_left INTEGER
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_promo (
-            user_id INTEGER,
+            user_id BIGINT,
             code TEXT,
             PRIMARY KEY (user_id, code)
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_quests (
-            user_id INTEGER,
+            user_id BIGINT,
             day_num INTEGER,
             quest_id INTEGER,
-            progress INTEGER DEFAULT 0,
+            progress BIGINT DEFAULT 0,
             completed INTEGER DEFAULT 0,
             last_reset_date TEXT,
             PRIMARY KEY (user_id, day_num, quest_id)
@@ -234,38 +231,25 @@ def init_db():
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
             username TEXT,
             action_type TEXT,
             action_details TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_inventory (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
             item_name TEXT,
-            price INTEGER,
-            sold INTEGER DEFAULT 0
+            price BIGINT,
+            sold INTEGER DEFAULT 0,
+            item_type TEXT DEFAULT 'normal'
         )
     """)
-    try:
-        cursor.execute("ALTER TABLE user_inventory ADD COLUMN item_type TEXT DEFAULT 'normal'")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
     conn.commit()
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN stolen INTEGER DEFAULT 0")
-        cursor.execute("ALTER TABLE users ADD COLUMN has_pet INTEGER DEFAULT 0")
-        cursor.execute("ALTER TABLE users ADD COLUMN has_connections INTEGER DEFAULT 0")
-        cursor.execute("ALTER TABLE users ADD COLUMN has_phone INTEGER DEFAULT 0")
-        cursor.execute("ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
     conn.close()
 
 def log_user_action(user_id, username, action_type, details):
@@ -332,8 +316,7 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
         await message.answer("🛠 **В боте ведутся технические работы!**\nПопробуйте зайти позже.", parse_mode="MARKDOWN")
         return False
 
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT banned FROM users WHERE user_id = ?", (user_id,))
         res = cursor.fetchone()
@@ -345,13 +328,20 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
                     potential_ref = int(command.args.replace("ref_", ""))
                     if potential_ref != user_id:
                         cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (potential_ref,))
-                        if cursor.fetchone(): ref_id = potential_ref
-                except: pass
+                        if cursor.fetchone(): 
+                            ref_id = potential_ref
+                except Exception:
+                    pass
 
-            cursor.execute("INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)", (user_id, username, time.time(), ref_id))
+            cursor.execute(
+                "INSERT INTO users (user_id, username, balance, last_bank_calc, referrer_id) VALUES (?, ?, 10000, ?, ?)",
+                (user_id, username, time.time(), ref_id)
+            )
             if ref_id != 0:
-                cursor.execute("UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?", (ref_id,))
-            conn.commit()
+                cursor.execute(
+                    "UPDATE users SET balance = balance + 1000000, ref_count = ref_count + 1 WHERE user_id = ?",
+                    (ref_id,)
+                )
 
             if ref_id != 0:
                 try:
@@ -362,15 +352,14 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
                 except Exception:
                     pass
             return True
+
         elif res[0] == 1:
             await message.answer("❌ Вы заблокированы и не можете пользоваться ботом.")
             return False
+
         else:
             cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-            conn.commit()
-        return True
-    finally:
-        conn.close()
+            return True
 
 async def is_creator(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
@@ -526,7 +515,7 @@ async def text_donate(message: Message):
     text = (
         "⭐ **Донат в игре**\n\n"
         "Привет! Если хочешь задонатить, вот цена:\n"
-        "• **1 ⭐ = 5 000 000 ¢**\n\n"
+        "• **1 ⭐ = 25 000 000 ¢**\n\n"
         "🛒 *Покупка от 15 зв*\n"
         "✍️ Писать в ЛС к @shaptes"
     )
