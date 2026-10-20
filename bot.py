@@ -6,6 +6,8 @@ import hashlib
 import json
 import asyncio
 import psycopg2
+from psycopg2 import extensions as pg_ext
+from psycopg2.pool import ThreadedConnectionPool
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from urllib.parse import quote, parse_qsl
@@ -135,10 +137,81 @@ def get_admin_keyboard():
 # --- БАЗА ДАННЫХ ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Пул соединений: переиспользуем TCP/TLS/аутентификацию вместо
+# установки нового соединения на каждый запрос (это давало задержку 1-2 c)
+_db_pool = None
+_idle_ts = {}  # id(conn) -> момент возврата в пул
+
+def _init_pool():
+    global _db_pool
+    if _db_pool is None:
+        _db_pool = ThreadedConnectionPool(
+            1, 12,
+            dsn=DATABASE_URL,
+            connect_timeout=10,
+            keepalives=1, keepalives_idle=30,
+            keepalives_interval=10, keepalives_count=3,
+        )
+    return _db_pool
+
+class PooledConnection:
+    """Обёртка над соединением из пула.
+    close() возвращает соединение в пул, а не закрывает его;
+    __del__ подстраховывается, если соединение «забыли» закрыть."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def close(self):
+        conn, self._conn = self._conn, None
+        if conn is None:
+            return
+        try:
+            p = _init_pool()
+            if conn.closed:
+                p.putconn(conn, close=True)
+                return
+            if conn.get_transaction_status() != pg_ext.TRANSACTION_STATUS_IDLE:
+                conn.rollback()  # сбрасываем незакрытую транзакцию чтения
+            _idle_ts[id(conn)] = time.time()
+            p.putconn(conn)
+        except Exception:
+            try:
+                if _db_pool is not None:
+                    _db_pool.putconn(conn, close=True)
+            except Exception:
+                pass
+
 def get_db():
-    # Подключение к Supabase (PostgreSQL)
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn
+    # Подключение к Supabase (PostgreSQL) через пул
+    p = _init_pool()
+    conn = p.getconn()
+    ts = _idle_ts.pop(id(conn), None)
+    if ts is not None and time.time() - ts > 30:
+        # Пул мог сохранить отвалившееся соединение — проверяем живость
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.close()
+        except Exception:
+            p.putconn(conn, close=True)
+            conn = p.getconn()
+    return PooledConnection(conn)
 
 def init_db():
     conn = get_db()
@@ -322,7 +395,7 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
     conn = get_db()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT banned FROM users WHERE user_id = %s", (user_id,))
+        cursor.execute("SELECT banned, username FROM users WHERE user_id = %s", (user_id,))
         res = cursor.fetchone()
 
         if res is None:
@@ -363,8 +436,11 @@ async def check_ban_and_register(message: Message, command: CommandObject = None
             return False
 
         else:
-            cursor.execute("UPDATE users SET username = %s WHERE user_id = %s", (username, user_id))
-            conn.commit()
+            # Обновляем username только если он реально изменился
+            # (экономит запись + commit на каждом сообщении)
+            if res[1] != username:
+                cursor.execute("UPDATE users SET username = %s WHERE user_id = %s", (username, user_id))
+                conn.commit()
             return True
     finally:
         conn.close()
