@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Игровой Центр</title>
+    <title>Игровой Центр 🎃</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { 
-            --bg: #0d081e;         
-            --card: #181230;       
-            --accent: #8b5cf6;     
-            --text: #ffffff; 
-            --muted: #a78bfa;      
+            --bg: #150901;         
+            --card: #2a1506;       
+            --accent: #ff8c00;     
+            --text: #fff7ed; 
+            --muted: #ffb347;      
         }
 
         body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            background: radial-gradient(circle at top, #1c133a, var(--bg)); 
+            background: radial-gradient(circle at top, #4a1c05, var(--bg)); 
             color: var(--text); 
             margin: 0; 
             padding: 12px 12px 90px 12px; 
@@ -41,12 +41,12 @@
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
-            background: linear-gradient(135deg, #1e1b4b, var(--card)); 
+            background: linear-gradient(135deg, #6b2c03, var(--card)); 
             padding: 12px 16px; 
             border-radius: 14px; 
             margin-bottom: 15px; 
-            border: 1px solid #312e81;
-            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+            border: 1px solid #9a4f12;
+            box-shadow: 0 4px 15px rgba(255, 140, 0, 0.25);
         }
 
         .balance-box { display: flex; flex-direction: column; align-items: flex-end; }
@@ -193,19 +193,95 @@
         .btn-yes { background: linear-gradient(135deg, #ef4444, #dc2626); }
         .btn-no { background: linear-gradient(135deg, #475569, #334155); }
 
-        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #0b0818; border-top: 1px solid #231d42; display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding: 0 4px; }
-        .nav-btn { background: transparent; border: none; color: #716c96; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 600; cursor: pointer; width: 16.66%; height: 100%; gap: 3px; }
-        .nav-btn svg { width: 22px; height: 22px; stroke: #716c96; }
-        .nav-btn.active { color: #f59e0b; }
-        .nav-btn.active svg { stroke: #f59e0b; transform: translateY(-2px); }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #1a0c01; border-top: 1px solid #5a3210; display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding: 0 4px; }
+        .nav-btn { background: transparent; border: none; color: #b3906e; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 600; cursor: pointer; width: 16.66%; height: 100%; gap: 3px; }
+        .nav-btn svg { width: 22px; height: 22px; stroke: #b3906e; }
+        .nav-btn.active { color: #ff8c00; }
+        .nav-btn.active svg { stroke: #ff8c00; transform: translateY(-2px); }
+
+        /* ===== ХЭЛЛОУИН-ТЕМА ===== */
+        /* Тёмные панели */
+        .case-card, .case-details-box, .case-image-wrapper, .drop-list, .back-btn,
+        .roulette-container, .roulette-item, .phone-shop-card, .sim-card-spin-box,
+        .sim-inv-item, .sim-cat-card, .market-tabs, .market-item-card,
+        .upgrader-card-box, .pct-btn-group, .slider-container, .fast-spin-row,
+        .upgrader-tabs, .upgrader-items-list, .upgrader-item-card,
+        .crash-container, .history-chip, .profile-card, .profile-inventory-section,
+        .stat-card, .inv-item, .profile-inv-count, .empty-inv-btn, .modal-content {
+            background-color: #241205;
+            border-color: #7a3f10;
+        }
+        .case-image-wrapper, .roulette-container, .history-chip { background-color: #170b01; }
+        .case-details-box { background-color: #2a1506; }
+        .inv-item, .upgrader-item-card, .case-card { background-color: #1f0e03; }
+        .upgrader-card-box { border-style: dashed; }
+        .profile-inv-count, .empty-inv-btn { background-color: #4a2408; }
+        .empty-inv-btn { border-color: #8a5a20; }
+
+        /* Акценты и кнопки */
+        .open-btn { background: linear-gradient(135deg, #ff8c00, #d9530a); box-shadow: 0 4px 15px rgba(255, 120, 0, 0.45); }
+        .case-card:active { border-color: #ff8c00; }
+        .sim-cat-card:hover, .inv-item:hover, .upgrader-item-card:hover { border-color: #ff8c00; }
+        .upgrader-card-box.selected { border-color: #ff8c00; background-color: #3a1c07; box-shadow: 0 4px 15px rgba(255, 140, 0, 0.25); }
+        .pct-btn.active, .upgrader-tab-btn.active, .market-tab-btn.active { background-color: #4a2408; color: #ffb347; }
+        .upgrader-circle-bg { stroke: #33190a; }
+        .upgrader-circle-sector { stroke: #ff8c00; }
+        .toggle-slider { background-color: #4a2a10; }
+        input:checked + .toggle-slider { background-color: #ff8c00; }
+        .upgrader-range { background: #4a2a10; }
+        .upgrader-range::-webkit-slider-thumb { background: #ffb347; box-shadow: 0 0 10px rgba(255, 179, 71, 0.8); }
+        .profile-avatar { border-color: #ff8c00; background-color: #4a2408; }
+        .rocket-img { filter: drop-shadow(0 0 10px rgba(255, 140, 0, 0.8)); }
+        .crash-big-screen { background: radial-gradient(circle at center, #40170a 0%, #140a01 100%); }
+        .crash-multiplier-display { text-shadow: 0 0 15px rgba(255, 140, 0, 0.6); }
+        .history-chip { color: #ffb347; }
+
+        /* Летающие тыквы, призраки и летучие мыши */
+        .halloween-fx { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 50; }
+        .halloween-fx span { position: absolute; opacity: 0; will-change: transform; filter: drop-shadow(0 0 6px rgba(255, 120, 0, 0.35)); }
+        .halloween-fx .fall { left: var(--x); top: 0; font-size: var(--s); animation: hwFall var(--d) linear var(--dl) infinite; }
+        .halloween-fx .bat { top: var(--y); left: -10%; font-size: var(--s); animation: hwFly var(--d) ease-in-out var(--dl) infinite; }
+        @keyframes hwFall {
+            0% { transform: translate(0, -12vh) rotate(-18deg); opacity: 0; }
+            10% { opacity: 0.6; }
+            50% { transform: translate(22px, 50vh) rotate(8deg); }
+            90% { opacity: 0.6; }
+            100% { transform: translate(-10px, 118vh) rotate(24deg); opacity: 0; }
+        }
+        @keyframes hwFly {
+            0% { transform: translate(0, 0) rotate(-6deg); opacity: 0; }
+            6% { opacity: 0.65; }
+            25% { transform: translate(30vw, -5vh) rotate(8deg); }
+            50% { transform: translate(55vw, 4vh) rotate(-8deg); }
+            75% { transform: translate(85vw, -4vh) rotate(6deg); }
+            94% { opacity: 0.65; }
+            100% { transform: translate(120vw, 2vh) rotate(-4deg); opacity: 0; }
+        }
     </style>
 </head>
 <body>
 
     <div id="loader-screen"></div>
 
+    <!-- Хэллоуин: летающие тыквы, призраки и летучие мыши на фоне -->
+    <div class="halloween-fx" aria-hidden="true">
+        <span class="fall" style="--x:8%;--s:2.1rem;--d:16s;--dl:0s;">🎃</span>
+        <span class="fall" style="--x:22%;--s:1.4rem;--d:21s;--dl:4s;">👻</span>
+        <span class="fall" style="--x:38%;--s:2.6rem;--d:18s;--dl:9s;">🎃</span>
+        <span class="fall" style="--x:52%;--s:1.2rem;--d:24s;--dl:2s;">🍂</span>
+        <span class="fall" style="--x:66%;--s:1.9rem;--d:17s;--dl:12s;">🎃</span>
+        <span class="fall" style="--x:80%;--s:1.5rem;--d:22s;--dl:6s;">🕸️</span>
+        <span class="fall" style="--x:92%;--s:2.2rem;--d:19s;--dl:14s;">🎃</span>
+        <span class="fall" style="--x:30%;--s:1rem;--d:26s;--dl:16s;">🍂</span>
+        <span class="fall" style="--x:74%;--s:1.7rem;--d:25s;--dl:1s;">😈</span>
+        <span class="bat" style="--y:12%;--s:1.5rem;--d:13s;--dl:0s;">🦇</span>
+        <span class="bat" style="--y:28%;--s:1.1rem;--d:17s;--dl:5s;">🦇</span>
+        <span class="bat" style="--y:45%;--s:1.8rem;--d:21s;--dl:9s;">👻</span>
+        <span class="bat" style="--y:8%;--s:1.2rem;--d:15s;--dl:12s;">🦇</span>
+    </div>
+
     <header>
-        <div>🎲 Игровой Центр</div>
+        <div>🎃 Игровой Центр</div>
         <div class="balance-box">
             <div class="balance" id="user-balance">0 ¢</div>
             <div class="coins-display" id="user-coins">🪙 0 коинов</div>
