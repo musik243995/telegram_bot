@@ -2421,8 +2421,10 @@ BP_TRACKS = ("normal", "donate")
 
 
 def bp_level_xp(level):
-    """XP, чтобы поднять уровень: 1-й — 100 XP, каждый следующий на x1.5 больше."""
-    return int(100 * (1.5 ** (level - 1)))
+    """XP, чтобы поднять уровень: 1-й — 100 XP, каждый следующий на x1.05 больше.
+    Рост подобран так, чтобы весь пасс (50 уровней) проходился примерно за 24 дня
+    при сезоне в 31 день — с запасом, не впритык (суммарно ~20 900 XP)."""
+    return int(100 * (1.05 ** (level - 1)))
 
 
 def bp_level_state(xp):
@@ -2841,6 +2843,11 @@ async def api_open_case(request):
     check_achievements(cursor, user_id, {"case_legend"} if got_rare_drop else ())
     bp_bump(cursor, user_id, "open_cases", count)
     bp_bump(cursor, user_id, "rare_drop", rare_count)
+    # XP батл-пасса за каждую открытую линию — пасс двигается и без квестов
+    cursor.execute(
+        "INSERT INTO battle_pass (user_id, xp) VALUES (%s, %s) "
+        "ON CONFLICT (user_id) DO UPDATE SET xp = battle_pass.xp + EXCLUDED.xp",
+        (user_id, count * 10))
 
     cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     balances = cursor.fetchone()
