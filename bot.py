@@ -118,7 +118,7 @@ def get_other_keyboard():
     kb = [
         [KeyboardButton(text="🎁 Бонус"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📜 Квесты"), KeyboardButton(text="📖 Помощь")],
-        [KeyboardButton(text="🪙 Обменять койны на баланс")],
+        [KeyboardButton(text="🪙 Обменять койны на баланс"), KeyboardButton(text="🏅 Достижения")],
         [KeyboardButton(text="🔙 Назад")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
@@ -534,6 +534,12 @@ async def text_cabbage_menu(message: Message):
 async def text_other_menu(message: Message):
     if not await check_ban_and_register(message): return
     await message.answer("⚙ Раздел «Прочее»:\nВыберите нужный раздел из меню ниже.", reply_markup=get_other_keyboard())
+
+@router.message(F.text.casefold().in_(["🏅 достижения", "достижения"]))
+async def msg_achievements(message: Message):
+    if not await check_ban_and_register(message): return
+    text, kb = build_achievements_menu(message.from_user.id)
+    await message.answer(text, reply_markup=kb)
 
 # --- ОБМЕН КОИНОВ НА БАЛАНС ЧЕРЕЗ БОТА ---
 @router.message(F.text.casefold().in_(["🪙 обменять койны на баланс", "обменять койны на баланс", "обменять коины на баланс"]))
@@ -979,16 +985,16 @@ def format_profile(user_data):
 
 # --- ДОСТИЖЕНИЯ ---
 ACHIEVEMENTS = {
-    "first_case":  {"emoji": "🥉", "name": "Первый кейс",     "desc": "Открыть первый кейс",          "reward": 10_000},
-    "cases_10":    {"emoji": "🥈", "name": "Кейсоман",         "desc": "Открыть 10 кейсов",            "reward": 100_000},
-    "cases_100":   {"emoji": "🥇", "name": "Кейсный магнат",   "desc": "Открыть 100 кейсов",           "reward": 1_000_000},
-    "rich_1m":     {"emoji": "💵", "name": "Миллионер",        "desc": "Накопить 1 000 000 ¢",         "reward": 50_000},
-    "rich_100m":   {"emoji": "💰", "name": "Олигарх",          "desc": "Накопить 100 000 000 ¢",       "reward": 500_000},
-    "first_sim":   {"emoji": "📱", "name": "Сим-владелец",     "desc": "Сохранить первую сим-карту",   "reward": 25_000},
-    "sim_legend":  {"emoji": "🌟", "name": "Легенда связи",    "desc": "Выбить легендарную сим-карту", "reward": 300_000},
-    "market_buy":  {"emoji": "🛒", "name": "Покупатель рынка", "desc": "Купить сим-карту на рынке",    "reward": 100_000},
-    "upgrade_win": {"emoji": "🎯", "name": "Апгрейдер",        "desc": "Победить в апгрейдере",        "reward": 100_000},
-    "case_legend": {"emoji": "💎", "name": "Везунчик",         "desc": "Выбить предмет с шансом 5%",   "reward": 250_000},
+    "first_case":  {"emoji": "🥉", "name": "Первый кейс",     "desc": "Открыть первый кейс",          "reward": 500_000},
+    "cases_10":    {"emoji": "🥈", "name": "Кейсоман",         "desc": "Открыть 10 кейсов",            "reward": 2_000_000},
+    "cases_100":   {"emoji": "🥇", "name": "Кейсный магнат",   "desc": "Открыть 100 кейсов",           "reward": 15_000_000},
+    "rich_1m":     {"emoji": "💵", "name": "Миллионер",        "desc": "Накопить 1 000 000 ¢",         "reward": 1_000_000},
+    "rich_100m":   {"emoji": "💰", "name": "Олигарх",          "desc": "Накопить 100 000 000 ¢",       "reward": 10_000_000},
+    "first_sim":   {"emoji": "📱", "name": "Сим-владелец",     "desc": "Сохранить первую сим-карту",   "reward": 2_000_000},
+    "sim_legend":  {"emoji": "🌟", "name": "Легенда связи",    "desc": "Выбить легендарную сим-карту", "reward": 25_000_000},
+    "market_buy":  {"emoji": "🛒", "name": "Покупатель рынка", "desc": "Купить сим-карту на рынке",    "reward": 5_000_000},
+    "upgrade_win": {"emoji": "🎯", "name": "Апгрейдер",        "desc": "Победить в апгрейдере",        "reward": 5_000_000},
+    "case_legend": {"emoji": "💎", "name": "Везунчик",         "desc": "Выбить предмет с шансом 5%",   "reward": 30_000_000},
 }
 
 
@@ -2393,8 +2399,9 @@ async def api_open_case(request):
             name, price, chance = won_item
             if chance <= 5:
                 got_rare_drop = True
-            cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s)", (user_id, name, price, item_type))
-            items.append({"name": name, "price": price, "item_type": item_type})
+            cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s) RETURNING id", (user_id, name, price, item_type))
+            inv_id = cursor.fetchone()[0]
+            items.append({"id": inv_id, "name": name, "price": price, "item_type": item_type})
         else:
             items.append({"name": None, "price": 0, "item_type": item_type})
 
@@ -2448,6 +2455,92 @@ async def api_sell_item(request):
     conn.close()
 
     return web.json_response({"success": True, "new_balance": new_bal, "new_coins": new_coins})
+
+
+async def api_sell_items(request):
+    """Продажа списка предметов (например, только что выигранных в кейсе).
+    Один атомарный UPDATE ... RETURNING — сумма считается ровно по тем
+    предметам, которые реально были проданы этим запросом."""
+    try:
+        data = await request.json()
+        user_id = api_uid(request)
+        item_ids = [int(i) for i in (data.get("item_ids") or [])][:50]
+    except (TypeError, ValueError):
+        return web.json_response({"success": False, "error": "Некорректные данные"}, status=400)
+    if not item_ids:
+        return web.json_response({"success": False, "error": "Нет предметов для продажи"}, status=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE user_inventory SET sold = 1 "
+        "WHERE user_id = %s AND sold = 0 AND id = ANY(%s) "
+        "RETURNING price, COALESCE(item_type, 'normal')",
+        (user_id, item_ids))
+    sold = cursor.fetchall()
+    if not sold:
+        conn.close()
+        return web.json_response({"success": False, "error": "Предметы уже проданы"}, status=400)
+
+    total_balance = sum(r[0] for r in sold if r[1] != "electronics")
+    total_coins = sum(r[0] for r in sold if r[1] == "electronics")
+    if total_balance:
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (total_balance, user_id))
+    if total_coins:
+        cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (total_coins, user_id))
+
+    check_achievements(cursor, user_id)
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    conn.commit()
+    conn.close()
+
+    return web.json_response({
+        "success": True, "sold_count": len(sold),
+        "total_balance": total_balance, "total_coins": total_coins,
+        "new_balance": row[0], "new_coins": row[1]
+    })
+
+
+async def api_sell_all(request):
+    """Продать весь инвентарь одним махом: electronics -> коины, обычные -> баланс."""
+    try:
+        user_id = api_uid(request)
+    except (TypeError, ValueError):
+        return web.json_response({"success": False, "error": "Некорректные данные"}, status=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    # Атомарно: параллельная продажа не продаст предмет дважды,
+    # а деньги начисляются ровно за то, что успели продать мы
+    cursor.execute(
+        "UPDATE user_inventory SET sold = 1 WHERE user_id = %s AND sold = 0 "
+        "RETURNING price, COALESCE(item_type, 'normal')",
+        (user_id,))
+    sold = cursor.fetchall()
+    if not sold:
+        conn.close()
+        return web.json_response({"success": False, "error": "Инвентарь пуст"}, status=400)
+
+    total_balance = sum(r[0] for r in sold if r[1] != "electronics")
+    total_coins = sum(r[0] for r in sold if r[1] == "electronics")
+    if total_balance:
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (total_balance, user_id))
+    if total_coins:
+        cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (total_coins, user_id))
+
+    check_achievements(cursor, user_id)
+    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    conn.commit()
+    conn.close()
+
+    return web.json_response({
+        "success": True, "sold_count": len(sold),
+        "total_balance": total_balance, "total_coins": total_coins,
+        "new_balance": row[0], "new_coins": row[1]
+    })
+
 
 # Прокрутка сим-карт: стоимость списывается и результат считается ТОЛЬКО на сервере.
 SIM_SPIN_COSTS = {"common": 1000000, "rare": 10000000, "epic": 50000000, "legendary": 250000000}
@@ -3001,6 +3094,8 @@ async def web_server():
     app.router.add_get("/api/get_inventory", api_get_inventory)
     app.router.add_post("/api/open_case", api_open_case)
     app.router.add_post("/api/sell_item", api_sell_item)
+    app.router.add_post("/api/sell_items", api_sell_items)
+    app.router.add_post("/api/sell_all", api_sell_all)
     app.router.add_post("/api/upgrader", api_upgrader)
     app.router.add_post("/api/crash", api_crash_bet)
     
