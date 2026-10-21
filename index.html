@@ -868,8 +868,6 @@
 
         // Выигранные в последнем открытии предметы — их можно быстро продать кнопкой слева от «Открыть»
         let lastWonIds = [];
-        let lastWonTotal = 0;
-        let lastWonCurrency = '¢';
 
         function openCaseRoom(caseId) {
             activeCaseId = caseId;
@@ -880,7 +878,6 @@
             document.getElementById('view-cases-list').classList.remove('active');
             document.getElementById('view-case-room').classList.add('active');
             lastWonIds = [];
-            lastWonTotal = 0;
             updateSellWonBtn();
             createRouletteDummy(c);
             updateOpenBtnLabel();
@@ -889,13 +886,8 @@
         function updateSellWonBtn() {
             const btn = document.getElementById('sell-won-btn');
             if (!btn) return;
-            if (lastWonIds.length > 0) {
-                btn.style.display = '';
-                btn.innerText = `💰 Продать (${lastWonTotal.toLocaleString('ru-RU')} ${lastWonCurrency})`;
-            } else {
-                btn.style.display = 'none';
-                btn.innerText = '💰 Продать';
-            }
+            btn.style.display = lastWonIds.length > 0 ? '' : 'none';
+            btn.innerText = '💰 Продать';
         }
 
         async function sellWonItems() {
@@ -918,7 +910,6 @@
                 if (data.total_coins) parts.push(`+${data.total_coins.toLocaleString('ru-RU')} коинов`);
                 document.getElementById('win-notification').innerText = `💰 Продано выигранное (${data.sold_count} шт.): ${parts.join(' и ')}`;
                 lastWonIds = [];
-                lastWonTotal = 0;
                 updateSellWonBtn();
                 await loadInventory();
                 initUpgraderView();
@@ -1029,8 +1020,6 @@
             // (накапливаем всё выигранное в этой комнате, пока не продадут)
             const newIds = serverItems.filter(si => si.id && si.name).map(si => si.id);
             lastWonIds = lastWonIds.concat(newIds);
-            lastWonTotal += wonItems.filter(Boolean).reduce((s, w) => s + (w.price || 0), 0);
-            lastWonCurrency = caseItem.currency === 'coins' ? 'коинов' : '¢';
             updateSellWonBtn();
 
             const area = document.getElementById('roulette-area');
