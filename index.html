@@ -350,33 +350,46 @@
         .bp-donate-btn.bought { background: linear-gradient(135deg, #065f46, #064e3b); }
         .bp-donate-note { font-size: 0.78rem; color: var(--muted); margin-bottom: 12px; }
 
-        .bp-levels-head {
-            display: grid; grid-template-columns: 42px 1fr 1fr; gap: 8px;
-            margin-bottom: 8px; font-size: 0.74rem; font-weight: 900;
-            color: #d8b4fe; text-align: center; letter-spacing: 0.4px;
+        /* Две горизонтальные полосы: сверху обычная, снизу донат, между ними номера уровней */
+        .bp-tracks-wrap {
+            overflow-x: auto; overflow-y: hidden;
+            margin: 0 -12px; padding: 2px 12px 8px 12px;
+            -webkit-overflow-scrolling: touch;
         }
-        .bp-level-row { display: grid; grid-template-columns: 42px 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-        .bp-lvl-num {
-            background: #2a1506; border: 1px solid #7c3aed; border-radius: 10px;
+        .bp-tracks-wrap::-webkit-scrollbar { height: 6px; }
+        .bp-tracks-wrap::-webkit-scrollbar-thumb { background: #7c3aed; border-radius: 4px; }
+        .bp-tracks-inner { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: max-content; min-width: 100%; }
+        .bp-track-row { display: flex; gap: 6px; }
+        .bp-track-label {
+            position: sticky; left: 0; z-index: 2;
+            font-size: 0.74rem; font-weight: 900; color: #d8b4fe;
+            letter-spacing: 0.5px; margin-top: 6px;
+        }
+        .bp-track-label.donate { color: #fbbf24; }
+        .bp-lvl-cell {
+            width: 106px; min-width: 106px; height: 26px; box-sizing: border-box;
+            background: #2a1506; border: 1px solid #7c3aed; border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
-            font-weight: 900; color: #ffb347; font-size: 0.95rem;
+            font-weight: 900; font-size: 0.85rem; color: #ffb347;
         }
+        .bp-lvl-cell.reached { background: #3b1a5e; color: #fff; }
+        .bp-lvl-cell.current { border-color: #fbbf24; color: #fbbf24; box-shadow: 0 0 8px rgba(251, 191, 36, 0.5); }
         .bp-cell {
-            background: #181033; border: 1px solid #3b2a6b; border-radius: 10px; padding: 8px 6px;
+            width: 106px; min-width: 106px; box-sizing: border-box;
+            background: #181033; border: 1px solid #3b2a6b; border-radius: 10px; padding: 6px 5px;
             display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-            gap: 6px; text-align: center; min-height: 88px;
+            gap: 5px; text-align: center; min-height: 120px;
         }
         .bp-cell.locked { opacity: 0.55; }
         .bp-cell.ready { border-color: #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.35); background: #241436; }
         .bp-cell.claimed { border-color: #10b981; background: #0f2922; }
-        .bp-cell-lbl { font-size: 0.6rem; font-weight: 800; color: #d8b4fe; letter-spacing: 0.5px; text-transform: uppercase; }
-        .bp-reward { font-size: 0.76rem; font-weight: 700; color: #fff; line-height: 1.25; }
+        .bp-reward { font-size: 0.67rem; font-weight: 700; color: #fff; line-height: 1.22; }
         .bp-reward.boost-x2 { color: #86efac; }
         .bp-reward.boost-x4 { color: #fbbf24; text-shadow: 0 0 8px rgba(251, 191, 36, 0.65); }
         .bp-claim-btn {
-            width: 100%; padding: 7px 4px; border: none; border-radius: 8px;
+            width: 100%; padding: 6px 3px; border: none; border-radius: 8px;
             background: linear-gradient(135deg, #f59e0b, #d97706); color: #1a0b2e;
-            font-weight: 900; font-size: 0.78rem; cursor: pointer;
+            font-weight: 900; font-size: 0.72rem; cursor: pointer;
         }
         .bp-claim-btn:active { transform: scale(0.96); }
         .bp-claim-btn.done { background: #065f46; color: #a7f3d0; cursor: default; }
@@ -507,8 +520,9 @@
             </div>
             <button class="bp-donate-btn" id="bp-donate-btn" onclick="openDonatePass()">🛒 Купить донат-пасс · @shaptes</button>
             <div class="bp-donate-note">Обращаться за донат-пассом к @shaptes</div>
-            <div class="bp-levels-head"><span></span><span>ОБЫЧНЫЙ</span><span>💎 ДОНАТ</span></div>
-            <div id="bp-levels-list"></div>
+            <div class="bp-tracks-wrap" id="bp-tracks-wrap">
+                <div class="bp-tracks-inner" id="bp-tracks"></div>
+            </div>
             <button class="bp-quests-btn" onclick="openBpQuests()">📜 Квесты</button>
         </div>
 
@@ -2335,7 +2349,6 @@
             if (claimed) cls += ' claimed';
             else if (canClaim) cls += ' ready';
             else cls += ' locked';
-            const lbl = track === 'normal' ? 'Обычный' : '💎 Донат';
             let rewardCls = 'bp-reward';
             if (r.kind === 'boost') rewardCls += (r.boost === 4 ? ' boost-x4' : ' boost-x2');
             let btn;
@@ -2343,7 +2356,6 @@
             else if (canClaim) btn = `<button class="bp-claim-btn" onclick="claimBpLevel(${lv},'${track}')">Забрать</button>`;
             else btn = '<button class="bp-claim-btn off" disabled>🔒</button>';
             return `<div class="${cls}">
-                <div class="bp-cell-lbl">${lbl}</div>
                 <div class="${rewardCls}">${r.emoji} ${r.name}</div>
                 ${btn}
             </div>`;
@@ -2378,16 +2390,23 @@
                 donateBtn.textContent = '🛒 Купить донат-пасс · @shaptes';
                 donateBtn.classList.remove('bought');
             }
-            // 50 уровней: награда обычного трека + донат-награда (с замком, пока не купят)
-            let html = '';
+            // Две горизонтальные полосы: сверху обычные награды, между ними номера уровней, снизу донат
+            const wrap = document.getElementById('bp-tracks-wrap');
+            const prevScroll = wrap.dataset.init === '1' ? wrap.scrollLeft : null;
+            let cellsN = '', cellsL = '', cellsD = '';
             for (let lv = 1; lv <= 50; lv++) {
-                html += `<div class="bp-level-row">
-                    <div class="bp-lvl-num">${lv}</div>
-                    ${bpCellHtml(s.rewards.normal[lv - 1], 'normal', lv, s)}
-                    ${bpCellHtml(s.rewards.donate[lv - 1], 'donate', lv, s)}
-                </div>`;
+                cellsN += bpCellHtml(s.rewards.normal[lv - 1], 'normal', lv, s);
+                cellsL += `<div class="bp-lvl-cell${lv <= s.level ? ' reached' : ''}${lv === s.level ? ' current' : ''}">${lv}</div>`;
+                cellsD += bpCellHtml(s.rewards.donate[lv - 1], 'donate', lv, s);
             }
-            document.getElementById('bp-levels-list').innerHTML = html;
+            document.getElementById('bp-tracks').innerHTML =
+                `<div class="bp-track-label">ОБЫЧНЫЙ ПАСС</div>
+                 <div class="bp-track-row">${cellsN}</div>
+                 <div class="bp-track-row">${cellsL}</div>
+                 <div class="bp-track-label donate">💎 ДОНАТ-ПАСС${s.donate_pass ? '' : ' — нужен донат-пасс'}</div>
+                 <div class="bp-track-row">${cellsD}</div>`;
+            wrap.dataset.init = '1';
+            if (prevScroll === null) wrap.scrollLeft = Math.max(0, (s.level - 3) * 112);
         }
 
         function renderBpQuests() {
