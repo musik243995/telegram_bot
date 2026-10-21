@@ -2306,29 +2306,39 @@ async def api_roll_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT has_phone FROM users WHERE user_id = %s", (user_id,))
-    row = cursor.fetchone()
-    if not row or not row[0]:
-        conn.close()
-        return web.json_response({"error": "Сначала купите телефон!"}, status=400)
+    number = generate_sim_number(category)
 
-    # Атомарное списание: не уйдём в минус даже при гонке
-    cursor.execute(
-        "UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s",
-        (cost, user_id, cost))
-    if cursor.rowcount == 0:
+    # Один запрос вместо четырёх: проверка телефона + атомарное списание +
+    # запись прокрутки + новый баланс. Меньше круговых обменов — меньше задержка.
+    cursor.execute("""
+        WITH ded AS (
+            UPDATE users SET balance = balance - %s
+            WHERE user_id = %s AND balance >= %s AND COALESCE(has_phone, 0) = 1
+            RETURNING balance
+        ), ins AS (
+            INSERT INTO pending_sims (user_id, number, category, price, created_at)
+            SELECT %s, %s, %s, %s, %s FROM ded
+            ON CONFLICT (user_id) DO UPDATE SET
+                number = EXCLUDED.number, category = EXCLUDED.category,
+                price = EXCLUDED.price, created_at = EXCLUDED.created_at
+            RETURNING 1
+        )
+        SELECT (SELECT balance FROM ded), (SELECT COUNT(*) FROM ins)
+    """, (cost, user_id, cost, user_id, number, category, cost, time.time()))
+    row = cursor.fetchone()
+    if not row or row[1] == 0:
+        # Отказ — уточняем причину (только в редком случае ошибки)
+        cursor.execute("SELECT COALESCE(has_phone, 0), COALESCE(balance, 0) FROM users WHERE user_id = %s", (user_id,))
+        diag = cursor.fetchone()
         conn.rollback()
         conn.close()
+        if not diag:
+            return web.json_response({"error": "Пользователь не найден"}, status=400)
+        if not diag[0]:
+            return web.json_response({"error": "Сначала купите телефон!"}, status=400)
         return web.json_response({"error": "Недостаточно средств для прокрутки!"}, status=400)
 
-    number = generate_sim_number(category)
-    cursor.execute(
-        "INSERT INTO pending_sims (user_id, number, category, price, created_at) VALUES (%s, %s, %s, %s, %s) "
-        "ON CONFLICT (user_id) DO UPDATE SET number = EXCLUDED.number, category = EXCLUDED.category, "
-        "price = EXCLUDED.price, created_at = EXCLUDED.created_at",
-        (user_id, number, category, cost, time.time()))
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
-    new_balance = cursor.fetchone()[0]
+    new_balance = row[0]
     conn.commit()
     conn.close()
 

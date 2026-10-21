@@ -836,15 +836,59 @@
             };
         }
 
+        let simRolling = false;
+
         async function rollSimCard(category) {
+            if (simRolling) return; // защита от двойного нажатия
             const conf = simConfig[category];
 
             document.getElementById('sim-result-actions').style.display = 'none';
             const displayEl = document.getElementById('sim-active-display');
 
-            // Прокрутку считает сервер: он проверяет баланс, списывает деньги
-            // и генерирует номер. Берём баланс и результат из ответа сервера.
-            let rolled;
+            simRolling = true;
+            let rolled = null, reqError = null, got = false, ticks = 0;
+
+            function finish() {
+                simRolling = false;
+                if (reqError) {
+                    displayEl.innerText = '+888 00000000';
+                    alert(reqError);
+                    return;
+                }
+                userBalance = rolled.balance;
+                document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+                document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+
+                currentRolledSim = { number: rolled.number, category: category, coins: rolled.coins, price: conf.price };
+                displayEl.innerText = currentRolledSim.number;
+                document.getElementById('sim-result-price-label').innerText = `Награда: +${currentRolledSim.coins} коинов`;
+
+                const sellBtn = document.getElementById('sim-sell-btn');
+                const saveBtn = document.getElementById('sim-save-btn');
+                sellBtn.style.background = '#fbbf24';
+                sellBtn.style.color = '#000';
+                sellBtn.innerText = 'Обменять на коинов';
+                saveBtn.style.background = '#3b82f6';
+                saveBtn.innerText = 'Сохранить';
+
+                document.getElementById('sim-result-actions').style.display = 'block';
+                updatePhoneTabUI();
+            }
+
+            // Анимация стартует сразу и крутится, пока не пришёл ответ сервера
+            // (сервер списывает деньги и генерирует номер — результат из его ответа)
+            let rollInterval = setInterval(() => {
+                let tempDigits = '';
+                for(let i=0; i<8; i++) tempDigits += Math.floor(Math.random() * 10);
+                displayEl.innerText = `+888 ${tempDigits.slice(0, 4)} ${tempDigits.slice(4)}`;
+                ticks++;
+
+                if (ticks > 25 && got) {
+                    clearInterval(rollInterval);
+                    finish();
+                }
+            }, 70);
+
             try {
                 const res = await fetch('/api/roll_sim', {
                     method: 'POST',
@@ -852,42 +896,16 @@
                     body: JSON.stringify({ category: category })
                 });
                 rolled = await res.json();
-                if (rolled.error) { alert(rolled.error); return; }
+                if (rolled.error) reqError = rolled.error;
             } catch (e) {
                 console.error(e);
-                alert('❌ Ошибка сети, попробуйте ещё раз');
-                return;
+                reqError = '❌ Ошибка сети, попробуйте ещё раз';
             }
-
-            userBalance = rolled.balance;
-            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
-
-            let counter = 0;
-            let rollInterval = setInterval(() => {
-                let tempDigits = '';
-                for(let i=0; i<8; i++) tempDigits += Math.floor(Math.random() * 10);
-                displayEl.innerText = `+888 ${tempDigits.slice(0, 4)} ${tempDigits.slice(4)}`;
-                counter++;
-
-               if (counter > 25) {
-                    clearInterval(rollInterval);
-                    currentRolledSim = { number: rolled.number, category: category, coins: rolled.coins, price: conf.price };
-                    displayEl.innerText = currentRolledSim.number;
-                    document.getElementById('sim-result-price-label').innerText = `Награда: +${currentRolledSim.coins} коинов`;
-                    
-                    const sellBtn = document.getElementById('sim-sell-btn');
-                    const saveBtn = document.getElementById('sim-save-btn');
-                    sellBtn.style.background = '#fbbf24';
-                    sellBtn.style.color = '#000';
-                    sellBtn.innerText = 'Обменять на коинов';
-                    saveBtn.style.background = '#3b82f6';
-                    saveBtn.innerText = 'Сохранить';
-
-                    document.getElementById('sim-result-actions').style.display = 'block';
-                    updatePhoneTabUI();
-                }
-            }, 70);
+            got = true;
+            if (ticks > 25) {
+                clearInterval(rollInterval);
+                finish();
+            }
         }
 
         async function saveCurrentSim() {
