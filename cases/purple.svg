@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="gTop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d3aaff"/>
+      <stop offset="0.55" stop-color="#a855f7"/>
+      <stop offset="1" stop-color="#6b21a8"/>
+    </linearGradient>
+    <linearGradient id="gLeft" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a855f7"/>
+      <stop offset="1" stop-color="#6b21a8"/>
+    </linearGradient>
+    <linearGradient id="gRight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b21a8"/>
+      <stop offset="1" stop-color="#411064"/>
+    </linearGradient>
+    <linearGradient id="gSheen" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.60"/>
+      <stop offset="0.40" stop-color="#ffffff" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="gBand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6f8fb"/>
+      <stop offset="0.5" stop-color="#aeb7c4"/>
+      <stop offset="1" stop-color="#69717e"/>
+    </linearGradient>
+    <radialGradient id="gGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#b96fff" stop-opacity="0.50"/>
+      <stop offset="1" stop-color="#b96fff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="fShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="9" stdDeviation="11" flood-color="#b96fff" flood-opacity="0.65"/>
+    </filter>
+  </defs>
+
+  <!-- цветное свечение вокруг кейса -->
+  <ellipse cx="200" cy="235" rx="175" ry="140" fill="url(#gGlow)"/>
+
+  <g filter="url(#fShadow)">
+    <!-- верхняя грань -->
+    <polygon points="200,70 350,145 200,220 50,145" fill="url(#gTop)" stroke="#000000" stroke-opacity="0.50" stroke-width="2.5"/>
+    <polygon points="200,70 350,145 200,220 50,145" fill="url(#gSheen)"/>
+    <polygon points="200,86 332,145 200,204 68,145" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="2"/>
+    <!-- левая грань -->
+    <polygon points="50,145 200,220 200,330 50,255" fill="url(#gLeft)" stroke="#000000" stroke-opacity="0.50" stroke-width="2.5"/>
+    <!-- правая грань -->
+    <polygon points="200,220 350,145 350,255 200,330" fill="url(#gRight)" stroke="#000000" stroke-opacity="0.50" stroke-width="2.5"/>
+    <!-- светлая кромка по верхнему контуру -->
+    <path d="M50,145 L200,70 L350,145" fill="none" stroke="#ffffff" stroke-opacity="0.70" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- вопросительные знаки на боковых гранях -->
+  <text x="0" y="0" transform="matrix(1,0.5,0,1,125,231)" font-family="Arial, Helvetica, sans-serif"
+        font-size="40" font-weight="700" fill="#ffffff" fill-opacity="0.95" text-anchor="middle">?</text>
+  <text x="0" y="0" transform="matrix(1,-0.5,0,1,275,231)" font-family="Arial, Helvetica, sans-serif"
+        font-size="40" font-weight="700" fill="#ffffff" fill-opacity="0.95" text-anchor="middle">?</text>
+
+  <!-- металлическая лента -->
+  <polygon points="50,215 200,290 200,308 50,233" fill="url(#gBand)" stroke="#000000" stroke-opacity="0.45" stroke-width="2"/>
+  <polygon points="200,290 350,215 350,233 200,308" fill="url(#gBand)" stroke="#000000" stroke-opacity="0.45" stroke-width="2"/>
+
+  <!-- заклёпки -->
+  <g fill="#4b525d">
+    <circle cx="77" cy="237" r="3.4"/>
+    <circle cx="125" cy="261" r="3.4"/>
+    <circle cx="173" cy="285" r="3.4"/>
+    <circle cx="227" cy="285" r="3.4"/>
+    <circle cx="275" cy="261" r="3.4"/>
+    <circle cx="323" cy="237" r="3.4"/>
+  </g>
+
+  <!-- замок на передней грани -->
+  <polygon points="182,285 200,294 218,285 218,313 200,322 182,313"
+           fill="url(#gBand)" stroke="#000000" stroke-opacity="0.55" stroke-width="2"/>
+  <circle cx="200" cy="298" r="4.5" fill="#1b1f27"/>
+  <polygon points="197,302 203,302 205,312 195,312" fill="#1b1f27"/>
+</svg>

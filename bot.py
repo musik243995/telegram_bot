@@ -2142,8 +2142,8 @@ def api_uid(request) -> int:
 
 @web.middleware
 async def telegram_auth_middleware(request, handler):
-    # Главная страница отдаётся без проверки: initData подставит сам Telegram
-    if request.path == "/":
+    # Главная страница и статические файлы отдаются без проверки: initData подставит сам Telegram
+    if request.path == "/" or request.path.startswith("/cases/"):
         return await handler(request)
     if verify_init_data(request.headers.get("X-Init-Data", "")) is None:
         return web.json_response({"error": "Не авторизовано"}, status=401)
@@ -2791,6 +2791,9 @@ async def api_crash_bet(request):
 async def web_server():
     app = web.Application(middlewares=[telegram_auth_middleware])
     app.router.add_get("/", index_handler)
+    # 3D-кейсы (SVG с прозрачным фоном)
+    cases_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cases")
+    app.router.add_static("/cases/", path=cases_dir, name="cases")
     app.router.add_get("/api/get_data", api_get_data)
     app.router.add_get("/api/get_inventory", api_get_inventory)
     app.router.add_post("/api/open_case", api_open_case)
