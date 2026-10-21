@@ -61,7 +61,7 @@
         .case-card { background: #120e24; border-radius: 18px; overflow: hidden; border: 1px solid #2a224c; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.2s; }
         .case-card:active { transform: scale(0.96); border-color: #8b5cf6; }
         .case-image-wrapper { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #090614; display: flex; align-items: center; justify-content: center; }
-        .case-img { width: 100%; height: 100%; object-fit: cover; }
+        .case-img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; }
         .case-details-box { width: 100%; padding: 10px 6px; background: #140f2b; text-align: center; box-sizing: border-box; }
         .case-title { color: #ffffff; font-size: 0.95rem; font-weight: 800; margin-bottom: 4px; }
         .case-price { color: #fbbf24; font-weight: 800; font-size: 0.9rem; }
@@ -672,7 +672,7 @@
 
         const casesData = [
             {
-                id: 1, name: "Квартира кейс", price: 5000000, img: "https://i.ibb.co/rRn2Jshy/IMG-20261014-221619.jpg",
+                id: 1, name: "Квартира кейс", price: 5000000, img: "cases/img/case1.png",
                 items: [
                     { name: "Ключи от однушки", price: 500000, chance: 45, emoji: "🔑" },
                     { name: "Ключи от двушки", price: 2500000, chance: 35, emoji: "🚪" },
@@ -682,7 +682,7 @@
                 dropListText: "<b>Что может выпасть:</b><br>🔑 Ключи от однушки (500.000¢ — 45%)<br>🚪 Ключи от двушки (2.500.000¢ — 35%)<br>🏢 Ключи от трешки (7.500.000¢ — 15%)<br>🏰 Ключи от 4комнатной (10.000.000¢ — 5%)"
             },
             {
-                id: 2, name: "Машина кейс", price: 15000000, img: "https://i.ibb.co/M5gbGKt7/IMG-20261014-221640.jpg",
+                id: 2, name: "Машина кейс", price: 15000000, img: "cases/img/case2.png",
                 items: [
                     { name: "Жигуль", price: 5000000, chance: 45, emoji: "🚙" },
                     { name: "Камри", price: 10000000, chance: 35, emoji: "🚗" },
@@ -692,7 +692,7 @@
                 dropListText: "<b>Что может выпасть:</b><br>🚙 Жигуль (5.000.000¢ — 45%)<br>🚗 Камри (10.000.000¢ — 35%)<br>🏎️ БМВ (20.000.000¢ — 15%)<br>🚀 БУГАТИ (25.000.000¢ — 5%)"
             },
             {
-                id: 3, name: "Кп кейс", price: 25000000, img: "https://i.ibb.co/YB6ngMSP/IMG-20261014-221608.jpg",
+                id: 3, name: "Кп кейс", price: 25000000, img: "cases/img/case3.png",
                 items: [
                     { name: "Кп по кв", price: 15000000, chance: 45, emoji: "📊" },
                     { name: "Кп по мш", price: 20000000, chance: 35, emoji: "📈" },
@@ -702,7 +702,7 @@
                 dropListText: "<b>Что может выпасть:</b><br>📊 Кп по кв (15.000.000¢ — 45%)<br>📈 Кп по мш (20.000.000¢ — 35%)<br>🏢 Кп по дм (30.000.000¢ — 15%)<br>💎 Кп по флт (40.000.000¢ — 5%)"
             },
             {
-                id: 4, name: "Дом кейс", price: 10000000, img: "https://i.ibb.co/Y7CZBs5R/IMG-20261014-221630.jpg",
+                id: 4, name: "Дом кейс", price: 10000000, img: "cases/img/case4.png",
                 items: [
                     { name: "Ключи от маленького домика", price: 3500000, chance: 45, emoji: "🛖" },
                     { name: "Средний домик", price: 6500000, chance: 35, emoji: "🏠" },
@@ -712,7 +712,7 @@
                 dropListText: "<b>Что может выпасть:</b><br>🛖 Ключи от маленького домика (3.500.000¢ — 45%)<br>🏠 Средний домик (6.500.000¢ — 35%)<br>🏡 Большой дом (12.500.000¢ — 15%)<br>🌇 Пин Хаус (20.000.000¢ — 5%)"
             },
             {
-                id: 5, name: "Кейс электроника", price: 150, currency: "coins", img: "https://cdn-icons-png.flaticon.com/512/3659/3659898.png",
+                id: 5, name: "Кейс электроника", price: 150, currency: "coins", img: "cases/img/case5.png",
                 items: [
                     { name: "Планшет", price: 50, chance: 45, emoji: "📱", item_type: "electronics" },
                     { name: "Телефон", price: 100, chance: 25, emoji: "📲", item_type: "electronics" },
@@ -723,7 +723,7 @@
             },
             {
                 id: 6, name: "Хеллоуин кейс", price: 1000000,
-                art: { bg: "radial-gradient(circle at 50% 38%, #ff9d33 0%, #b34700 38%, #3d1300 78%, #170901 100%)", emoji: "🎃", bats: "🦇" },
+                img: "cases/img/case6.png",
                 items: [
                     { name: "Тыква", price: 500000, chance: 35, emoji: "🎃" },
                     { name: "Череп", price: 750000, chance: 30, emoji: "💀" },
