@@ -838,19 +838,30 @@
 
         async function rollSimCard(category) {
             const conf = simConfig[category];
-            const spinCost = category === 'common' ? 1000000 : category === 'rare' ? 10000000 : category === 'epic' ? 50000000 : 250000000;
-
-            if (userBalance < spinCost) {
-                alert('❌ Недостаточно средств для прокрутки!');
-                return;
-            }
-
-            userBalance -= spinCost;
-            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
-            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
 
             document.getElementById('sim-result-actions').style.display = 'none';
             const displayEl = document.getElementById('sim-active-display');
+
+            // Прокрутку считает сервер: он проверяет баланс, списывает деньги
+            // и генерирует номер. Берём баланс и результат из ответа сервера.
+            let rolled;
+            try {
+                const res = await fetch('/api/roll_sim', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ category: category })
+                });
+                rolled = await res.json();
+                if (rolled.error) { alert(rolled.error); return; }
+            } catch (e) {
+                console.error(e);
+                alert('❌ Ошибка сети, попробуйте ещё раз');
+                return;
+            }
+
+            userBalance = rolled.balance;
+            document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
+            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
 
             let counter = 0;
             let rollInterval = setInterval(() => {
@@ -861,8 +872,7 @@
 
                if (counter > 25) {
                     clearInterval(rollInterval);
-                    const generated = generateSimNumber(category);
-                    currentRolledSim = generated;
+                    currentRolledSim = { number: rolled.number, category: category, coins: rolled.coins, price: conf.price };
                     displayEl.innerText = currentRolledSim.number;
                     document.getElementById('sim-result-price-label').innerText = `Награда: +${currentRolledSim.coins} коинов`;
                     

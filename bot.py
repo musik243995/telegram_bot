@@ -252,6 +252,15 @@ def init_db():
         )
     """)
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pending_sims (
+            user_id BIGINT PRIMARY KEY,
+            number TEXT,
+            category TEXT,
+            price BIGINT,
+            created_at REAL
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS market_sims (
             id SERIAL PRIMARY KEY,
             seller_id BIGINT,
@@ -2249,6 +2258,84 @@ async def api_sell_item(request):
 
     return web.json_response({"success": True, "new_balance": new_bal, "new_coins": new_coins})
 
+# Прокрутка сим-карт: стоимость списывается и результат считается ТОЛЬКО на сервере.
+SIM_SPIN_COSTS = {"common": 1000000, "rare": 10000000, "epic": 50000000, "legendary": 250000000}
+SIM_COIN_REWARDS = {"common": 1, "rare": 10, "epic": 50, "legendary": 400}
+
+def generate_sim_number(category):
+    def dig(n):
+        return "".join(str(random.randint(0, 9)) for _ in range(n))
+
+    if category == "common":
+        d = dig(8)
+    elif category == "rare":
+        base = str(random.randint(0, 9))
+        arr = [str(random.randint(0, 9)) for _ in range(8)]
+        for idx in random.sample(range(8), 2):
+            arr[idx] = base
+        d = "".join(arr)
+    elif category == "epic":
+        repeat_count = 3 if random.random() < 0.6 else 4
+        base = str(random.randint(0, 9))
+        arr = [base] * repeat_count + [str(random.randint(0, 9)) for _ in range(8 - repeat_count)]
+        random.shuffle(arr)
+        d = "".join(arr)
+    else:  # legendary
+        rand = random.random() * 100
+        roll = 1 if rand < 50 else 4 if rand < 80 else 5 if rand < 95 else 6 if rand < 99 else 8
+        if roll == 1:
+            d = dig(8)
+        else:
+            digit = str(random.randint(0, 9))
+            arr = list(digit * roll + dig(8 - roll))
+            random.shuffle(arr)
+            d = "".join(arr)
+    return f"+888 {d[:4]} {d[4:]}"
+
+async def api_roll_sim(request):
+    try:
+        data = await request.json()
+        user_id = api_uid(request)
+        category = str(data.get("category", ""))
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+
+    cost = SIM_SPIN_COSTS.get(category)
+    if cost is None:
+        return web.json_response({"error": "Неизвестная категория"}, status=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT has_phone FROM users WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    if not row or not row[0]:
+        conn.close()
+        return web.json_response({"error": "Сначала купите телефон!"}, status=400)
+
+    # Атомарное списание: не уйдём в минус даже при гонке
+    cursor.execute(
+        "UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s",
+        (cost, user_id, cost))
+    if cursor.rowcount == 0:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"error": "Недостаточно средств для прокрутки!"}, status=400)
+
+    number = generate_sim_number(category)
+    cursor.execute(
+        "INSERT INTO pending_sims (user_id, number, category, price, created_at) VALUES (%s, %s, %s, %s, %s) "
+        "ON CONFLICT (user_id) DO UPDATE SET number = EXCLUDED.number, category = EXCLUDED.category, "
+        "price = EXCLUDED.price, created_at = EXCLUDED.created_at",
+        (user_id, number, category, cost, time.time()))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    new_balance = cursor.fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    return web.json_response({
+        "success": True, "number": number, "category": category,
+        "coins": SIM_COIN_REWARDS[category], "balance": new_balance})
+
 async def api_buy_phone(request):
     data = await request.json()
     user_id = api_uid(request)
@@ -2256,14 +2343,25 @@ async def api_buy_phone(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, has_phone FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT has_phone FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
-    if not row or row[0] < cost:
+    if not row:
+        conn.close()
+        return web.json_response({"error": "Пользователь не найден"}, status=400)
+    if row[0]:
+        conn.close()
+        return web.json_response({"error": "У вас уже есть телефон!"}, status=400)
+
+    # Атомарное списание стоимости телефона
+    cursor.execute("UPDATE users SET balance = balance - %s, has_phone = 1 WHERE user_id = %s AND balance >= %s",
+                   (cost, user_id, cost))
+    if cursor.rowcount == 0:
+        conn.rollback()
         conn.close()
         return web.json_response({"error": "Недостаточно средств"}, status=400)
 
-    new_balance = row[0] - cost
-    cursor.execute("UPDATE users SET balance = %s, has_phone = 1 WHERE user_id = %s", (new_balance, user_id))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    new_balance = cursor.fetchone()[0]
     conn.commit()
     conn.close()
     return web.json_response({"success": True, "new_balance": new_balance})
@@ -2282,21 +2380,23 @@ async def api_get_sims(request):
     return web.json_response({"has_phone": has_phone, "sims": sims})
 
 async def api_save_sim(request):
-    data = await request.json()
+    try:
+        await request.json()
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Некорректные данные"}, status=400)
     user_id = api_uid(request)
-    number = data.get("number")
-    category = data.get("category")
-
-    coin_rewards = {
-        "common": 1,
-        "rare": 10,
-        "epic": 50,
-        "legendary": 400
-    }
-    earned_coins = coin_rewards.get(category, 1)
 
     conn = get_db()
     cursor = conn.cursor()
+
+    # Номер генерировал сервер при прокрутке — данные клиента игнорируем
+    cursor.execute("SELECT number, category, price FROM pending_sims WHERE user_id = %s", (user_id,))
+    pending = cursor.fetchone()
+    if not pending:
+        conn.close()
+        return web.json_response({"error": "Нет свежей прокрутки — сначала крутаните номер!"}, status=400)
+    number, category, price = pending
+    earned_coins = SIM_COIN_REWARDS.get(category, 1)
 
     cursor.execute("SELECT 1 FROM user_sims WHERE number = %s", (number,))
     if cursor.fetchone():
@@ -2310,27 +2410,37 @@ async def api_save_sim(request):
 
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (%s, %s, %s, %s)", 
                    (user_id, number, earned_coins, category))
-    
+    cursor.execute("DELETE FROM pending_sims WHERE user_id = %s", (user_id,))
+
     conn.commit()
     conn.close()
 
     return web.json_response({"success": True, "earned_coins": earned_coins})
 
 async def api_sell_sim(request):
-    data = await request.json()
+    try:
+        await request.json()
+    except (TypeError, ValueError):
+        return web.json_response({"error": "Некорректные данные"}, status=400)
     user_id = api_uid(request)
-    category = data.get("category")
-
-    coin_rewards = {
-        "common": 1,
-        "rare": 10,
-        "epic": 50,
-        "legendary": 400
-    }
-    earned_coins = coin_rewards.get(category, 1)
 
     conn = get_db()
     cursor = conn.cursor()
+
+    # Категория берётся из ПОСЛЕДНЕЙ ПРОКРУТКИ на сервере, не из тела запроса
+    cursor.execute("SELECT category FROM pending_sims WHERE user_id = %s", (user_id,))
+    pending = cursor.fetchone()
+    if not pending:
+        conn.close()
+        return web.json_response({"error": "Нет свежей прокрутки — сначала крутаните номер!"}, status=400)
+    earned_coins = SIM_COIN_REWARDS.get(pending[0], 1)
+
+    cursor.execute("DELETE FROM pending_sims WHERE user_id = %s", (user_id,))
+    if cursor.rowcount == 0:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"error": "Номер уже обработан"}, status=400)
+
     cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (earned_coins, user_id))
     cursor.execute("SELECT coins FROM users WHERE user_id = %s", (user_id,))
     new_coins = cursor.fetchone()[0]
@@ -2444,7 +2554,11 @@ async def api_market_buy_sim(request):
         conn.close()
         return web.json_response({"error": "В вашем инвентаре нет свободного места (максимум 5 сим-карт)"}, status=400)
 
-    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (price, user_id))
+    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s", (price, user_id, price))
+    if cursor.rowcount == 0:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"error": "Недостаточно средств для покупки"}, status=400)
     cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (price, seller_id))
     cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (%s, %s, %s, %s)", (user_id, number, price, category))
     cursor.execute("DELETE FROM market_sims WHERE id = %s", (listing_id,))
@@ -2638,6 +2752,7 @@ async def web_server():
     
     app.router.add_post("/api/buy_phone", api_buy_phone)
     app.router.add_get("/api/get_sims", api_get_sims)
+    app.router.add_post("/api/roll_sim", api_roll_sim)
     app.router.add_post("/api/save_sim", api_save_sim)
     app.router.add_post("/api/sell_sim", api_sell_sim)
     app.router.add_post("/api/exchange_sim_coins", api_exchange_sim_coins)
