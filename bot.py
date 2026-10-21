@@ -334,6 +334,14 @@ def init_db():
             item_type TEXT DEFAULT 'normal'
         )
     """)
+
+    # Номера сим-карт должны быть уникальны во всей игре:
+    # убираем старые дубликаты (оставляем самый ранний) и ставим индексы
+    cursor.execute("DELETE FROM user_sims a USING user_sims b WHERE a.number = b.number AND a.id > b.id")
+    cursor.execute("DELETE FROM market_sims a USING market_sims b WHERE a.number = b.number AND a.id > b.id")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS user_sims_number_uniq ON user_sims (number)")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS market_sims_number_uniq ON market_sims (number)")
+
     conn.commit()
     conn.close()
 
@@ -2295,6 +2303,17 @@ def generate_sim_number(category):
             d = "".join(arr)
     return f"+888 {d[:4]} {d[4:]}"
 
+def sim_number_taken(cursor, number, user_id):
+    """Проверяет, есть ли номер уже у кого-то в игре: в инвентарях,
+    на рынке или в чужих текущих прокрутках."""
+    cursor.execute("""
+        SELECT 1 FROM user_sims WHERE number = %s
+        UNION ALL SELECT 1 FROM market_sims WHERE number = %s
+        UNION ALL SELECT 1 FROM pending_sims WHERE number = %s AND user_id <> %s
+        LIMIT 1
+    """, (number, number, number, user_id))
+    return cursor.fetchone() is not None
+
 async def api_roll_sim(request):
     try:
         data = await request.json()
@@ -2309,7 +2328,17 @@ async def api_roll_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    number = generate_sim_number(category)
+
+    # Подбираем номер, которого ещё нет ни у кого в игре
+    number = None
+    for _ in range(20):
+        cand = generate_sim_number(category)
+        if not sim_number_taken(cursor, cand, user_id):
+            number = cand
+            break
+    if number is None:
+        conn.close()
+        return web.json_response({"error": "Не удалось подобрать свободный номер — попробуйте ещё раз"}, status=400)
 
     # Один запрос вместо четырёх: проверка телефона + атомарное списание +
     # запись прокрутки + новый баланс. Меньше круговых обменов — меньше задержка.
@@ -2421,8 +2450,14 @@ async def api_save_sim(request):
         conn.close()
         return web.json_response({"error": "Лимит номеров (максимум 5)"}, status=400)
 
-    cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (%s, %s, %s, %s)", 
-                   (user_id, number, earned_coins, category))
+    # Уникальный индекс в базе не даст создать дубликат даже при гонке
+    try:
+        cursor.execute("INSERT INTO user_sims (user_id, number, price, category) VALUES (%s, %s, %s, %s)", 
+                       (user_id, number, earned_coins, category))
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"error": "Этот номер уже занят!"}, status=400)
     cursor.execute("DELETE FROM pending_sims WHERE user_id = %s", (user_id,))
 
     conn.commit()
