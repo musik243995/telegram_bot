@@ -242,6 +242,16 @@ def init_db():
             coins BIGINT DEFAULT 0
         )
     """)
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS cases_opened INTEGER DEFAULT 0")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            user_id BIGINT,
+            code TEXT,
+            claimed INTEGER DEFAULT 0,
+            achieved_at REAL,
+            PRIMARY KEY (user_id, code)
+        )
+    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_sims (
             id SERIAL PRIMARY KEY,
@@ -660,7 +670,7 @@ async def shop_buy_callback(callback: CallbackQuery):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(f"SELECT balance, {field_name} FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute(f"SELECT balance, {field_name} FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -718,7 +728,7 @@ async def cmd_obran(message: Message, command: CommandObject):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     row = cursor.fetchone()
     if not row or row[0] < amount:
         conn.close()
@@ -827,7 +837,7 @@ async def nyachka_actions(message: Message):
         return
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, nyachka FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance, nyachka FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     u_row = cursor.fetchone()
     bal, nyach = u_row[0], (u_row[1] or 0)
     
@@ -967,6 +977,48 @@ def format_profile(user_data):
         f"👥 Приглашено друзей: {ref_count} шт."
     ).replace(",", " ")
 
+# --- ДОСТИЖЕНИЯ ---
+ACHIEVEMENTS = {
+    "first_case":  {"emoji": "🥉", "name": "Первый кейс",     "desc": "Открыть первый кейс",          "reward": 10_000},
+    "cases_10":    {"emoji": "🥈", "name": "Кейсоман",         "desc": "Открыть 10 кейсов",            "reward": 100_000},
+    "cases_100":   {"emoji": "🥇", "name": "Кейсный магнат",   "desc": "Открыть 100 кейсов",           "reward": 1_000_000},
+    "rich_1m":     {"emoji": "💵", "name": "Миллионер",        "desc": "Накопить 1 000 000 ¢",         "reward": 50_000},
+    "rich_100m":   {"emoji": "💰", "name": "Олигарх",          "desc": "Накопить 100 000 000 ¢",       "reward": 500_000},
+    "first_sim":   {"emoji": "📱", "name": "Сим-владелец",     "desc": "Сохранить первую сим-карту",   "reward": 25_000},
+    "sim_legend":  {"emoji": "🌟", "name": "Легенда связи",    "desc": "Выбить легендарную сим-карту", "reward": 300_000},
+    "market_buy":  {"emoji": "🛒", "name": "Покупатель рынка", "desc": "Купить сим-карту на рынке",    "reward": 100_000},
+    "upgrade_win": {"emoji": "🎯", "name": "Апгрейдер",        "desc": "Победить в апгрейдере",        "reward": 100_000},
+    "case_legend": {"emoji": "💎", "name": "Везунчик",         "desc": "Выбить предмет с шансом 5%",   "reward": 250_000},
+}
+
+
+def check_achievements(cursor, user_id, extra=()):
+    """Отмечает выполненные достижения. Вызывать внутри открытой транзакции."""
+    codes = {c for c in extra if c in ACHIEVEMENTS}
+    cursor.execute("SELECT COALESCE(cases_opened, 0), COALESCE(balance, 0) FROM users WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    if row:
+        if row[0] >= 1: codes.add("first_case")
+        if row[0] >= 10: codes.add("cases_10")
+        if row[0] >= 100: codes.add("cases_100")
+        if row[1] >= 1_000_000: codes.add("rich_1m")
+        if row[1] >= 100_000_000: codes.add("rich_100m")
+    cursor.execute("SELECT 1 FROM user_sims WHERE user_id = %s LIMIT 1", (user_id,))
+    if cursor.fetchone():
+        codes.add("first_sim")
+    for code in codes:
+        cursor.execute(
+            "INSERT INTO user_achievements (user_id, code, claimed, achieved_at) VALUES (%s, %s, 0, %s) "
+            "ON CONFLICT (user_id, code) DO NOTHING",
+            (user_id, code, time.time()))
+
+
+def get_user_medals(cursor, user_id, limit=3):
+    cursor.execute(
+        "SELECT code FROM user_achievements WHERE user_id = %s AND claimed = 1 ORDER BY achieved_at LIMIT %s",
+        (user_id, limit))
+    return " ".join(ACHIEVEMENTS[r[0]]["emoji"] for r in cursor.fetchall() if r[0] in ACHIEVEMENTS)
+
 @router.message(F.text.casefold().in_(["👤 профиль", "я"]))
 async def msg_profile(message: Message):
     if not await check_ban_and_register(message): return
@@ -981,8 +1033,103 @@ async def msg_profile(message: Message):
     apt_count = cursor.fetchone()[0]
     cursor.execute("SELECT ref_count FROM users WHERE user_id = %s", (user_id,))
     ref_count = cursor.fetchone()[0] or 0
+    medals = get_user_medals(cursor, user_id)
     conn.close()
-    await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins)))
+    display_name = f"{display_name} {medals}" if medals else display_name
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏅 Достижения", callback_data="achievements_menu")]
+    ])
+    await message.answer(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins)), reply_markup=kb)
+
+
+def build_achievements_menu(user_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    check_achievements(cursor, user_id)  # обновить статусы по текущим данным
+    cursor.execute("SELECT code, claimed FROM user_achievements WHERE user_id = %s", (user_id,))
+    state = {r[0]: r[1] for r in cursor.fetchall()}
+    conn.commit()
+    conn.close()
+    lines = ["🏅 Достижения — выполняйте цели и забирайте награды!\n"]
+    buttons = []
+    for code, a in ACHIEVEMENTS.items():
+        st = state.get(code, -1)
+        if st == 1:
+            lines.append(f"{a['emoji']} {a['name']} — ✅ получено")
+        elif st == 0:
+            lines.append(f"{a['emoji']} {a['name']} — 🎁 награда готова!")
+            buttons.append([InlineKeyboardButton(text=f"🎁 Забрать «{a['name']}» (+{a['reward']:,} ¢)".replace(",", " "), callback_data=f"ach_claim_{code}")])
+        else:
+            lines.append(f"{a['emoji']} {a['name']} — 🔒 {a['desc']}")
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="ach_back")])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.callback_query(F.data == "achievements_menu")
+async def cb_achievements_menu(callback: CallbackQuery):
+    text, kb = build_achievements_menu(callback.from_user.id)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        try:
+            await callback.message.answer(text, reply_markup=kb)
+        except Exception:
+            pass
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("ach_claim_"))
+async def cb_ach_claim(callback: CallbackQuery):
+    code = callback.data[len("ach_claim_"):]
+    if code not in ACHIEVEMENTS:
+        await callback.answer("❌ Достижение не найдено", show_alert=True)
+        return
+    user_id = callback.from_user.id
+    a = ACHIEVEMENTS[code]
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE user_achievements SET claimed = 1 WHERE user_id = %s AND code = %s AND claimed = 0",
+                   (user_id, code))
+    if cursor.rowcount == 0:
+        conn.close()
+        await callback.answer("❌ Это достижение уже забрано или ещё не выполнено", show_alert=True)
+        return
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (a["reward"], user_id))
+    check_achievements(cursor, user_id)  # новые достижения могли разблокироваться
+    conn.commit()
+    conn.close()
+    await callback.answer(f"🎉 «{a['name']}» получено! +{a['reward']:,} ¢".replace(",", " "), show_alert=True)
+    text, kb = build_achievements_menu(user_id)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "ach_back")
+async def cb_ach_back(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT custom_name, username, balance, bank_balance, invested, is_creator, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
+    u = cursor.fetchone()
+    custom_name, uname, balance, bank_balance, invested, is_creat, coins = u if u else (None, "user", 10000, 0, 0, 0, 0)
+    display_name = custom_name if custom_name else (uname if uname else callback.from_user.first_name)
+    cursor.execute("SELECT COUNT(*) FROM user_apartments WHERE user_id = %s", (user_id,))
+    apt_count = cursor.fetchone()[0]
+    cursor.execute("SELECT ref_count FROM users WHERE user_id = %s", (user_id,))
+    ref_count = cursor.fetchone()[0] or 0
+    medals = get_user_medals(cursor, user_id)
+    conn.close()
+    display_name = f"{display_name} {medals}" if medals else display_name
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏅 Достижения", callback_data="achievements_menu")]
+    ])
+    try:
+        await callback.message.edit_text(format_profile((user_id, display_name, balance, bank_balance, invested, apt_count, ref_count, is_creat, coins)), reply_markup=kb)
+    except Exception:
+        pass
+    await callback.answer()
 
 @router.message(F.text.casefold() == "чекнуть")
 async def msg_check_profile(message: Message):
@@ -1156,7 +1303,7 @@ async def work_steal(callback: CallbackQuery):
 async def sell_resources(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance, bottles, metal, stolen FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     row = cursor.fetchone()
     if not row:
         conn.close(); await callback.answer("❌ Игрок не найден!", show_alert=True); return
@@ -1249,6 +1396,8 @@ async def callback_buy_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
+    # Блокируем строку пользователя до конца транзакции: две параллельные покупки не спишут баланс дважды
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     cursor.execute("SELECT 1 FROM user_companies WHERE user_id = %s", (user_id,))
     if cursor.fetchone():
         conn.close()
@@ -1324,7 +1473,7 @@ async def callback_upgrade_company(callback: CallbackQuery):
     total_earned = earned_bal + accrued
     next_level = level + 1
     upgrade_cost = COMPANY_LEVELS[next_level]["cost"]
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     bal = cursor.fetchone()[0]
     if bal < upgrade_cost:
         await callback.answer(f"❌ Недостаточно средств для прокачки! Нужно {upgrade_cost:,} ¢".replace(",", " "), show_alert=True)
@@ -1392,7 +1541,7 @@ async def casino_roulette(message: Message):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     bal = cursor.fetchone()[0]
 
     amount = bal if raw_amount_str in ["вб", "все", "all"] else parse_sum(raw_amount_str)
@@ -1447,7 +1596,7 @@ async def casino_poker(message: Message):
     amount = parse_sum(args[1])
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     bal = cursor.fetchone()[0]
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Ошибка ставки.")
@@ -1479,7 +1628,7 @@ async def game_darts(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     bal = cursor.fetchone()[0]
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Неверная ставка.")
@@ -1516,7 +1665,7 @@ async def game_basketball(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     bal = cursor.fetchone()[0]
     if not amount or amount <= 0 or bal < amount:
         await message.answer("❌ Неверная ставка.")
@@ -1558,7 +1707,7 @@ async def bank_deposit(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     if cursor.fetchone()[0] < amount:
         await message.answer("❌ Недостаточно налички.")
         conn.close()
@@ -1576,7 +1725,7 @@ async def bank_withdraw(message: Message):
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT bank_balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT bank_balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     if cursor.fetchone()[0] < amount:
         await message.answer("❌ В банке нет столько.")
         conn.close()
@@ -1593,7 +1742,7 @@ async def transfer_money(message: Message):
     sender_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (sender_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (sender_id,))
     sender_bal = cursor.fetchone()[0]
 
     if message.reply_to_message and message.reply_to_message.from_user:
@@ -1710,7 +1859,7 @@ async def buy_apartment(callback: CallbackQuery):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     res = cursor.fetchone()
     bal = res[0] if res else 0
     if bal < price:
@@ -2156,12 +2305,16 @@ async def api_get_data(request):
     user_id = api_uid(request)
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance, COALESCE(coins, 0), COALESCE(cases_opened, 0) FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     balance = row[0] if row else 10000
     coins = row[1] if row else 0
+    cases_opened = row[2] if row else 0
+    check_achievements(cursor, user_id)
+    medals = get_user_medals(cursor, user_id)
+    conn.commit()
     conn.close()
-    return web.json_response({"balance": balance, "coins": coins})
+    return web.json_response({"balance": balance, "coins": coins, "cases_opened": cases_opened, "medals": medals})
 
 async def api_get_inventory(request):
     user_id = api_uid(request)
@@ -2200,43 +2353,65 @@ async def api_open_case(request):
     if not case_info:
         return web.json_response({"error": "Кейс не найден"}, status=400)
 
+    try:
+        count = int(data.get("count", 1))
+    except (TypeError, ValueError):
+        count = 1
+    count = max(1, min(3, count))
+    total_price = case_info["price"] * count
+
     conn = get_db()
     cursor = conn.cursor()
     currency = case_info["currency"]
     balance_field = "coins" if currency == "coins" else "balance"
     cursor.execute(f"SELECT COALESCE({balance_field}, 0) FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
-    if not row or row[0] < case_info["price"]:
+    if not row or row[0] < total_price:
         conn.close()
         return web.json_response({"error": "Недостаточно коинов" if currency == "coins" else "Недостаточно средств"}, status=400)
 
-    cursor.execute(f"UPDATE users SET {balance_field} = COALESCE({balance_field}, 0) - %s WHERE user_id = %s AND COALESCE({balance_field}, 0) >= %s", (case_info["price"], user_id, case_info["price"]))
+    # Атомарное списание за всё количество сразу — защита от гонок баланса
+    cursor.execute(f"UPDATE users SET {balance_field} = COALESCE({balance_field}, 0) - %s WHERE user_id = %s AND COALESCE({balance_field}, 0) >= %s", (total_price, user_id, total_price))
     if cursor.rowcount == 0:
         conn.rollback()
         conn.close()
         return web.json_response({"error": "Недостаточно средств для открытия кейса"}, status=400)
 
-    roll = random.randint(1, 100)
-    current_sum = 0
-    won_item = None
-    for name, price, chance in case_info["items"]:
-        current_sum += chance
-        if roll <= current_sum:
-            won_item = (name, price)
-            break
-
-    if won_item:
-        name, price = won_item
+    items = []
+    got_rare_drop = False
+    for _ in range(count):
+        roll = random.randint(1, 100)
+        current_sum = 0
+        won_item = None
+        for name, price, chance in case_info["items"]:
+            current_sum += chance
+            if roll <= current_sum:
+                won_item = (name, price, chance)
+                break
         item_type = case_info.get("item_type", "normal")
-        cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s)", (user_id, name, price, item_type))
+        if won_item:
+            name, price, chance = won_item
+            if chance <= 5:
+                got_rare_drop = True
+            cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s)", (user_id, name, price, item_type))
+            items.append({"name": name, "price": price, "item_type": item_type})
+        else:
+            items.append({"name": None, "price": 0, "item_type": item_type})
+
+    cursor.execute("UPDATE users SET cases_opened = COALESCE(cases_opened, 0) + %s WHERE user_id = %s", (count, user_id))
+    check_achievements(cursor, user_id, {"case_legend"} if got_rare_drop else ())
+
     cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     balances = cursor.fetchone()
     conn.commit()
     conn.close()
+    first = next((i for i in items if i["name"]), None)
     return web.json_response({
         "new_balance": balances[0], "new_coins": balances[1],
-        "item_name": won_item[0] if won_item else None,
-        "item_price": won_item[1] if won_item else 0,
+        "count": count,
+        "items": items,
+        "item_name": first["name"] if first else None,
+        "item_price": first["price"] if first else 0,
         "item_type": case_info.get("item_type", "normal"), "currency": currency
     })
 
@@ -2254,7 +2429,12 @@ async def api_sell_item(request):
         return web.json_response({"success": False})
 
     price, item_type = item[0], item[1]
-    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = %s", (item_id,))
+    # FOR UPDATE + sold=0 в условии: второй параллельный запрос не сможет продать предмет дважды
+    cursor.execute("UPDATE user_inventory SET sold = 1 WHERE id = %s AND user_id = %s AND sold = 0", (item_id, user_id))
+    if cursor.rowcount == 0:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"success": False})
     
     if item_type == "electronics":
         cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (price, user_id))
@@ -2460,6 +2640,11 @@ async def api_save_sim(request):
         return web.json_response({"error": "Этот номер уже занят!"}, status=400)
     cursor.execute("DELETE FROM pending_sims WHERE user_id = %s", (user_id,))
 
+    extra = {"first_sim"}
+    if category == "legendary":
+        extra.add("sim_legend")
+    check_achievements(cursor, user_id, extra)
+
     conn.commit()
     conn.close()
 
@@ -2529,9 +2714,24 @@ async def api_exchange_sim_coins(request):
     return web.json_response({"success": True, "new_coins": new_coins, "added_coins": earned_coins})
 
 async def api_market_get_listings(request):
+    try:
+        page = int(request.query.get("page", 1))
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, page)
+    page_size = 8
+
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, seller_id, seller_name, sim_id, number, price, category FROM market_sims")
+    cursor.execute("SELECT COUNT(*) FROM market_sims")
+    total = cursor.fetchone()[0]
+    pages = max(1, (total + page_size - 1) // page_size)
+    if page > pages:
+        page = pages
+    cursor.execute(
+        "SELECT id, seller_id, seller_name, sim_id, number, price, category FROM market_sims "
+        "ORDER BY id DESC LIMIT %s OFFSET %s",
+        (page_size, (page - 1) * page_size))
     listings = [
         {
             "id": r[0], "seller_id": r[1], "seller_name": r[2], 
@@ -2540,7 +2740,7 @@ async def api_market_get_listings(request):
         for r in cursor.fetchall()
     ]
     conn.close()
-    return web.json_response(listings)
+    return web.json_response({"listings": listings, "page": page, "pages": pages, "total": total})
 
 async def api_market_list_sim(request):
     data = await request.json()
@@ -2580,7 +2780,8 @@ async def api_market_buy_sim(request):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT seller_id, sim_id, number, price, category FROM market_sims WHERE id = %s", (listing_id,))
+    # FOR UPDATE блокирует лот до конца транзакции — параллельные покупатели получат «Лот не найден»
+    cursor.execute("SELECT seller_id, sim_id, number, price, category FROM market_sims WHERE id = %s FOR UPDATE", (listing_id,))
     listing = cursor.fetchone()
     if not listing:
         conn.close()
@@ -2591,7 +2792,7 @@ async def api_market_buy_sim(request):
         conn.close()
         return web.json_response({"error": "Нельзя купить свою собственную сим-карту"}, status=400)
 
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
     buyer_row = cursor.fetchone()
     if not buyer_row or buyer_row[0] < price:
         conn.close()
@@ -2614,6 +2815,7 @@ async def api_market_buy_sim(request):
     cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
     new_balance = cursor.fetchone()[0]
 
+    check_achievements(cursor, user_id, {"market_buy"})
     conn.commit()
     conn.close()
     try:
@@ -2696,6 +2898,7 @@ async def api_upgrader(request):
             return web.json_response({"error": "Предмет уже использован"}, status=400)
         if won:
             cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s)", (user_id, target_name, target_price, target_type))
+            check_achievements(cursor, user_id, {"upgrade_win"})
         conn.commit()
         return web.json_response({"success": True, "won": won, "chance": chance})
     except Exception:

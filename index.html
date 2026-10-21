@@ -73,6 +73,18 @@
         .open-btn:active { transform: scale(0.98); }
 
         .roulette-container { position: relative; width: 100%; height: 120px; background: #09070f; border-radius: 14px; overflow: hidden; margin: 15px 0; display: flex; align-items: center; border: 2px solid #312e81; }
+        .case-count-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; }
+        .case-count-label { color: var(--muted); font-weight: 700; font-size: 0.85rem; }
+        .count-btn { width: 44px; height: 38px; border-radius: 10px; border: 1px solid #312e81; background: #130d28; color: #716c96; font-weight: 800; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+        .count-btn:active { transform: scale(0.92); }
+        .count-btn.active { background: #251b47; color: #fbbf24; border-color: #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.25); }
+        .roulette-area { display: flex; flex-direction: column; gap: 8px; margin: 15px 0; }
+        .roulette-area .roulette-container { margin: 0; }
+        .market-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 0 2px; }
+        .market-page-btn { width: 44px; height: 36px; border-radius: 10px; border: 1px solid #312e81; background: #130d28; color: #fbbf24; font-weight: 800; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+        .market-page-btn:disabled { opacity: 0.35; cursor: default; }
+        .market-page-btn:not(:disabled):active { transform: scale(0.92); }
+        .market-page-info { color: var(--muted); font-weight: 700; font-size: 0.85rem; }
         .roulette-pointer { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: #ef4444; z-index: 10; transform: translateX(-50%); box-shadow: 0 0 8px #ef4444; }
         .roulette-track { display: flex; gap: 10px; position: absolute; left: 0; transition: transform 4s cubic-bezier(0.15, 0.85, 0.35, 1); }
         .roulette-item { min-width: 90px; height: 90px; background: #1a1528; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #3b3363; }
@@ -338,12 +350,15 @@
                 <button class="back-btn" onclick="goBackToList()">❮</button>
                 <h2 id="room-case-title" style="margin: 0; font-size: 1.2rem;">Кейс</h2>
             </div>
-            <div class="roulette-container">
-                <div class="roulette-pointer"></div>
-                <div class="roulette-track" id="roulette-track"></div>
+            <div class="case-count-row">
+                <span class="case-count-label">Линий разом:</span>
+                <button class="count-btn active" data-count="1" onclick="setCaseCount(1)">1</button>
+                <button class="count-btn" data-count="2" onclick="setCaseCount(2)">2</button>
+                <button class="count-btn" data-count="3" onclick="setCaseCount(3)">3</button>
             </div>
+            <div class="roulette-area" id="roulette-area"></div>
             <div id="win-notification" style="text-align: center; font-weight: bold; color: #fbbf24; margin-bottom: 10px; min-height: 24px;"></div>
-            <button class="open-btn" onclick="openCurrentCase()">Открыть кейс</button>
+            <button class="open-btn" id="open-case-btn" onclick="openCurrentCase()">Открыть кейс</button>
             <div class="drop-list" id="room-drop-list"></div>
         </div>
     </div>
@@ -646,8 +661,10 @@
         let inventory = [];
         let selectedItemForSell = null;
         let activeCaseId = null;
+        let activeCaseCount = 1;
 
         let casesOpenedCount = 0;
+        let userMedals = '';
         let successfulUpgrades = 0;
         let failedUpgrades = 0;
 
@@ -834,6 +851,30 @@
             document.getElementById('view-cases-list').classList.remove('active');
             document.getElementById('view-case-room').classList.add('active');
             createRouletteDummy(c);
+            updateOpenBtnLabel();
+        }
+
+        function setCaseCount(n) {
+            activeCaseCount = n;
+            document.querySelectorAll('.count-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.count) === n));
+            if (activeCaseId) {
+                const c = casesData.find(x => x.id === activeCaseId);
+                if (c) createRouletteDummy(c);
+            }
+            updateOpenBtnLabel();
+        }
+
+        function updateOpenBtnLabel() {
+            const btn = document.getElementById('open-case-btn');
+            if (!btn || !activeCaseId) return;
+            const c = casesData.find(x => x.id === activeCaseId);
+            if (!c) return;
+            if (activeCaseCount > 1) {
+                const total = c.price * activeCaseCount;
+                btn.innerText = `Открыть ×${activeCaseCount} (${total.toLocaleString('ru-RU')} ${c.currency === 'coins' ? 'коинов' : '¢'})`;
+            } else {
+                btn.innerText = 'Открыть кейс';
+            }
         }
 
         function goBackToList() {
@@ -843,15 +884,25 @@
         }
 
         function createRouletteDummy(caseItem) {
-            const track = document.getElementById('roulette-track');
-            let html = '';
-            for(let i=0; i<30; i++) {
-                let item = caseItem.items[Math.floor(Math.random() * caseItem.items.length)];
-                html += `<div class="roulette-item ${rarityClass(item.chance)}">${item.emoji}<span>${item.name}</span></div>`;
+            const area = document.getElementById('roulette-area');
+            let linesHtml = '';
+            for (let t = 0; t < activeCaseCount; t++) {
+                let html = '';
+                for(let i=0; i<30; i++) {
+                    let item = caseItem.items[Math.floor(Math.random() * caseItem.items.length)];
+                    html += `<div class="roulette-item ${rarityClass(item.chance)}">${item.emoji}<span>${item.name}</span></div>`;
+                }
+                linesHtml += `
+                    <div class="roulette-container">
+                        <div class="roulette-pointer"></div>
+                        <div class="roulette-track">${html}</div>
+                    </div>`;
             }
-            track.innerHTML = html;
-            track.style.transition = 'none';
-            track.style.transform = 'translateX(0px)';
+            area.innerHTML = linesHtml;
+            area.querySelectorAll('.roulette-track').forEach(track => {
+                track.style.transition = 'none';
+                track.style.transform = 'translateX(0px)';
+            });
         }
 
         async function fetchData() {
@@ -861,6 +912,12 @@
                 userBalance = data.balance;
                 userCoins = data.coins || 0;
                 if (data.created_at) firstJoinDate = data.created_at;
+                if (typeof data.cases_opened === 'number') casesOpenedCount = data.cases_opened;
+                if (typeof data.medals === 'string' && data.medals) {
+                    userMedals = data.medals;
+                    const nameEl = document.getElementById('user-display-name');
+                    if (nameEl) nameEl.innerText = `${firstName} ${userMedals}`;
+                }
                 
                 document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
                 document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
@@ -871,7 +928,9 @@
         async function openCurrentCase() {
             if(!activeCaseId) return;
             const caseItem = casesData.find(c => c.id === activeCaseId);
-            if(caseItem.currency === 'coins' ? userCoins < caseItem.price : userBalance < caseItem.price) {
+            const count = activeCaseCount;
+            const totalPrice = caseItem.price * count;
+            if(caseItem.currency === 'coins' ? userCoins < totalPrice : userBalance < totalPrice) {
                 alert(caseItem.currency === 'coins' ? '❌ Недостаточно коинов!' : '❌ Недостаточно средств!');
                 return;
             }
@@ -879,7 +938,7 @@
             const res = await fetch('/api/open_case', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, case_id: activeCaseId})
+                body: JSON.stringify({user_id: userId, case_id: activeCaseId, count: count})
             });
             const data = await res.json();
             if(!res.ok || data.error) { alert(data.error || 'Ошибка открытия кейса'); return; }
@@ -889,41 +948,62 @@
             document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
             document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
             document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
-            casesOpenedCount++;
 
-            const track = document.getElementById('roulette-track');
-            const wonItem = caseItem.items.find(i => i.name === data.item_name) || null;
-            
-            let itemsHtml = '';
-            let winningIndex = 25;
-            for(let i=0; i<35; i++) {
-                let item = (i === winningIndex) ? wonItem : caseItem.items[Math.floor(Math.random() * caseItem.items.length)];
-                itemsHtml += item ? `<div class="roulette-item ${rarityClass(item.chance)}">${item.emoji}<span>${item.name}</span></div>` : `<div class="roulette-item">❌<span>Пусто</span></div>`;
+            const serverItems = Array.isArray(data.items) ? data.items : [{name: data.item_name, price: data.item_price, item_type: data.item_type}];
+            casesOpenedCount += serverItems.length;
+            const wonItems = serverItems.map(si => si.name
+                ? (caseItem.items.find(i => i.name === si.name) || {name: si.name, price: si.price, emoji: '🎁', chance: 50})
+                : null);
+
+            const area = document.getElementById('roulette-area');
+            if (area.querySelectorAll('.roulette-track').length !== serverItems.length) {
+                createRouletteDummy(caseItem);
             }
-            track.innerHTML = itemsHtml;
-            track.style.transition = 'none';
-            track.style.transform = 'translateX(0px)';
+            const tracks = Array.from(area.querySelectorAll('.roulette-track'));
+            const winningIndex = 25;
+
+            tracks.forEach((track, t) => {
+                const wonItem = wonItems[t] || null;
+                let itemsHtml = '';
+                for(let i=0; i<35; i++) {
+                    let item = (i === winningIndex) ? wonItem : caseItem.items[Math.floor(Math.random() * caseItem.items.length)];
+                    itemsHtml += item ? `<div class="roulette-item ${rarityClass(item.chance)}">${item.emoji}<span>${item.name}</span></div>` : `<div class="roulette-item">❌<span>Пусто</span></div>`;
+                }
+                track.innerHTML = itemsHtml;
+                track.style.transition = 'none';
+                track.style.transform = 'translateX(0px)';
+            });
 
             document.getElementById('win-notification').innerText = '🌀 Крутим рулетку...';
-            setTimeout(() => {
-                // Плавное замедление с лёгким «докатом» на выигрышном предмете
-                track.style.transition = 'transform 5s cubic-bezier(0.12, 0.72, 0.18, 1.06)';
-                const offset = (winningIndex * 100) - 120 + Math.random()*40;
-                track.style.transform = `translateX(-${offset}px)`;
-            }, 50);
+            // Линии стартуют с лёгким сдвигом друг от друга — красивое мульти-открытие
+            tracks.forEach((track, t) => {
+                setTimeout(() => {
+                    // Плавное замедление с лёгким «докатом» на выигрышном предмете
+                    track.style.transition = 'transform 5s cubic-bezier(0.12, 0.72, 0.18, 1.06)';
+                    const offset = (winningIndex * 100) - 120 + Math.random()*40;
+                    track.style.transform = `translateX(-${offset}px)`;
+                }, 50 + t * 200);
+            });
 
+            const finishDelay = 5100 + (tracks.length - 1) * 200;
             setTimeout(() => {
-                if (wonItem) {
-                    const winEl = track.children[winningIndex];
-                    if (winEl) winEl.classList.add('win-flash');
+                const won = wonItems.filter(Boolean);
+                tracks.forEach((track, t) => {
+                    if (wonItems[t]) {
+                        const winEl = track.children[winningIndex];
+                        if (winEl) winEl.classList.add('win-flash');
+                    }
+                });
+                if (won.length > 0) {
                     spawnCaseConfetti();
-                    document.getElementById('win-notification').innerHTML = `🎉 Вы выиграли: <b>${wonItem.emoji} ${wonItem.name}</b> (${wonItem.price.toLocaleString('ru-RU')} ${caseItem.currency === 'coins' ? 'коинов' : '¢'})!`;
+                    const listStr = won.map(w => `<b>${w.emoji} ${w.name}</b> (${w.price.toLocaleString('ru-RU')} ${caseItem.currency === 'coins' ? 'коинов' : '¢'})`).join(', ');
+                    document.getElementById('win-notification').innerHTML = `🎉 Вы выиграли: ${listStr}!`;
                 } else {
-                    document.getElementById('win-notification').innerText = '😕 Не повезло: в этот раз предмет не выпал.';
+                    document.getElementById('win-notification').innerText = '😕 Не повезло: в этот раз предметы не выпали.';
                 }
                 loadInventory();
                 initUpgraderView();
-            }, 5100);
+            }, finishDelay);
         }
 
         function spawnCaseConfetti() {
@@ -1245,10 +1325,12 @@
         }
 
         let marketListings = [];
+        let marketPage = 1;
+        let marketPages = 1;
 
         async function initMarketView() {
             switchMarketTab('browse');
-            await loadMarketListings();
+            await loadMarketListings(1);
         }
 
         function switchMarketTab(tab) {
@@ -1258,16 +1340,25 @@
             document.getElementById('market-box-sell').classList.toggle('active', tab === 'sell');
 
             if(tab === 'browse') {
-                loadMarketListings();
+                loadMarketListings(marketPage);
             } else {
                 loadMarketSellInventory();
             }
         }
 
-        async function loadMarketListings() {
+        async function loadMarketListings(page) {
             try {
-                const res = await fetch(`/api/market/get_listings`);
-                marketListings = await res.json();
+                const res = await fetch(`/api/market/get_listings?page=${Math.max(1, parseInt(page) || 1)}`);
+                const data = await res.json();
+                if (Array.isArray(data)) {          // совместимость со старым форматом
+                    marketListings = data;
+                    marketPage = 1;
+                    marketPages = 1;
+                } else {
+                    marketListings = data.listings || [];
+                    marketPage = data.page || 1;
+                    marketPages = data.pages || 1;
+                }
                 renderMarketListings();
             } catch(e) {
                 const listEl = document.getElementById('market-listings-list');
@@ -1275,10 +1366,21 @@
             }
         }
 
+        function changeMarketPage(delta) {
+            loadMarketListings(Math.min(Math.max(1, marketPage + delta), marketPages));
+        }
+
         function renderMarketListings() {
             const listEl = document.getElementById('market-listings-list');
+            const pager = marketPages > 1 ? `
+                <div class="market-pager">
+                    <button class="market-page-btn" ${marketPage <= 1 ? 'disabled' : ''} onclick="changeMarketPage(-1)">◀</button>
+                    <span class="market-page-info">Стр. ${marketPage} / ${marketPages}</span>
+                    <button class="market-page-btn" ${marketPage >= marketPages ? 'disabled' : ''} onclick="changeMarketPage(1)">▶</button>
+                </div>` : '';
+
             if(!marketListings || marketListings.length === 0) {
-                listEl.innerHTML = `<div style="text-align: center; color: var(--muted); padding: 15px;">На рынке пока нет сим-карт</div>`;
+                listEl.innerHTML = `<div style="text-align: center; color: var(--muted); padding: 15px;">На рынке пока нет сим-карт</div>` + pager;
                 return;
             }
 
@@ -1298,7 +1400,7 @@
                         <div>${actionBtn}</div>
                     </div>
                 `;
-            }).join('');
+            }).join('') + pager;
         }
 
         async function loadMarketSellInventory() {
@@ -1362,7 +1464,7 @@
                 document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
                 document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
                 alert("Вы успешно купили сим-карту");
-                loadMarketListings();
+                loadMarketListings(marketPage);
             } catch(e) {
                 alert("❌ Ошибка при покупке");
             }
@@ -1378,7 +1480,7 @@
                 const data = await res.json();
                 if(data.error) { alert(data.error); return; }
                 alert("Вы успешно сняли сим-карту с рынка");
-                loadMarketListings();
+                loadMarketListings(marketPage);
             } catch(e) {
                 alert("❌ Ошибка при снятии с рынка");
             }
@@ -1626,7 +1728,7 @@
         }
 
         async function loadProfile() {
-            document.getElementById('user-display-name').innerText = firstName;
+            document.getElementById('user-display-name').innerText = userMedals ? `${firstName} ${userMedals}` : firstName;
             document.getElementById('user-display-id').innerText = `${username} • ID ${userId}`;
             document.getElementById('stat-cases-opened').innerText = casesOpenedCount;
             document.getElementById('stat-upgrades-count').innerText = `${successfulUpgrades} / ${failedUpgrades}`;
