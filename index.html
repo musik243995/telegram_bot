@@ -314,6 +314,126 @@
             94% { opacity: 0.65; }
             100% { transform: translate(120vw, 2vh) rotate(-4deg); opacity: 0; }
         }
+
+        /* ==================== БАТЛ-ПАСС (Хэллоуин) ==================== */
+        .bp-entry-btn {
+            display: block; width: 100%; height: 48px; margin-bottom: 12px;
+            background: linear-gradient(135deg, #ff7a00, #7c2fd6 135%);
+            border: 1px solid #ffb347; color: #fff; border-radius: 14px;
+            font-weight: 900; font-size: 1.02rem; letter-spacing: 0.3px; cursor: pointer;
+            box-shadow: 0 4px 16px rgba(255, 122, 0, 0.4), inset 0 0 14px rgba(255, 180, 0, 0.15);
+            transition: transform 0.15s;
+        }
+        .bp-entry-btn:active { transform: scale(0.98); }
+
+        .bp-banner {
+            background: linear-gradient(135deg, #3b0f66, #1a0b2e 60%, #4a1505);
+            border: 1px solid #8b5cf6; border-radius: 16px; padding: 14px;
+            margin-bottom: 12px; position: relative; overflow: hidden;
+            box-shadow: 0 4px 18px rgba(139, 92, 246, 0.3);
+        }
+        .bp-banner-title { font-size: 1.05rem; font-weight: 900; color: #ffb347; }
+        .bp-banner-sub { font-size: 0.8rem; color: #d8b4fe; margin-top: 3px; }
+        .bp-level-big { font-size: 1.35rem; font-weight: 900; color: #fff; margin-top: 8px; }
+        .bp-xp-track { height: 14px; background: #170f2b; border: 1px solid #4c2a8a; border-radius: 8px; overflow: hidden; margin-top: 6px; }
+        .bp-xp-fill { height: 100%; background: linear-gradient(90deg, #ff8c00, #ffb347); border-radius: 8px; transition: width 0.4s; }
+        .xp-label, .bp-xp-label { font-size: 0.75rem; color: #ffb347; margin-top: 4px; font-weight: 700; }
+        .bp-pass-done { text-align: center; font-weight: 900; color: #4ade80; font-size: 1.15rem; margin-top: 8px; text-shadow: 0 0 12px rgba(74, 222, 128, 0.5); }
+
+        .bp-donate-btn {
+            display: block; width: fit-content; margin: 0 0 6px 0;
+            background: linear-gradient(135deg, #22c55e, #0f766e); border: none; color: #fff;
+            padding: 10px 14px; border-radius: 12px; font-weight: 800; font-size: 0.92rem;
+            cursor: pointer; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+        }
+        .bp-donate-btn:active { transform: scale(0.97); }
+        .bp-donate-btn.bought { background: linear-gradient(135deg, #065f46, #064e3b); }
+        .bp-donate-note { font-size: 0.78rem; color: var(--muted); margin-bottom: 12px; }
+
+        .bp-levels-head {
+            display: grid; grid-template-columns: 42px 1fr 1fr; gap: 8px;
+            margin-bottom: 8px; font-size: 0.74rem; font-weight: 900;
+            color: #d8b4fe; text-align: center; letter-spacing: 0.4px;
+        }
+        .bp-level-row { display: grid; grid-template-columns: 42px 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .bp-lvl-num {
+            background: #2a1506; border: 1px solid #7c3aed; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 900; color: #ffb347; font-size: 0.95rem;
+        }
+        .bp-cell {
+            background: #181033; border: 1px solid #3b2a6b; border-radius: 10px; padding: 8px 6px;
+            display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+            gap: 6px; text-align: center; min-height: 88px;
+        }
+        .bp-cell.locked { opacity: 0.55; }
+        .bp-cell.ready { border-color: #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.35); background: #241436; }
+        .bp-cell.claimed { border-color: #10b981; background: #0f2922; }
+        .bp-cell-lbl { font-size: 0.6rem; font-weight: 800; color: #d8b4fe; letter-spacing: 0.5px; text-transform: uppercase; }
+        .bp-reward { font-size: 0.76rem; font-weight: 700; color: #fff; line-height: 1.25; }
+        .bp-reward.boost-x2 { color: #86efac; }
+        .bp-reward.boost-x4 { color: #fbbf24; text-shadow: 0 0 8px rgba(251, 191, 36, 0.65); }
+        .bp-claim-btn {
+            width: 100%; padding: 7px 4px; border: none; border-radius: 8px;
+            background: linear-gradient(135deg, #f59e0b, #d97706); color: #1a0b2e;
+            font-weight: 900; font-size: 0.78rem; cursor: pointer;
+        }
+        .bp-claim-btn:active { transform: scale(0.96); }
+        .bp-claim-btn.done { background: #065f46; color: #a7f3d0; cursor: default; }
+        .bp-claim-btn.off { background: #312e81; color: #a5b4fc; cursor: default; }
+
+        .bp-quests-btn {
+            width: 100%; margin-top: 14px; padding: 13px;
+            background: linear-gradient(135deg, #ff7a00, #7c2fd6 140%); border: 1px solid #ffb347;
+            color: #fff; border-radius: 14px; font-weight: 900; font-size: 1rem; cursor: pointer;
+            box-shadow: 0 4px 14px rgba(255, 122, 0, 0.35);
+        }
+        .bp-quests-btn:active { transform: scale(0.98); }
+
+        .bp-section-title { font-weight: 900; color: #ffb347; margin: 14px 0 8px; font-size: 0.95rem; }
+        .bp-quest-card { background: #181033; border: 1px solid #3b2a6b; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+        .bp-quest-card.locked { opacity: 0.6; }
+        .bp-quest-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+        .bp-quest-name { font-weight: 800; font-size: 0.88rem; color: #fff; }
+        .bp-quest-reward { font-size: 0.76rem; color: #ffb347; font-weight: 800; white-space: nowrap; }
+        .bp-quest-track { height: 10px; background: #170f2b; border-radius: 6px; overflow: hidden; margin: 8px 0 6px; border: 1px solid #4c2a8a; }
+        .bp-quest-fill { height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80); transition: width 0.3s; }
+        .bp-quest-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .bp-quest-prog { font-size: 0.76rem; color: var(--muted); font-weight: 800; }
+        .bp-quest-claim {
+            padding: 7px 14px; border: none; border-radius: 9px; font-weight: 900;
+            font-size: 0.8rem; cursor: pointer;
+            background: linear-gradient(135deg, #f59e0b, #d97706); color: #1a0b2e;
+        }
+        .bp-quest-claim.done { background: #065f46; color: #a7f3d0; cursor: default; }
+        .bp-quest-claim.off { background: #312e81; color: #a5b4fc; cursor: default; }
+        .bp-quest-locked-note { text-align: center; font-size: 0.85rem; font-weight: 700; color: #d8b4fe; }
+
+        /* Клевер-буст в углу снизу */
+        .bp-boost-badge {
+            position: fixed; left: 12px; bottom: 75px; z-index: 950;
+            display: none; align-items: center; gap: 7px;
+            background: rgba(20, 8, 30, 0.94); border: 1px solid #22c55e;
+            border-radius: 24px; padding: 7px 13px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+        }
+        .bp-boost-badge.active { display: flex; }
+        .bp-boost-badge .clover { font-size: 1.15rem; filter: drop-shadow(0 0 6px rgba(74, 222, 128, 0.8)); }
+        .bp-boost-badge .mult { font-weight: 900; color: #4ade80; font-size: 0.95rem; }
+        .bp-boost-badge .timer { font-weight: 800; color: #ffb347; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+        .bp-boost-badge.golden { border-color: #fbbf24; box-shadow: 0 0 16px rgba(251, 191, 36, 0.55); }
+        .bp-boost-badge.golden .clover { filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.95)) saturate(1.7); }
+        .bp-boost-badge.golden .mult { color: #fbbf24; }
+
+        /* Бесплатные кейсы в комнате «Квартира кейс» */
+        .free-cases-badge {
+            display: none; width: fit-content;
+            background: linear-gradient(135deg, #7c2fd6, #4c1d95);
+            border: 1px solid #a78bfa; color: #f5f3ff;
+            font-weight: 800; font-size: 0.82rem; padding: 7px 12px;
+            border-radius: 10px; margin-bottom: 10px;
+        }
+        .free-cases-badge b { color: #fbbf24; }
     </style>
 </head>
 <body>
@@ -348,6 +468,7 @@
 
     <div id="section-cases" class="view-section active">
         <div id="view-cases-list" class="view-section active">
+            <button class="bp-entry-btn" id="bp-entry-btn" style="display:none;" onclick="openBattlePass()">🎃 Батл-пасс · 31 день</button>
             <div class="cases-grid" id="cases-grid"></div>
         </div>
         <div id="view-case-room" class="view-section">
@@ -355,6 +476,7 @@
                 <button class="back-btn" onclick="goBackToList()">❮</button>
                 <h2 id="room-case-title" style="margin: 0; font-size: 1.2rem;">Кейс</h2>
             </div>
+            <div class="free-cases-badge" id="free-cases-badge">🎁 Бесплатные кейсы: <b id="free-cases-count">0</b></div>
             <div class="roulette-area" id="roulette-area"></div>
             <div id="win-notification" style="text-align: center; font-weight: bold; color: #fbbf24; margin-bottom: 10px; min-height: 24px;"></div>
             <div class="case-count-row">
@@ -368,6 +490,37 @@
                 <button class="open-btn" id="open-case-btn" onclick="openCurrentCase()">Открыть кейс</button>
             </div>
             <div class="drop-list" id="room-drop-list"></div>
+        </div>
+
+        <div id="view-battle-pass" class="view-section">
+            <div class="case-header">
+                <button class="back-btn" onclick="closeBattlePass()">❮</button>
+                <h2 style="margin: 0; font-size: 1.2rem;">🎃 Батл-пасс</h2>
+            </div>
+            <div class="bp-banner">
+                <div class="bp-banner-title">🎃 Хэллоуинский батл-пасс</div>
+                <div class="bp-banner-sub" id="bp-season-sub">Сезон: 31 день</div>
+                <div class="bp-level-big" id="bp-level-big">Уровень 0</div>
+                <div class="bp-xp-track"><div class="bp-xp-fill" id="bp-xp-fill" style="width: 0%;"></div></div>
+                <div class="bp-xp-label" id="bp-xp-label"></div>
+                <div class="bp-pass-done" id="bp-pass-done" style="display: none;">Пройдено ✅</div>
+            </div>
+            <button class="bp-donate-btn" id="bp-donate-btn" onclick="openDonatePass()">🛒 Купить донат-пасс · @shaptes</button>
+            <div class="bp-donate-note">Обращаться за донат-пассом к @shaptes</div>
+            <div class="bp-levels-head"><span></span><span>ОБЫЧНЫЙ</span><span>💎 ДОНАТ</span></div>
+            <div id="bp-levels-list"></div>
+            <button class="bp-quests-btn" onclick="openBpQuests()">📜 Квесты</button>
+        </div>
+
+        <div id="view-bp-quests" class="view-section">
+            <div class="case-header">
+                <button class="back-btn" onclick="backToPassFromQuests()">❮</button>
+                <h2 style="margin: 0; font-size: 1.2rem;">📜 Квесты дня</h2>
+            </div>
+            <div class="bp-section-title">Ежедневные квесты <span style="font-size: 0.75rem; color: var(--muted); font-weight: 700;">· обновляются каждый день</span></div>
+            <div id="bp-quests-normal"></div>
+            <div class="bp-section-title">💎 Донат-квесты</div>
+            <div id="bp-quests-donate"></div>
         </div>
     </div>
 
@@ -582,6 +735,12 @@
                 <div class="inventory-grid" id="inventory-grid"></div>
             </div>
         </div>
+    </div>
+
+    <div class="bp-boost-badge" id="bp-boost-badge">
+        <span class="clover" id="bp-boost-clover">🍀</span>
+        <span class="mult" id="bp-boost-mult">x2</span>
+        <span class="timer" id="bp-boost-timer">1:00</span>
     </div>
 
     <div class="bottom-nav">
@@ -869,6 +1028,13 @@
         // Выигранные в последнем открытии предметы — их можно быстро продать кнопкой слева от «Открыть»
         let lastWonIds = [];
 
+        // --- Батл-пасс: состояние (всё приходит с сервера) ---
+        let bpState = null;        // полный стейт /api/battle_pass
+        let userFreeCases = 0;     // бесплатные кейсы «Квартира» из пасса
+        let bpBoost = null;        // {boost: 2|4, until: server_ts}
+        let bpSeason = null;       // {active, days_left}
+        let bpServerDelta = 0;     // серверное время минус клиентское (сек)
+
         function openCaseRoom(caseId) {
             activeCaseId = caseId;
             const c = casesData.find(x => x.id === caseId);
@@ -881,6 +1047,16 @@
             updateSellWonBtn();
             createRouletteDummy(c);
             updateOpenBtnLabel();
+            updateFreeCasesBadge();
+        }
+
+        // Счётчик бесплатных кейсов «Квартира» — сверху слева в комнате кейса
+        function updateFreeCasesBadge() {
+            const badge = document.getElementById('free-cases-badge');
+            const cnt = document.getElementById('free-cases-count');
+            if (!badge || !cnt) return;
+            cnt.textContent = userFreeCases;
+            badge.style.display = activeCaseId === 1 ? 'block' : 'none';
         }
 
         function updateSellWonBtn() {
@@ -931,6 +1107,19 @@
             if (!btn || !activeCaseId) return;
             const c = casesData.find(x => x.id === activeCaseId);
             if (!c) return;
+            // «Квартира кейс»: бесплатные кейсы из пасса списываются первыми
+            if (activeCaseId === 1 && userFreeCases > 0) {
+                const free = Math.min(userFreeCases, activeCaseCount);
+                const paid = activeCaseCount - free;
+                if (paid === 0) {
+                    btn.innerText = activeCaseCount > 1
+                        ? `Открыть ×${activeCaseCount} (🎁 бесплатно)`
+                        : 'Открыть кейс 🎁 бесплатно';
+                } else {
+                    btn.innerText = `Открыть ×${activeCaseCount} (🎁${free} + ${(c.price * paid).toLocaleString('ru-RU')} ¢)`;
+                }
+                return;
+            }
             if (activeCaseCount > 1) {
                 const total = c.price * activeCaseCount;
                 btn.innerText = `Открыть ×${activeCaseCount} (${total.toLocaleString('ru-RU')} ${c.currency === 'coins' ? 'коинов' : '¢'})`;
@@ -941,8 +1130,11 @@
 
         function goBackToList() {
             document.getElementById('view-case-room').classList.remove('active');
+            document.getElementById('view-battle-pass').classList.remove('active');
+            document.getElementById('view-bp-quests').classList.remove('active');
             document.getElementById('view-cases-list').classList.add('active');
             activeCaseId = null;
+            updateFreeCasesBadge();
         }
 
         function createRouletteDummy(caseItem) {
@@ -984,6 +1176,18 @@
                 document.getElementById('user-balance').innerText = userBalance.toLocaleString() + ' ¢';
                 document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
                 document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString() + ' ¢';
+
+                // Батл-пасс: бесплатные кейсы, активный буст, сезон (кнопка исчезает после 31 дня)
+                if (typeof data.free_cases === 'number') userFreeCases = data.free_cases;
+                if (data.bp_boost) bpBoost = data.bp_boost;
+                if (data.bp_season) {
+                    bpSeason = data.bp_season;
+                    const bpBtn = document.getElementById('bp-entry-btn');
+                    if (bpBtn) bpBtn.style.display = bpSeason.active ? 'block' : 'none';
+                }
+                if (data.server_now) bpServerDelta = data.server_now - Date.now() / 1000;
+                updateBoostBadge();
+                updateFreeCasesBadge();
             } catch(e) { console.error(e); }
         }
 
@@ -991,8 +1195,11 @@
             if(!activeCaseId) return;
             const caseItem = casesData.find(c => c.id === activeCaseId);
             const count = activeCaseCount;
-            const totalPrice = caseItem.price * count;
-            if(caseItem.currency === 'coins' ? userCoins < totalPrice : userBalance < totalPrice) {
+            // Бесплатные кейсы «Квартира» покрывают часть/всё открытие — проверяем только платную часть
+            const freeUsed = (activeCaseId === 1) ? Math.min(userFreeCases, count) : 0;
+            const paidCount = count - freeUsed;
+            const totalPrice = caseItem.price * paidCount;
+            if(paidCount > 0 && (caseItem.currency === 'coins' ? userCoins < totalPrice : userBalance < totalPrice)) {
                 alert(caseItem.currency === 'coins' ? '❌ Недостаточно коинов!' : '❌ Недостаточно средств!');
                 return;
             }
@@ -1010,6 +1217,12 @@
             document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
             document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
             document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
+            // Сервер сообщил, сколько бесплатных кейсов осталось
+            if (typeof data.free_cases === 'number') {
+                userFreeCases = data.free_cases;
+                updateFreeCasesBadge();
+                updateOpenBtnLabel();
+            }
 
             const serverItems = Array.isArray(data.items) ? data.items : [{name: data.item_name, price: data.item_price, item_type: data.item_type}];
             casesOpenedCount += serverItems.length;
@@ -2040,6 +2253,223 @@
                 if (!item.win && item.mult === targetCrashPoint) cssClass = 'history-chip crash';
                 return `<div class="${cssClass}">Χ${item.mult.toFixed(2)}</div>`;
             }).join('');
+        }
+
+        // ==================== БАТЛ-ПАСС (Хэллоуин) ====================
+        function updateBalanceUI() {
+            document.getElementById('user-balance').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
+            document.getElementById('profile-balance-badge').innerText = userBalance.toLocaleString('ru-RU') + ' ¢';
+            document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
+        }
+
+        // Клевер-буст: 🍀 x2 (зелёный) / x4 (золотой) + таймер справа
+        function updateBoostBadge() {
+            const badge = document.getElementById('bp-boost-badge');
+            if (!badge) return;
+            const nowSrv = Date.now() / 1000 + bpServerDelta;
+            if (bpBoost && bpBoost.until > nowSrv) {
+                badge.classList.add('active');
+                badge.classList.toggle('golden', bpBoost.boost === 4);
+                document.getElementById('bp-boost-mult').textContent = 'x' + bpBoost.boost;
+                const left = Math.max(0, Math.ceil(bpBoost.until - nowSrv));
+                document.getElementById('bp-boost-timer').textContent =
+                    Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+            } else {
+                badge.classList.remove('active');
+                if (bpBoost && bpBoost.until <= nowSrv) bpBoost = null;
+            }
+        }
+        setInterval(updateBoostBadge, 500);
+
+        async function openBattlePass() {
+            document.getElementById('view-cases-list').classList.remove('active');
+            document.getElementById('view-bp-quests').classList.remove('active');
+            document.getElementById('view-battle-pass').classList.add('active');
+            await loadBattlePass();
+        }
+
+        function closeBattlePass() {
+            document.getElementById('view-battle-pass').classList.remove('active');
+            document.getElementById('view-bp-quests').classList.remove('active');
+            document.getElementById('view-cases-list').classList.add('active');
+        }
+
+        function openDonatePass() {
+            window.open('https://t.me/shaptes', '_blank');
+        }
+
+        function openBpQuests() {
+            document.getElementById('view-battle-pass').classList.remove('active');
+            document.getElementById('view-bp-quests').classList.add('active');
+            renderBpQuests();
+        }
+
+        function backToPassFromQuests() {
+            document.getElementById('view-bp-quests').classList.remove('active');
+            document.getElementById('view-battle-pass').classList.add('active');
+            renderBattlePass();
+        }
+
+        async function loadBattlePass() {
+            try {
+                const res = await fetch(`/api/battle_pass?user_id=${userId}`);
+                const data = await res.json();
+                if (!data.success) { alert(data.error || 'Ошибка загрузки батл-пасса'); closeBattlePass(); return; }
+                bpState = data;
+                if (data.server_now) bpServerDelta = data.server_now - Date.now() / 1000;
+                bpBoost = data.boost;
+                if (typeof data.free_cases === 'number') userFreeCases = data.free_cases;
+                updateBoostBadge();
+                updateFreeCasesBadge();
+                renderBattlePass();
+                renderBpQuests();
+            } catch(e) { alert('❌ Ошибка соединения'); }
+        }
+
+        function bpCellHtml(r, track, lv, s) {
+            const claimedList = track === 'normal' ? s.claimed_normal : s.claimed_donate;
+            const claimed = claimedList.includes(lv);
+            const locked = track === 'donate' && !s.donate_pass;
+            const canClaim = !claimed && !locked && lv <= s.level && s.season.active;
+            let cls = 'bp-cell';
+            if (claimed) cls += ' claimed';
+            else if (canClaim) cls += ' ready';
+            else cls += ' locked';
+            const lbl = track === 'normal' ? 'Обычный' : '💎 Донат';
+            let rewardCls = 'bp-reward';
+            if (r.kind === 'boost') rewardCls += (r.boost === 4 ? ' boost-x4' : ' boost-x2');
+            let btn;
+            if (claimed) btn = '<button class="bp-claim-btn done" disabled>✅ Забрано</button>';
+            else if (canClaim) btn = `<button class="bp-claim-btn" onclick="claimBpLevel(${lv},'${track}')">Забрать</button>`;
+            else btn = '<button class="bp-claim-btn off" disabled>🔒</button>';
+            return `<div class="${cls}">
+                <div class="bp-cell-lbl">${lbl}</div>
+                <div class="${rewardCls}">${r.emoji} ${r.name}</div>
+                ${btn}
+            </div>`;
+        }
+
+        function renderBattlePass() {
+            const s = bpState;
+            if (!s) return;
+            document.getElementById('bp-season-sub').textContent = s.season.active
+                ? `Сезон: осталось ${s.season.days_left} дн.`
+                : 'Сезон завершён';
+            document.getElementById('bp-level-big').textContent = `Уровень ${s.level}`;
+            const doneEl = document.getElementById('bp-pass-done');
+            const xpFill = document.getElementById('bp-xp-fill');
+            const xpLabel = document.getElementById('bp-xp-label');
+            if (s.passed) {
+                doneEl.style.display = 'block';
+                xpFill.style.width = '100%';
+                xpLabel.textContent = 'Все 50 уровней пройдены';
+            } else {
+                doneEl.style.display = 'none';
+                const pct = s.xp_needed > 0 ? Math.min(100, Math.round(s.xp_into / s.xp_needed * 100)) : 0;
+                xpFill.style.width = pct + '%';
+                xpLabel.textContent = `${s.xp_into} / ${s.xp_needed} XP до следующего уровня`;
+            }
+            // Кнопка донат-пасса
+            const donateBtn = document.getElementById('bp-donate-btn');
+            if (s.donate_pass) {
+                donateBtn.textContent = '✅ Донат-пасс активен';
+                donateBtn.classList.add('bought');
+            } else {
+                donateBtn.textContent = '🛒 Купить донат-пасс · @shaptes';
+                donateBtn.classList.remove('bought');
+            }
+            // 50 уровней: награда обычного трека + донат-награда (с замком, пока не купят)
+            let html = '';
+            for (let lv = 1; lv <= 50; lv++) {
+                html += `<div class="bp-level-row">
+                    <div class="bp-lvl-num">${lv}</div>
+                    ${bpCellHtml(s.rewards.normal[lv - 1], 'normal', lv, s)}
+                    ${bpCellHtml(s.rewards.donate[lv - 1], 'donate', lv, s)}
+                </div>`;
+            }
+            document.getElementById('bp-levels-list').innerHTML = html;
+        }
+
+        function renderBpQuests() {
+            const s = bpState;
+            if (!s) return;
+            const renderList = (track) => {
+                const list = s.quests[track] || [];
+                const trackLocked = track === 'donate' && !s.donate_pass;
+                return list.map((q, i) => {
+                    const done = !!q.claimed;
+                    const ready = !done && q.progress >= q.target && !trackLocked;
+                    const pct = Math.min(100, Math.round(q.progress / q.target * 100));
+                    let btn = '<button class="bp-quest-claim off" disabled>🔒</button>';
+                    if (done) btn = '<button class="bp-quest-claim done" disabled>✅</button>';
+                    else if (q.progress >= q.target && trackLocked) btn = '<button class="bp-quest-claim off" disabled>🔒</button>';
+                    else if (ready) btn = `<button class="bp-quest-claim" onclick="claimBpQuest('${track}',${i})">Забрать</button>`;
+                    else if (!trackLocked) btn = '<button class="bp-quest-claim off" disabled>⏳</button>';
+                    return `<div class="bp-quest-card ${trackLocked ? 'locked' : ''}">
+                        <div class="bp-quest-top">
+                            <div class="bp-quest-name">${q.emoji} ${q.name}</div>
+                            <div class="bp-quest-reward">+${q.xp} XP · +${q.balance.toLocaleString('ru-RU')} ¢</div>
+                        </div>
+                        <div class="bp-quest-track"><div class="bp-quest-fill" style="width: ${pct}%;"></div></div>
+                        <div class="bp-quest-foot">
+                            <span class="bp-quest-prog">${Math.min(q.progress, q.target)} / ${q.target}</span>
+                            ${btn}
+                        </div>
+                    </div>`;
+                }).join('');
+            };
+            document.getElementById('bp-quests-normal').innerHTML = renderList('normal');
+            let donateHtml = renderList('donate');
+            if (!s.donate_pass) {
+                donateHtml = `<div class="bp-quest-card locked" style="text-align:center;">
+                    <div class="bp-quest-locked-note">🔒 Донат-квесты закрыты<br><span style="font-size:0.78rem;">Обращаться за донат-пассом к @shaptes</span></div>
+                </div>` + donateHtml;
+            }
+            document.getElementById('bp-quests-donate').innerHTML = donateHtml;
+        }
+
+        async function claimBpLevel(level, track) {
+            try {
+                const res = await fetch('/api/battle_pass/claim', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, level: level, track: track})
+                });
+                const data = await res.json();
+                if (!data.success) { alert(data.error || 'Ошибка получения награды'); return; }
+                bpState = data.state;
+                if (bpState && bpState.server_now) bpServerDelta = bpState.server_now - Date.now() / 1000;
+                if (typeof data.state.new_balance === 'number') {
+                    userBalance = data.state.new_balance;
+                    userCoins = data.state.new_coins || 0;
+                    updateBalanceUI();
+                }
+                bpBoost = data.state.boost;
+                userFreeCases = data.state.free_cases;
+                updateBoostBadge();
+                updateFreeCasesBadge();
+                renderBattlePass();
+            } catch(e) { alert('❌ Ошибка соединения'); }
+        }
+
+        async function claimBpQuest(track, idx) {
+            try {
+                const res = await fetch('/api/battle_pass/claim_quest', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, track: track, idx: idx})
+                });
+                const data = await res.json();
+                if (!data.success) { alert(data.error || 'Ошибка получения награды'); return; }
+                bpState = data.state;
+                if (bpState && bpState.server_now) bpServerDelta = bpState.server_now - Date.now() / 1000;
+                if (typeof data.state.new_balance === 'number') {
+                    userBalance = data.state.new_balance;
+                    userCoins = data.state.new_coins || 0;
+                    updateBalanceUI();
+                }
+                renderBpQuests();
+            } catch(e) { alert('❌ Ошибка соединения'); }
         }
 
         window.addEventListener('load', () => {

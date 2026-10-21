@@ -31,6 +31,7 @@ class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
     waiting_for_balance_change = State()
     waiting_for_coin_exchange = State()
+    waiting_for_donate_pass = State()
 
 # --- АНТИСПАМ ФИЛЬТРЫ ---
 original_send_message = bot.send_message
@@ -129,6 +130,7 @@ def get_admin_keyboard():
             [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
             [InlineKeyboardButton(text="📢 Сделать рассылку", callback_data="admin_broadcast")],
             [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
+            [InlineKeyboardButton(text="🎁 Донат-пасс", callback_data="admin_donate_pass")],
             [InlineKeyboardButton(text="🚫 Баны / Креаторы", callback_data="admin_ban_menu")],
             [InlineKeyboardButton(text="📋 История игрока", callback_data="admin_history_help")]
         ]
@@ -342,6 +344,41 @@ def init_db():
             price BIGINT,
             sold INTEGER DEFAULT 0,
             item_type TEXT DEFAULT 'normal'
+        )
+    """)
+    # --- Батл-пасс ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS battle_pass (
+            user_id BIGINT PRIMARY KEY,
+            xp BIGINT DEFAULT 0,
+            free_cases INTEGER DEFAULT 0,
+            donate_pass INTEGER DEFAULT 0,
+            claimed_normal TEXT DEFAULT '',
+            claimed_donate TEXT DEFAULT ''
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS battle_pass_boosts (
+            user_id BIGINT PRIMARY KEY,
+            boost INTEGER DEFAULT 0,
+            until_ts REAL DEFAULT 0
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS battle_pass_daily (
+            user_id BIGINT,
+            day TEXT,
+            track TEXT,
+            code TEXT,
+            progress BIGINT DEFAULT 0,
+            claimed INTEGER DEFAULT 0,
+            PRIMARY KEY (user_id, day, track, code)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS battle_pass_settings (
+            id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+            started_at REAL NOT NULL
         )
     """)
 
@@ -2204,6 +2241,42 @@ async def admin_balance_process(message: Message, state: FSMContext):
     except:
         await message.answer("❌ Ошибка формата! Пример: `@user 1кк`")
 
+@router.callback_query(F.data == "admin_donate_pass")
+async def admin_donate_pass_start(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS: return
+    await callback.message.answer("🎁 Введите юзернейм или ID игрока, которому выдать донат-пасс (или /cancel):")
+    await state.set_state(AdminStates.waiting_for_donate_pass)
+    await callback.answer()
+
+@router.message(AdminStates.waiting_for_donate_pass)
+async def admin_donate_pass_process(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS: return
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отменено.")
+        return
+    try:
+        target_raw = message.text.strip()
+        conn = get_db()
+        cursor = conn.cursor()
+        uid = int(target_raw) if target_raw.isdigit() else None
+        if not uid:
+            cursor.execute("SELECT user_id FROM users WHERE LOWER(username) = LOWER(%s)", (target_raw.replace("@", ""),))
+            res = cursor.fetchone()
+            if res: uid = res[0]
+        if not uid:
+            await message.answer("❌ Игрок не найден.")
+            conn.close()
+            return
+        cursor.execute("INSERT INTO battle_pass (user_id, donate_pass) VALUES (%s, 1) "
+                       "ON CONFLICT (user_id) DO UPDATE SET donate_pass = 1", (uid,))
+        conn.commit()
+        conn.close()
+        await state.clear()
+        await message.answer(f"✅ Донат-пасс выдан игроку {target_raw}!")
+    except Exception:
+        await message.answer("❌ Ошибка! Пример: `@username` или `123456`")
+
 @router.callback_query(F.data == "admin_ban_menu")
 async def admin_ban_menu_callback(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return
@@ -2318,9 +2391,19 @@ async def api_get_data(request):
     cases_opened = row[2] if row else 0
     check_achievements(cursor, user_id)
     medals = get_user_medals(cursor, user_id)
+    season = bp_season(cursor)
+    boost = bp_get_boost(cursor, user_id)
+    cursor.execute("SELECT COALESCE(free_cases, 0) FROM battle_pass WHERE user_id = %s", (user_id,))
+    fr = cursor.fetchone()
     conn.commit()
     conn.close()
-    return web.json_response({"balance": balance, "coins": coins, "cases_opened": cases_opened, "medals": medals})
+    return web.json_response({
+        "balance": balance, "coins": coins, "cases_opened": cases_opened, "medals": medals,
+        "free_cases": fr[0] if fr else 0,
+        "bp_boost": boost,
+        "bp_season": season,
+        "server_now": time.time()
+    })
 
 async def api_get_inventory(request):
     user_id = api_uid(request)
@@ -2330,6 +2413,326 @@ async def api_get_inventory(request):
     items = [{"id": r[0], "name": r[1], "price": r[2], "item_type": r[3], "emoji": "💻" if r[3] == "electronics" else "🎁"} for r in cursor.fetchall()]
     conn.close()
     return web.json_response(items)
+
+# --- БАТЛ-ПАСС (Хэллоуин, сезон 31 день, 50 уровней) ---
+BP_MAX_LEVEL = 50
+BP_SEASON_DAYS = 31
+BP_TRACKS = ("normal", "donate")
+
+
+def bp_level_xp(level):
+    """XP, чтобы поднять уровень: 1-й — 100 XP, каждый следующий на x1.5 больше."""
+    return int(100 * (1.5 ** (level - 1)))
+
+
+def bp_level_state(xp):
+    """(уровень 0..50, XP внутри текущего уровня, XP нужно до следующего)."""
+    level, passed = 0, 0
+    while level < BP_MAX_LEVEL:
+        need = bp_level_xp(level + 1)
+        if xp >= passed + need:
+            passed += need
+            level += 1
+        else:
+            return level, xp - passed, need
+    return level, xp - passed, 0
+
+
+def bp_reward(level, track):
+    """Награда уровня пасса. Донат-пасс: деньги x2, кейсы x2, бусты на 2 минуты."""
+    donate = track == "donate"
+    boost_secs = 120 if donate else 60
+    # 10/20/30/40/50 — x4; кратные 3 — баланс (шаг +500к, донат x2); 3k+2 — x2; остальные — бесплатный кейс
+    if level % 10 == 0 and level >= 10:
+        return {"kind": "boost", "boost": 4, "duration": boost_secs, "emoji": "🍀",
+                "name": f"x4 везение в кейсах · {boost_secs} сек"}
+    if level == 1 or level % 3 == 0:
+        amount = 500_000 if level == 1 else 500_000 * (level // 3 + 1)
+        if donate:
+            amount *= 2
+        return {"kind": "balance", "emoji": "💰", "amount": amount,
+                "name": f"Баланс +{amount:,} ¢".replace(",", " ")}
+    if level % 3 == 2:
+        return {"kind": "boost", "boost": 2, "duration": boost_secs, "emoji": "🍀",
+                "name": f"x2 везение в кейсах · {boost_secs} сек"}
+    cases = 2 if donate else 1
+    return {"kind": "free_case", "emoji": "🎁", "amount": cases,
+            "name": f"Бесплатный кейс «Квартира» ×{cases}"}
+
+
+# Пул ежедневных квестов: сложность 0/1/2 -> цель и награда
+BP_QUEST_POOL = [
+    {"code": "open_cases", "emoji": "🎁", "tpl": "Открой кейсов: {t}",
+     "targets": (3, 7, 15),
+     "xp": ((100, 250), (300, 450), (500, 700)),
+     "bal": ((250_000, 400_000), (500_000, 700_000), (750_000, 1_000_000))},
+    {"code": "rare_drop", "emoji": "💎", "tpl": "Выбей предметов с шансом ≤15%: {t}",
+     "targets": (1, 2, 4),
+     "xp": ((100, 250), (300, 450), (500, 700)),
+     "bal": ((250_000, 400_000), (500_000, 700_000), (750_000, 1_000_000))},
+    {"code": "sell_value", "emoji": "💰", "tpl": "Продай предметов на {t} ¢",
+     "targets": (1_000_000, 5_000_000, 15_000_000),
+     "xp": ((100, 250), (300, 450), (500, 700)),
+     "bal": ((250_000, 400_000), (500_000, 700_000), (750_000, 1_000_000))},
+    {"code": "upgrade_win", "emoji": "🎯", "tpl": "Победи в апгрейдере: {t}",
+     "targets": (1, 2, 4),
+     "xp": ((100, 250), (300, 450), (500, 700)),
+     "bal": ((250_000, 400_000), (500_000, 700_000), (750_000, 1_000_000))},
+    {"code": "roll_sim", "emoji": "📱", "tpl": "Сделай прокруток сим-карт: {t}",
+     "targets": (1, 3, 6),
+     "xp": ((100, 250), (300, 450), (500, 700)),
+     "bal": ((250_000, 400_000), (500_000, 700_000), (750_000, 1_000_000))},
+    {"code": "market_buy", "emoji": "🛒", "tpl": "Купи сим-карт на рынке: {t}",
+     "targets": (1, 2, 3),
+     "xp": ((100, 250), (300, 450), (500, 700)),
+     "bal": ((250_000, 400_000), (500_000, 700_000), (750_000, 1_000_000))},
+]
+BP_DONATE_XP = ((250, 400), (500, 750), (800, 1000))
+BP_DONATE_BAL = ((1_000_000, 1_300_000), (1_400_000, 1_700_000), (1_800_000, 2_000_000))
+
+
+def bp_day_str():
+    """Московский день — квесты обновляются раз в сутки (по МСК)."""
+    from datetime import datetime, timezone, timedelta
+    return (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%Y-%m-%d")
+
+
+def bp_daily_quests(user_id, day, track):
+    """Детерминированные квесты дня: другие каждый день, свои у каждого игрока."""
+    rng = random.Random(f"bp:{user_id}:{day}:{track}")
+    n = 3 if track == "normal" else 2
+    picks = rng.sample(range(len(BP_QUEST_POOL)), n)
+    out = []
+    for idx in picks:
+        q = BP_QUEST_POOL[idx]
+        diff = rng.randint(0, 2)
+        if track == "donate":
+            xp = rng.randint(*BP_DONATE_XP[diff])
+            bal = rng.randint(*BP_DONATE_BAL[diff])
+        else:
+            xp = rng.randint(*q["xp"][diff])
+            bal = rng.randint(*q["bal"][diff])
+        target = q["targets"][diff]
+        out.append({
+            "code": q["code"], "emoji": q["emoji"], "difficulty": diff,
+            "name": q["tpl"].format(t=f"{target:,}".replace(",", " ")),
+            "target": target, "xp": xp, "balance": bal,
+        })
+    return out
+
+
+def bp_bump(cursor, user_id, code, amount):
+    """Накидывает прогресс дневного квеста (вызывать внутри транзакции до commit)."""
+    if amount <= 0:
+        return
+    day = bp_day_str()
+    for track in BP_TRACKS:
+        codes = {q["code"] for q in bp_daily_quests(user_id, day, track)}
+        if code not in codes:
+            continue
+        cursor.execute("""
+            INSERT INTO battle_pass_daily (user_id, day, track, code, progress, claimed)
+            VALUES (%s, %s, %s, %s, %s, 0)
+            ON CONFLICT (user_id, day, track, code)
+            DO UPDATE SET progress = battle_pass_daily.progress + EXCLUDED.progress
+        """, (user_id, day, track, code, amount))
+
+
+def bp_season(cursor):
+    """Сезон стартует с первой активности и длится 31 день."""
+    cursor.execute("INSERT INTO battle_pass_settings (id, started_at) VALUES (1, %s) ON CONFLICT (id) DO NOTHING", (time.time(),))
+    cursor.execute("SELECT started_at FROM battle_pass_settings WHERE id = 1")
+    start = cursor.fetchone()[0]
+    days_left = BP_SEASON_DAYS - int((time.time() - start) // 86400)
+    return {"active": days_left > 0, "days_left": max(0, days_left), "started_at": start}
+
+
+def bp_get_boost(cursor, user_id):
+    cursor.execute("SELECT boost, until_ts FROM battle_pass_boosts WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    if row and row[0] in (2, 4) and row[1] > time.time():
+        return {"boost": row[0], "until": row[1]}
+    return None
+
+
+def bp_ensure_row(cursor, user_id):
+    cursor.execute("INSERT INTO battle_pass (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
+
+
+def bp_full_state(cursor, user_id, season=None):
+    bp_ensure_row(cursor, user_id)
+    if season is None:
+        season = bp_season(cursor)
+    cursor.execute("SELECT xp, free_cases, donate_pass, claimed_normal, claimed_donate FROM battle_pass WHERE user_id = %s", (user_id,))
+    xp, free_cases, donate, cn, cd = cursor.fetchone()
+    level, into, need = bp_level_state(xp)
+    day = bp_day_str()
+    cursor.execute("SELECT track, code, progress, claimed FROM battle_pass_daily WHERE user_id = %s AND day = %s", (user_id, day))
+    prog = {(r[0], r[1]): (r[2], r[3]) for r in cursor.fetchall()}
+    quests = {}
+    for track in BP_TRACKS:
+        qs = bp_daily_quests(user_id, day, track)
+        for q in qs:
+            p, c = prog.get((track, q["code"]), (0, 0))
+            q["progress"] = p
+            q["claimed"] = c
+        quests[track] = qs
+    return {
+        "season": season,
+        "level": level, "xp": xp, "xp_into": into, "xp_needed": need,
+        "passed": level >= BP_MAX_LEVEL,
+        "free_cases": free_cases,
+        "donate_pass": bool(donate),
+        "claimed_normal": [int(x) for x in cn.split(",") if x],
+        "claimed_donate": [int(x) for x in cd.split(",") if x],
+        "boost": bp_get_boost(cursor, user_id),
+        "rewards": {t: [bp_reward(i, t) for i in range(1, BP_MAX_LEVEL + 1)] for t in BP_TRACKS},
+        "quests": quests,
+        "server_now": time.time(),
+    }
+
+
+async def api_battle_pass(request):
+    user_id = api_uid(request)
+    conn = get_db()
+    cursor = conn.cursor()
+    state = bp_full_state(cursor, user_id)
+    state["success"] = True
+    conn.commit()
+    conn.close()
+    return web.json_response(state)
+
+
+async def api_bp_claim(request):
+    """Забрать награду уровня пасса."""
+    try:
+        data = await request.json()
+        user_id = api_uid(request)
+        level = int(data.get("level", 0))
+        track = str(data.get("track", "normal"))
+    except (TypeError, ValueError):
+        return web.json_response({"success": False, "error": "Некорректные данные"}, status=400)
+    if track not in BP_TRACKS or not (1 <= level <= BP_MAX_LEVEL):
+        return web.json_response({"success": False, "error": "Некорректные данные"}, status=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    season = bp_season(cursor)
+    if not season["active"]:
+        conn.close()
+        return web.json_response({"success": False, "error": "Сезон батл-пасса завершён"}, status=400)
+    bp_ensure_row(cursor, user_id)
+    cursor.execute("SELECT xp, donate_pass, claimed_normal, claimed_donate FROM battle_pass WHERE user_id = %s FOR UPDATE", (user_id,))
+    xp, donate, cn, cd = cursor.fetchone()
+    cur_level = bp_level_state(xp)[0]
+    claimed_field = cn if track == "normal" else cd
+    claimed = {int(x) for x in claimed_field.split(",") if x}
+    if level in claimed:
+        conn.close()
+        return web.json_response({"success": False, "error": "Эта награда уже забрана"}, status=400)
+    if level > cur_level:
+        conn.close()
+        return web.json_response({"success": False, "error": "Уровень ещё не получен"}, status=400)
+    if track == "donate" and not donate:
+        conn.close()
+        return web.json_response({"success": False, "error": "Нужен донат-пасс — обращайтесь к @shaptes"}, status=400)
+
+    reward = bp_reward(level, track)
+    if reward["kind"] == "boost":
+        if bp_get_boost(cursor, user_id):
+            conn.close()
+            return web.json_response({"success": False, "error": "Подожди, пока закончится эта удача! 🍀"}, status=400)
+        cursor.execute(
+            "INSERT INTO battle_pass_boosts (user_id, boost, until_ts) VALUES (%s, %s, %s) "
+            "ON CONFLICT (user_id) DO UPDATE SET boost = EXCLUDED.boost, until_ts = EXCLUDED.until_ts",
+            (user_id, reward["boost"], time.time() + reward["duration"]))
+    elif reward["kind"] == "balance":
+        cursor.execute("UPDATE users SET balance = COALESCE(balance, 0) + %s WHERE user_id = %s", (reward["amount"], user_id))
+        check_achievements(cursor, user_id)
+    else:  # free_case
+        cursor.execute("UPDATE battle_pass SET free_cases = free_cases + %s WHERE user_id = %s", (reward["amount"], user_id))
+
+    new_field = claimed_field + ("," if claimed_field else "") + str(level)
+    col = "claimed_normal" if track == "normal" else "claimed_donate"
+    cursor.execute(f"UPDATE battle_pass SET {col} = %s WHERE user_id = %s", (new_field, user_id))
+
+    state = bp_full_state(cursor, user_id, season)
+    cursor.execute("SELECT COALESCE(balance, 0), COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
+    bal = cursor.fetchone() or (0, 0)
+    state["new_balance"], state["new_coins"] = bal[0], bal[1]
+    state["success"] = True
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "reward": reward, "state": state})
+
+
+async def api_bp_claim_quest(request):
+    """Забрать награду ежедневного квеста: XP + баланс."""
+    try:
+        data = await request.json()
+        user_id = api_uid(request)
+        track = str(data.get("track", "normal"))
+        idx = int(data.get("idx", -1))
+    except (TypeError, ValueError):
+        return web.json_response({"success": False, "error": "Некорректные данные"}, status=400)
+    if track not in BP_TRACKS:
+        return web.json_response({"success": False, "error": "Некорректные данные"}, status=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    season = bp_season(cursor)
+    if not season["active"]:
+        conn.close()
+        return web.json_response({"success": False, "error": "Сезон батл-пасса завершён"}, status=400)
+
+    day = bp_day_str()
+    quests = bp_daily_quests(user_id, day, track)
+    if not (0 <= idx < len(quests)):
+        conn.close()
+        return web.json_response({"success": False, "error": "Квест не найден"}, status=400)
+    q = quests[idx]
+
+    bp_ensure_row(cursor, user_id)
+    cursor.execute("SELECT donate_pass FROM battle_pass WHERE user_id = %s FOR UPDATE", (user_id,))
+    row = cursor.fetchone()
+    if track == "donate" and (not row or not row[0]):
+        conn.close()
+        return web.json_response({"success": False, "error": "Нужен донат-пасс — обращайтесь к @shaptes"}, status=400)
+
+    cursor.execute(
+        "SELECT progress, claimed FROM battle_pass_daily "
+        "WHERE user_id = %s AND day = %s AND track = %s AND code = %s FOR UPDATE",
+        (user_id, day, track, q["code"]))
+    prow = cursor.fetchone()
+    progress, claimed = prow if prow else (0, 0)
+    if claimed:
+        conn.close()
+        return web.json_response({"success": False, "error": "Квест уже выполнен"}, status=400)
+    if progress < q["target"]:
+        conn.close()
+        return web.json_response({"success": False, "error": "Квест ещё не выполнен"}, status=400)
+    if prow:
+        cursor.execute(
+            "UPDATE battle_pass_daily SET claimed = 1 "
+            "WHERE user_id = %s AND day = %s AND track = %s AND code = %s",
+            (user_id, day, track, q["code"]))
+    else:
+        cursor.execute(
+            "INSERT INTO battle_pass_daily (user_id, day, track, code, progress, claimed) VALUES (%s, %s, %s, %s, %s, 1)",
+            (user_id, day, track, q["code"], q["target"]))
+
+    cursor.execute("UPDATE battle_pass SET xp = xp + %s WHERE user_id = %s", (q["xp"], user_id))
+    cursor.execute("UPDATE users SET balance = COALESCE(balance, 0) + %s WHERE user_id = %s", (q["balance"], user_id))
+    check_achievements(cursor, user_id)
+
+    state = bp_full_state(cursor, user_id, season)
+    cursor.execute("SELECT COALESCE(balance, 0), COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
+    bal = cursor.fetchone() or (0, 0)
+    state["new_balance"], state["new_coins"] = bal[0], bal[1]
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "quest": q, "state": state})
+
 
 async def api_open_case(request):
     try:
@@ -2364,41 +2767,70 @@ async def api_open_case(request):
     except (TypeError, ValueError):
         count = 1
     count = max(1, min(3, count))
-    total_price = case_info["price"] * count
 
     conn = get_db()
     cursor = conn.cursor()
     currency = case_info["currency"]
     balance_field = "coins" if currency == "coins" else "balance"
-    cursor.execute(f"SELECT COALESCE({balance_field}, 0) FROM users WHERE user_id = %s", (user_id,))
-    row = cursor.fetchone()
-    if not row or row[0] < total_price:
-        conn.close()
-        return web.json_response({"error": "Недостаточно коинов" if currency == "coins" else "Недостаточно средств"}, status=400)
 
-    # Атомарное списание за всё количество сразу — защита от гонок баланса
-    cursor.execute(f"UPDATE users SET {balance_field} = COALESCE({balance_field}, 0) - %s WHERE user_id = %s AND COALESCE({balance_field}, 0) >= %s", (total_price, user_id, total_price))
-    if cursor.rowcount == 0:
-        conn.rollback()
-        conn.close()
-        return web.json_response({"error": "Недостаточно средств для открытия кейса"}, status=400)
+    # Бесплатные кейсы батл-пасса («Квартира кейс») списываются первыми, остальное — за деньги
+    free_used = 0
+    if case_id == 1:
+        cursor.execute("SELECT COALESCE(free_cases, 0) FROM battle_pass WHERE user_id = %s FOR UPDATE", (user_id,))
+        fr = cursor.fetchone()
+        have = fr[0] if fr else 0
+        if have > 0:
+            free_used = min(have, count)
+            cursor.execute("UPDATE battle_pass SET free_cases = free_cases - %s WHERE user_id = %s", (free_used, user_id))
+    paid_count = count - free_used
+    total_price = case_info["price"] * paid_count
+
+    if paid_count > 0:
+        cursor.execute(f"SELECT COALESCE({balance_field}, 0) FROM users WHERE user_id = %s", (user_id,))
+        row = cursor.fetchone()
+        if not row or row[0] < total_price:
+            conn.rollback()
+            conn.close()
+            return web.json_response({"error": "Недостаточно коинов" if currency == "coins" else "Недостаточно средств"}, status=400)
+
+        # Атомарное списание за всё количество сразу — защита от гонок баланса
+        cursor.execute(f"UPDATE users SET {balance_field} = COALESCE({balance_field}, 0) - %s WHERE user_id = %s AND COALESCE({balance_field}, 0) >= %s", (total_price, user_id, total_price))
+        if cursor.rowcount == 0:
+            conn.rollback()
+            conn.close()
+            return web.json_response({"error": "Недостаточно средств для открытия кейса"}, status=400)
+
+    # Буст везения из пасса: x2/x4 = столько прокруток, берётся самый дорогой предмет
+    boost_mult = 1
+    active_boost = bp_get_boost(cursor, user_id)
+    if active_boost:
+        boost_mult = active_boost["boost"]
 
     items = []
     got_rare_drop = False
+    rare_count = 0
     for _ in range(count):
-        roll = random.randint(1, 100)
-        current_sum = 0
         won_item = None
-        for name, price, chance in case_info["items"]:
-            current_sum += chance
-            if roll <= current_sum:
-                won_item = (name, price, chance)
-                break
+        for _try in range(boost_mult):
+            roll = random.randint(1, 100)
+            current_sum = 0
+            cand = None
+            for name, price, chance in case_info["items"]:
+                current_sum += chance
+                if roll <= current_sum:
+                    cand = (name, price, chance)
+                    break
+            if cand is None:
+                continue  # пусто не бьёт предмет: с бустом берётся лучший исход
+            if won_item is None or cand[1] > won_item[1]:
+                won_item = cand
         item_type = case_info.get("item_type", "normal")
         if won_item:
             name, price, chance = won_item
             if chance <= 5:
                 got_rare_drop = True
+            if chance <= 15:
+                rare_count += 1
             cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s) RETURNING id", (user_id, name, price, item_type))
             inv_id = cursor.fetchone()[0]
             items.append({"id": inv_id, "name": name, "price": price, "item_type": item_type})
@@ -2407,9 +2839,14 @@ async def api_open_case(request):
 
     cursor.execute("UPDATE users SET cases_opened = COALESCE(cases_opened, 0) + %s WHERE user_id = %s", (count, user_id))
     check_achievements(cursor, user_id, {"case_legend"} if got_rare_drop else ())
+    bp_bump(cursor, user_id, "open_cases", count)
+    bp_bump(cursor, user_id, "rare_drop", rare_count)
 
     cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     balances = cursor.fetchone()
+    cursor.execute("SELECT COALESCE(free_cases, 0) FROM battle_pass WHERE user_id = %s", (user_id,))
+    fr = cursor.fetchone()
+    free_cases_now = fr[0] if fr else 0
     conn.commit()
     conn.close()
     first = next((i for i in items if i["name"]), None)
@@ -2419,7 +2856,10 @@ async def api_open_case(request):
         "items": items,
         "item_name": first["name"] if first else None,
         "item_price": first["price"] if first else 0,
-        "item_type": case_info.get("item_type", "normal"), "currency": currency
+        "item_type": case_info.get("item_type", "normal"), "currency": currency,
+        "free_cases": free_cases_now,
+        "boost": active_boost,
+        "free_used": free_used
     })
 
 async def api_sell_item(request):
@@ -2447,6 +2887,7 @@ async def api_sell_item(request):
         cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (price, user_id))
     else:
         cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (price, user_id))
+    bp_bump(cursor, user_id, "sell_value", price)
 
     cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
@@ -2488,6 +2929,7 @@ async def api_sell_items(request):
         cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (total_balance, user_id))
     if total_coins:
         cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (total_coins, user_id))
+    bp_bump(cursor, user_id, "sell_value", total_balance + total_coins)
 
     check_achievements(cursor, user_id)
     cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
@@ -2528,6 +2970,7 @@ async def api_sell_all(request):
         cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (total_balance, user_id))
     if total_coins:
         cursor.execute("UPDATE users SET coins = COALESCE(coins, 0) + %s WHERE user_id = %s", (total_coins, user_id))
+    bp_bump(cursor, user_id, "sell_value", total_balance + total_coins)
 
     check_achievements(cursor, user_id)
     cursor.execute("SELECT balance, COALESCE(coins, 0) FROM users WHERE user_id = %s", (user_id,))
@@ -2644,6 +3087,7 @@ async def api_roll_sim(request):
         return web.json_response({"error": "Недостаточно средств для прокрутки!"}, status=400)
 
     new_balance = row[0]
+    bp_bump(cursor, user_id, "roll_sim", 1)
     conn.commit()
     conn.close()
 
@@ -2909,6 +3353,7 @@ async def api_market_buy_sim(request):
     new_balance = cursor.fetchone()[0]
 
     check_achievements(cursor, user_id, {"market_buy"})
+    bp_bump(cursor, user_id, "market_buy", 1)
     conn.commit()
     conn.close()
     try:
@@ -2992,6 +3437,7 @@ async def api_upgrader(request):
         if won:
             cursor.execute("INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) VALUES (%s, %s, %s, 0, %s)", (user_id, target_name, target_price, target_type))
             check_achievements(cursor, user_id, {"upgrade_win"})
+            bp_bump(cursor, user_id, "upgrade_win", 1)
         conn.commit()
         return web.json_response({"success": True, "won": won, "chance": chance})
     except Exception:
@@ -3096,6 +3542,9 @@ async def web_server():
     app.router.add_post("/api/sell_item", api_sell_item)
     app.router.add_post("/api/sell_items", api_sell_items)
     app.router.add_post("/api/sell_all", api_sell_all)
+    app.router.add_get("/api/battle_pass", api_battle_pass)
+    app.router.add_post("/api/battle_pass/claim", api_bp_claim)
+    app.router.add_post("/api/battle_pass/claim_quest", api_bp_claim_quest)
     app.router.add_post("/api/upgrader", api_upgrader)
     app.router.add_post("/api/crash", api_crash_bet)
     
