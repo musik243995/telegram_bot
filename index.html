@@ -383,9 +383,19 @@
         .bp-cell.locked { opacity: 0.55; }
         .bp-cell.ready { border-color: #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.35); background: #241436; }
         .bp-cell.claimed { border-color: #10b981; background: #0f2922; }
-        .bp-reward { font-size: 0.67rem; font-weight: 700; color: #fff; line-height: 1.22; }
-        .bp-reward.boost-x2 { color: #86efac; }
-        .bp-reward.boost-x4 { color: #fbbf24; text-shadow: 0 0 8px rgba(251, 191, 36, 0.65); }
+        .bp-cell-center {
+            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 6px; width: 100%; min-height: 74px;
+        }
+        .bp-cell-emoji { font-size: 1.9rem; line-height: 1; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45)); }
+        .bp-cell-info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .bp-cell-money { font-size: 0.78rem; font-weight: 900; color: #86efac; white-space: nowrap; }
+        .bp-cell-x { font-size: 1.05rem; font-weight: 900; line-height: 1; }
+        .bp-cell-info.boost-x2 .bp-cell-x { color: #86efac; }
+        .bp-cell-info.boost-x4 .bp-cell-x { color: #fbbf24; text-shadow: 0 0 8px rgba(251, 191, 36, 0.65); }
+        .bp-cell-time { font-size: 0.64rem; font-weight: 800; color: #c4b5fd; white-space: nowrap; }
+        .bp-cell-case { font-size: 0.78rem; font-weight: 900; color: #fff; line-height: 1; }
+        .bp-cell-case-name { font-size: 0.66rem; font-weight: 700; color: #fdba74; white-space: nowrap; }
         .bp-claim-btn {
             width: 100%; padding: 6px 3px; border: none; border-radius: 8px;
             background: linear-gradient(135deg, #f59e0b, #d97706); color: #1a0b2e;
@@ -2349,14 +2359,30 @@
             if (claimed) cls += ' claimed';
             else if (canClaim) cls += ' ready';
             else cls += ' locked';
-            let rewardCls = 'bp-reward';
-            if (r.kind === 'boost') rewardCls += (r.boost === 4 ? ' boost-x4' : ' boost-x2');
             let btn;
             if (claimed) btn = '<button class="bp-claim-btn done" disabled>✅ Забрано</button>';
             else if (canClaim) btn = `<button class="bp-claim-btn" onclick="claimBpLevel(${lv},'${track}')">Забрать</button>`;
             else btn = '<button class="bp-claim-btn off" disabled>🔒</button>';
+            // Центр ячейки: эмодзи среднего размера, под ним — суть награды
+            let info;
+            if (r.kind === 'boost') {
+                info = `<div class="bp-cell-info boost-x${r.boost}">
+                            <span class="bp-cell-x">x${r.boost}</span>
+                            <span class="bp-cell-time">${r.duration} сек</span>
+                        </div>`;
+            } else if (r.kind === 'balance') {
+                info = `<div class="bp-cell-info"><span class="bp-cell-money">${(r.amount || 0).toLocaleString('ru-RU')} ¢</span></div>`;
+            } else {
+                info = `<div class="bp-cell-info">
+                            <span class="bp-cell-case">Кейс</span>
+                            <span class="bp-cell-case-name">«Квартира»${r.amount > 1 ? ' ×' + r.amount : ''}</span>
+                        </div>`;
+            }
             return `<div class="${cls}">
-                <div class="${rewardCls}">${r.emoji} ${r.name}</div>
+                <div class="bp-cell-center">
+                    <div class="bp-cell-emoji">${r.emoji}</div>
+                    ${info}
+                </div>
                 ${btn}
             </div>`;
         }
