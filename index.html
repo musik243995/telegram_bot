@@ -1055,7 +1055,7 @@
         // --- Батл-пасс: состояние (всё приходит с сервера) ---
         let bpState = null;        // полный стейт /api/battle_pass
         let userFreeCases = 0;     // бесплатные кейсы «Квартира» из пасса
-        let bpBoost = null;        // {boost: 2|4, until: server_ts}
+        let bpBoost = null;        // {boost: 2|4, until, left, recvAt} — left/recvAt: серверные секунды + монотонная отметка
         let bpSeason = null;       // {active, days_left}
         let bpServerDelta = 0;     // серверное время минус клиентское (сек)
 
@@ -1203,7 +1203,7 @@
 
                 // Батл-пасс: бесплатные кейсы, активный буст, сезон (кнопка исчезает после 31 дня)
                 if (typeof data.free_cases === 'number') userFreeCases = data.free_cases;
-                if (data.bp_boost) bpBoost = data.bp_boost;
+                if (data.bp_boost) setBpBoost(data.bp_boost);
                 if (data.bp_season) {
                     bpSeason = data.bp_season;
                     const bpBtn = document.getElementById('bp-entry-btn');
@@ -2286,21 +2286,41 @@
             document.getElementById('user-coins').innerText = `🪙 ${userCoins} коинов`;
         }
 
-        // Клевер-буст: 🍀 x2 (зелёный) / x4 (золотой) + таймер справа
+        // Клевер-буст: 🍀 x2 (зелёный) / x4 (золотой) + таймер справа.
+        // Таймер отсчитывается от серверных секунд (bpBoost.left) собственным
+        // монотонным счётчиком performance.now(): кривые часы устройства
+        // (расхождение с сервером на минуты) на отсчёт не влияют.
+        function setBpBoost(b) {
+            bpBoost = b ? {
+                boost: b.boost,
+                until: b.until,
+                left: b.left,                    // серверные секунды до конца на момент ответа
+                recvAt: performance.now()        // монотонная отметка момента получения
+            } : null;
+        }
+
+        function bpBoostLeftSec() {
+            if (!bpBoost) return 0;
+            if (typeof bpBoost.left === 'number') {
+                return Math.max(0, bpBoost.left - (performance.now() - bpBoost.recvAt) / 1000);
+            }
+            // запасной путь для старого ответа без поля left
+            return Math.max(0, bpBoost.until - (Date.now() / 1000 + bpServerDelta));
+        }
+
         function updateBoostBadge() {
             const badge = document.getElementById('bp-boost-badge');
             if (!badge) return;
-            const nowSrv = Date.now() / 1000 + bpServerDelta;
-            if (bpBoost && bpBoost.until > nowSrv) {
+            const left = Math.ceil(bpBoostLeftSec());
+            if (bpBoost && left > 0) {
                 badge.classList.add('active');
                 badge.classList.toggle('golden', bpBoost.boost === 4);
                 document.getElementById('bp-boost-mult').textContent = 'x' + bpBoost.boost;
-                const left = Math.max(0, Math.ceil(bpBoost.until - nowSrv));
                 document.getElementById('bp-boost-timer').textContent =
                     Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
             } else {
                 badge.classList.remove('active');
-                if (bpBoost && bpBoost.until <= nowSrv) bpBoost = null;
+                if (bpBoost) bpBoost = null;
             }
         }
         setInterval(updateBoostBadge, 500);
@@ -2341,7 +2361,7 @@
                 if (!data.success) { alert(data.error || 'Ошибка загрузки батл-пасса'); closeBattlePass(); return; }
                 bpState = data;
                 if (data.server_now) bpServerDelta = data.server_now - Date.now() / 1000;
-                bpBoost = data.boost;
+                setBpBoost(data.boost);
                 if (typeof data.free_cases === 'number') userFreeCases = data.free_cases;
                 updateBoostBadge();
                 updateFreeCasesBadge();
@@ -2489,7 +2509,7 @@
                     userCoins = data.state.new_coins || 0;
                     updateBalanceUI();
                 }
-                bpBoost = data.state.boost;
+                setBpBoost(data.state.boost);
                 userFreeCases = data.state.free_cases;
                 updateBoostBadge();
                 updateFreeCasesBadge();

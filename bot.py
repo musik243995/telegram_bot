@@ -361,9 +361,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS battle_pass_boosts (
             user_id BIGINT PRIMARY KEY,
             boost INTEGER DEFAULT 0,
-            until_ts REAL DEFAULT 0
+            until_ts DOUBLE PRECISION DEFAULT 0
         )
     """)
+    # Миграция старых таблиц: REAL (float32) на эпохе ~1.8e9 округляет с шагом
+    # 128 секунд — таймер буста «врал». Идемпотентно переводим на точный double.
+    cursor.execute("ALTER TABLE battle_pass_boosts ALTER COLUMN until_ts TYPE DOUBLE PRECISION USING until_ts::DOUBLE PRECISION")
+    cursor.execute("ALTER TABLE battle_pass_settings ALTER COLUMN started_at TYPE DOUBLE PRECISION USING started_at::DOUBLE PRECISION")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS battle_pass_daily (
             user_id BIGINT,
@@ -2552,8 +2556,11 @@ def bp_season(cursor):
 def bp_get_boost(cursor, user_id):
     cursor.execute("SELECT boost, until_ts FROM battle_pass_boosts WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
-    if row and row[0] in (2, 4) and row[1] > time.time():
-        return {"boost": row[0], "until": row[1]}
+    now = time.time()
+    if row and row[0] in (2, 4) and row[1] > now:
+        # left — секунды до конца буста, посчитанные на СЕРВЕРЕ: клиент отсчитывает
+        # их своим монотонным таймером, поэтому кривые часы устройства не влияют
+        return {"boost": row[0], "until": row[1], "left": max(0.0, row[1] - now)}
     return None
 
 
