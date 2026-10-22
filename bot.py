@@ -2782,9 +2782,9 @@ async def api_open_case(request):
     currency = case_info["currency"]
     balance_field = "coins" if currency == "coins" else "balance"
 
-    # Бесплатные кейсы батл-пасса («Квартира кейс») списываются первыми, остальное — за деньги
+    # Бесплатные кейсы батл-пасса («Хеллоуин кейс») списываются первыми, остальное — за деньги
     free_used = 0
-    if case_id == 1:
+    if case_id == 6:
         cursor.execute("SELECT COALESCE(free_cases, 0) FROM battle_pass WHERE user_id = %s FOR UPDATE", (user_id,))
         fr = cursor.fetchone()
         have = fr[0] if fr else 0

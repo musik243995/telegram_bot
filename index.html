@@ -453,7 +453,7 @@
         .bp-boost-badge.golden .clover { filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.95)) saturate(1.7); }
         .bp-boost-badge.golden .mult { color: #fbbf24; }
 
-        /* Бесплатные кейсы в комнате «Квартира кейс» */
+        /* Бесплатные кейсы в комнате «Хеллоуин кейс» */
         .free-cases-badge {
             display: none; width: fit-content;
             background: linear-gradient(135deg, #7c2fd6, #4c1d95);
@@ -1059,7 +1059,7 @@
 
         // --- Батл-пасс: состояние (всё приходит с сервера) ---
         let bpState = null;        // полный стейт /api/battle_pass
-        let userFreeCases = 0;     // бесплатные кейсы «Квартира» из пасса
+        let userFreeCases = 0;     // бесплатные кейсы «Хеллоуин кейс» из пасса
         let bpBoost = null;        // {boost: 2|4, until, left, recvAt} — left/recvAt: серверные секунды + монотонная отметка
         let bpSeason = null;       // {active, days_left}
         let bpServerDelta = 0;     // серверное время минус клиентское (сек)
@@ -1136,7 +1136,7 @@
             if (!btn || !activeCaseId) return;
             const c = casesData.find(x => x.id === activeCaseId);
             if (!c) return;
-            // «Квартира кейс»: бесплатные кейсы из пасса списываются первыми
+            // «Хеллоуин кейс»: бесплатные кейсы из пасса списываются первыми
             if (activeCaseId === 1 && userFreeCases > 0) {
                 const free = Math.min(userFreeCases, activeCaseCount);
                 const paid = activeCaseCount - free;
