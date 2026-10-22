@@ -2462,8 +2462,8 @@ def bp_reward(level, track):
         return {"kind": "boost", "boost": 2, "duration": boost_secs, "emoji": "🍀",
                 "name": f"x2 везение в кейсах · {boost_secs} сек"}
     cases = 2 if donate else 1
-    return {"kind": "free_case", "emoji": "🎁", "amount": cases,
-            "name": f"Бесплатный кейс «Квартира» ×{cases}"}
+    return {"kind": "free_case", "emoji": "🎃", "amount": cases,
+            "name": f"Бесплатный кейс «Хеллоуин кейс» ×{cases}"}
 
 
 # Пул ежедневных квестов: сложность 0/1/2 -> цель и награда
