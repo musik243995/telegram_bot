@@ -72,6 +72,8 @@
         .drop-list { font-size: 0.85rem; color: var(--muted); margin: 15px 0; line-height: 1.5; background: var(--card); padding: 12px; border-radius: 12px; border: 1px solid #312e81; }
         .open-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #8b5cf6, #6d28d9); border: none; color: white; border-radius: 14px; font-weight: 800; cursor: pointer; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); transition: 0.2s; }
         .open-btn:active { transform: scale(0.98); }
+        .open-btn.case-opening { animation: caseOpeningPulse 1.1s ease-in-out infinite; }
+        @keyframes caseOpeningPulse { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.25); } }
         .case-btn-row { display: flex; gap: 10px; }
         .case-btn-row .open-btn { flex: 1; font-size: 1rem; white-space: nowrap; overflow: hidden; }
         .sell-won-btn { background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35); }
@@ -1228,7 +1230,7 @@
 
         async function openCurrentCase() {
             if(!activeCaseId) return;
-            if(caseOpening) return;   // уже крутим — не даём открыть ещё раз
+            if(caseOpening) { showCaseWaitMessage(); return; }   // уже крутим — показываем сообщение
             const caseItem = casesData.find(c => c.id === activeCaseId);
             if(!caseItem) return;
             const count = activeCaseCount;
@@ -1337,12 +1339,36 @@
             caseOpening = locked;
             const btn = document.getElementById('open-case-btn');
             if (!btn) return;
-            btn.disabled = locked;
+            // Кнопку НЕ отключаем (disabled/pointer-events), чтобы повторное нажатие
+            // доходило до обработчика и показывало «Подожди, пока откроется кейс»
             btn.style.opacity = locked ? '0.55' : '';
-            btn.style.cursor = locked ? 'default' : '';
-            btn.style.pointerEvents = locked ? 'none' : '';
+            btn.classList.toggle('case-opening', locked);
             if (locked) btn.innerText = '🌀 Крутим...';
             else updateOpenBtnLabel();
+        }
+
+        function showCaseWaitMessage() {
+            // Вибрация в Telegram (если доступна)
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch (e) {}
+            let el = document.getElementById('case-wait-toast');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'case-wait-toast';
+                el.textContent = '⏳ Подожди, пока откроется кейс';
+                el.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(0.9);'
+                    + 'background:rgba(22,12,34,0.96);color:#ffd166;border:1px solid #ff9f1c;border-radius:16px;'
+                    + 'padding:16px 24px;font-weight:800;font-size:15px;z-index:100000;text-align:center;'
+                    + 'box-shadow:0 10px 30px rgba(0,0,0,0.55);opacity:0;pointer-events:none;'
+                    + 'transition:opacity .15s ease, transform .15s ease;max-width:80vw;';
+                document.body.appendChild(el);
+            }
+            el.style.opacity = '1';
+            el.style.transform = 'translate(-50%,-50%) scale(1)';
+            clearTimeout(el._hideTimer);
+            el._hideTimer = setTimeout(() => {
+                el.style.opacity = '0';
+                el.style.transform = 'translate(-50%,-50%) scale(0.9)';
+            }, 1700);
         }
 
         function spawnCaseConfetti() {

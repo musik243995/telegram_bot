@@ -27,6 +27,12 @@ router = Router()
 dp = Dispatcher()
 dp.include_router(router)
 
+# --- ЗАЩИТА ОТ ДВОЙНОГО ОТКРЫТИЯ КЕЙСА ---
+# user_id -> timestamp последнего успешно начатого открытия.
+# Второй запрос в течение 1 секунды (двойной клик / две вкладки) отклоняется.
+CASE_OPEN_GUARD = {}
+CASE_OPEN_COOLDOWN = 1.0
+
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
     waiting_for_balance_change = State()
@@ -2796,6 +2802,11 @@ async def api_open_case(request):
     if not case_info:
         return web.json_response({"error": "Кейс не найден"}, status=400)
 
+    # Двойной клик / повторный запрос, пока открывается предыдущий кейс
+    now_ts = time.time()
+    if now_ts - CASE_OPEN_GUARD.get(user_id, 0) < CASE_OPEN_COOLDOWN:
+        return web.json_response({"error": "⏳ Подожди, пока откроется кейс"}, status=429)
+
     try:
         count = int(data.get("count", 1))
     except (TypeError, ValueError):
@@ -2833,6 +2844,9 @@ async def api_open_case(request):
             conn.rollback()
             conn.close()
             return web.json_response({"error": "Недостаточно средств для открытия кейса"}, status=400)
+
+    # Открытие началось — запоминаем время, чтобы дубль в течение секунды отклонить
+    CASE_OPEN_GUARD[user_id] = now_ts
 
     # Буст везения из пасса: x2/x4 = столько прокруток, берётся самый дорогой предмет
     boost_mult = 1
