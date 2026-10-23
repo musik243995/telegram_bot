@@ -28,10 +28,9 @@ dp = Dispatcher()
 dp.include_router(router)
 
 # --- ЗАЩИТА ОТ ДВОЙНОГО ОТКРЫТИЯ КЕЙСА ---
-# user_id -> timestamp последнего успешно начатого открытия.
-# Второй запрос в течение 1 секунды (двойной клик / две вкладки) отклоняется.
-CASE_OPEN_GUARD = {}
-CASE_OPEN_COOLDOWN = 1.0
+# Минимальный интервал между открытиями кейсов одного пользователя (сек).
+# Проверяется в БД по users.last_case_open_ts, поэтому работает при любом кеше клиента.
+CASE_OPEN_COOLDOWN = 5.0
 
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
@@ -251,6 +250,7 @@ def init_db():
         )
     """)
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS cases_opened INTEGER DEFAULT 0")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_case_open_ts DOUBLE PRECISION DEFAULT 0")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_achievements (
             user_id BIGINT,
@@ -2413,7 +2413,11 @@ async def telegram_auth_middleware(request, handler):
     return await handler(request)
 
 async def index_handler(request):
-    return web.FileResponse("index.html")
+    resp = web.FileResponse("index.html")
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 async def api_get_data(request):
     user_id = api_uid(request)
@@ -2802,11 +2806,6 @@ async def api_open_case(request):
     if not case_info:
         return web.json_response({"error": "Кейс не найден"}, status=400)
 
-    # Двойной клик / повторный запрос, пока открывается предыдущий кейс
-    now_ts = time.time()
-    if now_ts - CASE_OPEN_GUARD.get(user_id, 0) < CASE_OPEN_COOLDOWN:
-        return web.json_response({"error": "⏳ Подожди, пока откроется кейс"}, status=429)
-
     try:
         count = int(data.get("count", 1))
     except (TypeError, ValueError):
@@ -2817,6 +2816,21 @@ async def api_open_case(request):
     cursor = conn.cursor()
     currency = case_info["currency"]
     balance_field = "coins" if currency == "coins" else "balance"
+
+    # Двойной клик: защита на уровне БД (работает даже при старом кеше и нескольких воркерах).
+    # FOR UPDATE сериализует параллельные запросы одного пользователя.
+    now_ts = time.time()
+    cursor.execute("SELECT COALESCE(last_case_open_ts, 0) FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
+    guard_row = cursor.fetchone()
+    if not guard_row:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"error": "Пользователь не найден"}, status=400)
+    if now_ts - float(guard_row[0] or 0) < CASE_OPEN_COOLDOWN:
+        conn.rollback()
+        conn.close()
+        return web.json_response({"error": "⏳ Подожди, пока откроется кейс"}, status=429)
+    cursor.execute("UPDATE users SET last_case_open_ts = %s WHERE user_id = %s", (now_ts, user_id))
 
     # Бесплатные кейсы батл-пасса («Хеллоуин кейс») списываются первыми, остальное — за деньги
     free_used = 0
@@ -2844,9 +2858,6 @@ async def api_open_case(request):
             conn.rollback()
             conn.close()
             return web.json_response({"error": "Недостаточно средств для открытия кейса"}, status=400)
-
-    # Открытие началось — запоминаем время, чтобы дубль в течение секунды отклонить
-    CASE_OPEN_GUARD[user_id] = now_ts
 
     # Буст везения из пасса: x2/x4 = столько прокруток, берётся самый дорогой предмет
     boost_mult = 1
@@ -3623,10 +3634,12 @@ async def main():
     init_db()
     
     from aiogram.types import MenuButtonWebApp, WebAppInfo
+    # Меняем версию URL, чтобы Telegram принудительно перекачивал WebApp при деплое
+    web_app_url = "https://telegram-bot-tg9i.onrender.com?v=" + str(int(time.time()))
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(
             text="🎰 Кейсы",
-            web_app=WebAppInfo(url="https://telegram-bot-tg9i.onrender.com")
+            web_app=WebAppInfo(url=web_app_url)
         )
     )
     
