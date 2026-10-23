@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Игровой Центр 🎃 v1792669000</title>
+    <title>Игровой Центр 🎃 v1792778300</title>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -1059,6 +1059,7 @@
 
         // Выигранные в последнем открытии предметы — их можно быстро продать кнопкой слева от «Открыть»
         let lastWonIds = [];
+        let sellingWon = false;    // защита от двойного клика по «Продать»
 
         // --- Батл-пасс: состояние (всё приходит с сервера) ---
         let bpState = null;        // полный стейт /api/battle_pass
@@ -1103,7 +1104,10 @@
         }
 
         async function sellWonItems() {
-            if (!lastWonIds.length) return;
+            if (!lastWonIds.length || sellingWon) return;
+            const sellBtn = document.getElementById('sell-won-btn');
+            sellingWon = true;
+            if (sellBtn) { sellBtn.disabled = true; sellBtn.style.opacity = '0.6'; }
             try {
                 const res = await fetch('/api/sell_items', {
                     method: 'POST',
@@ -1122,10 +1126,14 @@
                 if (data.total_coins) parts.push(`+${data.total_coins.toLocaleString('ru-RU')} коинов`);
                 document.getElementById('win-notification').innerText = `💰 Продано выигранное (${data.sold_count} шт.): ${parts.join(' и ')}`;
                 lastWonIds = [];
-                updateSellWonBtn();
                 await loadInventory();
                 initUpgraderView();
             } catch(e) { alert('❌ Ошибка соединения'); }
+            finally {
+                sellingWon = false;
+                if (sellBtn) { sellBtn.disabled = false; sellBtn.style.opacity = ''; }
+                updateSellWonBtn();
+            }
         }
 
         function setCaseCount(n) {
@@ -1277,10 +1285,10 @@
             const wonItems = serverItems.map(si => si.name
                 ? (caseItem.items.find(i => i.name === si.name) || {name: si.name, price: si.price, emoji: '🎁', chance: 50})
                 : null);
-            // Запоминаем выигрыш с серверными id — кнопка «Продать» слева от «Открыть»
-            // (накапливаем всё выигранное в этой комнате, пока не продадут)
+            // Заменяем список: кнопка «Продать» продаёт ТОЛЬКО предметы последнего открытия.
+            // Ранее не проданные предметы остаются в инвентаре и не попадают под эту кнопку.
             const newIds = serverItems.filter(si => si.id && si.name).map(si => si.id);
-            lastWonIds = lastWonIds.concat(newIds);
+            lastWonIds = newIds.slice();
             updateSellWonBtn();
 
             const area = document.getElementById('roulette-area');
