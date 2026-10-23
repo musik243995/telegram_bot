@@ -874,6 +874,7 @@
         let selectedItemForSell = null;
         let activeCaseId = null;
         let activeCaseCount = 1;
+        let caseOpening = false;   // защита от повторного нажатия «Открыть кейс» во время прокрутки
 
         let casesOpenedCount = 0;
         let userMedals = '';
@@ -1138,6 +1139,7 @@
         function updateOpenBtnLabel() {
             const btn = document.getElementById('open-case-btn');
             if (!btn || !activeCaseId) return;
+            if (caseOpening) return;   // пока крутится — не трогаем текст/состояние кнопки
             const c = casesData.find(x => x.id === activeCaseId);
             if (!c) return;
             // «Хеллоуин кейс»: бесплатные кейсы из пасса списываются первыми
@@ -1226,7 +1228,9 @@
 
         async function openCurrentCase() {
             if(!activeCaseId) return;
+            if(caseOpening) return;   // уже крутим — не даём открыть ещё раз
             const caseItem = casesData.find(c => c.id === activeCaseId);
+            if(!caseItem) return;
             const count = activeCaseCount;
             // Бесплатные кейсы «Хеллоуин кейс» покрывают часть/всё открытие — проверяем только платную часть
             const freeUsed = (activeCaseId === 6) ? Math.min(userFreeCases, count) : 0;
@@ -1237,13 +1241,22 @@
                 return;
             }
 
-            const res = await fetch('/api/open_case', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id: userId, case_id: activeCaseId, count: count})
-            });
-            const data = await res.json();
-            if(!res.ok || data.error) { alert(data.error || 'Ошибка открытия кейса'); return; }
+            setCaseOpeningLock(true);
+            let data;
+            try {
+                const res = await fetch('/api/open_case', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, case_id: activeCaseId, count: count})
+                });
+                data = await res.json();
+                if(!res.ok || data.error) { alert(data.error || 'Ошибка открытия кейса'); setCaseOpeningLock(false); return; }
+            } catch (e) {
+                console.error(e);
+                alert('Ошибка сети при открытии кейса');
+                setCaseOpeningLock(false);
+                return;
+            }
 
             userBalance = data.new_balance;
             userCoins = data.new_coins || 0;
@@ -1316,7 +1329,20 @@
                 }
                 loadInventory();
                 initUpgraderView();
+                setCaseOpeningLock(false);
             }, finishDelay);
+        }
+
+        function setCaseOpeningLock(locked) {
+            caseOpening = locked;
+            const btn = document.getElementById('open-case-btn');
+            if (!btn) return;
+            btn.disabled = locked;
+            btn.style.opacity = locked ? '0.55' : '';
+            btn.style.cursor = locked ? 'default' : '';
+            btn.style.pointerEvents = locked ? 'none' : '';
+            if (locked) btn.innerText = '🌀 Крутим...';
+            else updateOpenBtnLabel();
         }
 
         function spawnCaseConfetti() {

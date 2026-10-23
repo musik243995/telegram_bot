@@ -1402,12 +1402,13 @@ def get_company_data_and_keyboard(user_id):
     else:
         level, last_claim, earned_bal = comp
         now = time.time()
-        hours_passed = (now - last_claim) / 3600
+        # Защита от минуса: если часы отрицательные (рассинхрон) — берём 0, максимум 24ч
+        hours_passed = max(0.0, (now - last_claim) / 3600)
         if hours_passed > 24: hours_passed = 24
             
         current_income_per_hour = COMPANY_LEVELS[level]["income"]
         accrued = int(hours_passed * current_income_per_hour)
-        total_available = earned_bal + accrued
+        total_available = max(0, (earned_bal or 0) + accrued)
         
         lvl_info = COMPANY_LEVELS[level]
         if level < 5:
@@ -1443,28 +1444,39 @@ async def callback_buy_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    # Блокируем строку пользователя до конца транзакции: две параллельные покупки не спишут баланс дважды
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
-    cursor.execute("SELECT 1 FROM user_companies WHERE user_id = %s", (user_id,))
-    if cursor.fetchone():
+    try:
+        # Блокируем строку пользователя до конца транзакции
+        cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
+        row = cursor.fetchone()
+        if not row:
+            await callback.answer("❌ Пользователь не найден", show_alert=True)
+            return
+        bal = row[0]
+        cursor.execute("SELECT 1 FROM user_companies WHERE user_id = %s", (user_id,))
+        if cursor.fetchone():
+            await callback.answer("⚠️ У вас уже есть компания!", show_alert=True)
+            return
+        cost = 100_000_000
+        if bal < cost:
+            await callback.answer("❌ У вас недостаточно наличных для покупки компании (нужно 100 млн ¢)!", show_alert=True)
+            return
+        cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s", (cost, user_id, cost))
+        if cursor.rowcount == 0:
+            await callback.answer("❌ Недостаточно средств", show_alert=True)
+            return
+        cursor.execute("INSERT INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (%s, 1, %s, 0)", (user_id, time.time()))
+        conn.commit()
+        await callback.answer("🎉 Вы успешно купили компанию по флипингу 1 уровня!", show_alert=True)
+        text, keyboard = get_company_data_and_keyboard(user_id)
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+        except Exception:
+            pass
+    except Exception as e:
+        conn.rollback()
+        await callback.answer("❌ Ошибка при покупке компании", show_alert=True)
+    finally:
         conn.close()
-        await callback.answer("⚠️ У вас уже есть компания!", show_alert=True)
-        return
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s", (user_id,))
-    bal = cursor.fetchone()[0]
-    cost = 100_000_000
-    if bal < cost:
-        await callback.answer("❌ У вас недостаточно наличных для покупки компании (нужно 100 млн ¢)!", show_alert=True)
-        conn.close()
-        return
-    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (cost, user_id))
-    cursor.execute("INSERT INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (%s, 1, %s, 0) ON CONFLICT (user_id) DO UPDATE SET level = 1, last_claim = EXCLUDED.last_claim, earned_balance = 0", (user_id, time.time()))
-    conn.commit()
-    conn.close()
-    await callback.answer("🎉 Вы успешно купили компанию по флипингу 1 уровня!", show_alert=True)
-    text, keyboard = get_company_data_and_keyboard(user_id)
-    try: await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
-    except: pass
 
 @router.callback_query(F.data == "company_get_profit")
 async def callback_claim_company(callback: CallbackQuery):
@@ -1479,11 +1491,12 @@ async def callback_claim_company(callback: CallbackQuery):
         return
     level, last_claim, earned_bal = comp
     now = time.time()
-    hours_passed = (now - last_claim) / 3600
+    # Защита от минуса: если часы отрицательные (рассинхрон) — берём 0, максимум 24ч
+    hours_passed = max(0.0, (now - last_claim) / 3600)
     if hours_passed > 24: hours_passed = 24
     current_income_per_hour = COMPANY_LEVELS[level]["income"]
     accrued = int(hours_passed * current_income_per_hour)
-    total_to_claim = earned_bal + accrued
+    total_to_claim = max(0, (earned_bal or 0) + accrued)
     if total_to_claim <= 0:
         await callback.answer("❌ Пока еще ничего не накопилось!", show_alert=True)
         conn.close()
@@ -1502,38 +1515,50 @@ async def callback_upgrade_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = %s", (user_id,))
-    comp = cursor.fetchone()
-    if not comp:
-        await callback.answer("❌ У вас нет компании.", show_alert=True)
+    try:
+        cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = %s FOR UPDATE", (user_id,))
+        comp = cursor.fetchone()
+        if not comp:
+            await callback.answer("❌ У вас нет компании.", show_alert=True)
+            return
+        level, last_claim, earned_bal = comp
+        if level >= 5:
+            await callback.answer("⭐️ У вас уже максимальный уровень компании!", show_alert=True)
+            return
+        now = time.time()
+        next_level = level + 1
+        upgrade_cost = COMPANY_LEVELS[next_level]["cost"]
+        cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
+        bal_row = cursor.fetchone()
+        if not bal_row:
+            await callback.answer("❌ Пользователь не найден", show_alert=True)
+            return
+        bal = bal_row[0]
+        if bal < upgrade_cost:
+            await callback.answer(f"❌ Недостаточно средств для прокачки! Нужно {upgrade_cost:,} ¢".replace(",", " "), show_alert=True)
+            return
+        cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s", (upgrade_cost, user_id, upgrade_cost))
+        if cursor.rowcount == 0:
+            await callback.answer("❌ Недостаточно средств", show_alert=True)
+            return
+        # Сохраняем уже накопленную прибыль (включая доход с последнего клейма) и повышаем уровень
+        hours_passed = max(0.0, (now - last_claim) / 3600)
+        if hours_passed > 24: hours_passed = 24
+        accrued = int(hours_passed * COMPANY_LEVELS[level]["income"])
+        saved_earned = max(0, (earned_bal or 0) + accrued)
+        cursor.execute("UPDATE user_companies SET level = %s, last_claim = %s, earned_balance = %s WHERE user_id = %s", (next_level, now, saved_earned, user_id))
+        conn.commit()
+        await callback.answer(f"📈 Компания успешно прокачана до {next_level} уровня!", show_alert=True)
+        text, keyboard = get_company_data_and_keyboard(user_id)
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
+        except Exception:
+            pass
+    except Exception as e:
+        conn.rollback()
+        await callback.answer("❌ Ошибка при прокачке компании", show_alert=True)
+    finally:
         conn.close()
-        return
-    level, last_claim, earned_bal = comp
-    if level >= 5:
-        await callback.answer("⭐️ У вас уже максимальный уровень компании!", show_alert=True)
-        conn.close()
-        return
-    now = time.time()
-    hours_passed = (now - last_claim) / 3600
-    if hours_passed > 24: hours_passed = 24
-    accrued = int(hours_passed * COMPANY_LEVELS[level]["income"])
-    total_earned = earned_bal + accrued
-    next_level = level + 1
-    upgrade_cost = COMPANY_LEVELS[next_level]["cost"]
-    cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
-    bal = cursor.fetchone()[0]
-    if bal < upgrade_cost:
-        await callback.answer(f"❌ Недостаточно средств для прокачки! Нужно {upgrade_cost:,} ¢".replace(",", " "), show_alert=True)
-        conn.close()
-        return
-    cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (upgrade_cost, user_id))
-    cursor.execute("UPDATE user_companies SET level = %s, last_claim = %s, earned_balance = %s WHERE user_id = %s", (next_level, now, total_earned, user_id))
-    conn.commit()
-    conn.close()
-    await callback.answer(f"📈 Компания успешно прокачана до {next_level} уровня!", show_alert=True)
-    text, keyboard = get_company_data_and_keyboard(user_id)
-    try: await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
-    except: pass
 
 @router.message(F.text.casefold().in_(["🎰 казино", "казино"]))
 async def text_casino(message: Message):
