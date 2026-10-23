@@ -2315,7 +2315,7 @@ async def admin_donate_pass_process(message: Message, state: FSMContext):
 @router.callback_query(F.data == "admin_ban_menu")
 async def admin_ban_menu_callback(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return
-    text = "Команды в чате:\n• бан @юз\n• разбан @юз\n• выдавать креатора @юз\n• забрать креатора @юз\n• обнулить @юз"
+    text = "Команды в чате:\n• бан @юз\n• разбан @юз\n• выдавать креатора @юз\n• забрать креатора @юз\n• обнулить @юз\n• обнулить всех (сброс прогресса всех игроков)"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]])
     await callback.message.edit_text(text, reply_markup=kb)
 
@@ -2363,16 +2363,126 @@ async def admin_take_creator(message: Message):
     conn.close()
     await message.answer(f"❌ У @{uname} забран креатор.")
 
+def reset_all_players_progress(cursor):
+    """Полный сброс прогресса ВСЕХ игроков.
+    Аккаунты в users сохраняются (количество людей не меняется),
+    но прогресс, балансы, инвентарь, пасс, квесты, компании, симки и т.д. — обнуляются.
+    Возвращает (кол-во пользователей, список очищенных таблиц)."""
+    cursor.execute("""
+        SELECT table_name FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+        ORDER BY table_name
+    """)
+    tables = [r[0] for r in cursor.fetchall()]
+    cleared = []
+    for t in tables:
+        if t == 'users':
+            continue
+        cursor.execute("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = %s AND column_name = 'user_id'
+        """, (t,))
+        has_user_id = cursor.fetchone() is not None
+        # market_sims — чужие лоты на рынке (без user_id в некоторых версиях)
+        if has_user_id or t == 'market_sims':
+            cursor.execute('DELETE FROM "%s"' % t)
+            cleared.append(t)
+
+    # Сбрасываем только игровые поля users; username/custom_name/banned/is_creator не трогаем
+    cursor.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'users'
+    """)
+    user_cols = {r[0] for r in cursor.fetchall()}
+    resets = {
+        'balance': 10000,
+        'bank_balance': 0,
+        'nyachka': 0,
+        'invested': 0,
+        'bottles': 0,
+        'metal': 0,
+        'coins': 0,
+        'cases_opened': 0,
+        'last_case_open_ts': 0,
+        'last_bank_calc': 0,
+        'last_bonus': 0,
+        'last_salary': 0,
+        'referrer_id': 0,
+        'ref_count': 0,
+        'stolen': 0,
+        'has_pet': 0,
+        'has_connections': 0,
+        'has_phone': 0,
+        'gang_name': None,
+        # на случай, если в актуальной базе есть общий уровень/XP пользователя
+        'level': 1,
+        'xp': 0,
+    }
+    present = {k: v for k, v in resets.items() if k in user_cols}
+    if present:
+        set_clause = ", ".join('"%s" = %%s' % k for k in present)
+        cursor.execute("UPDATE users SET " + set_clause, list(present.values()))
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    users_count = cursor.fetchone()[0]
+    return users_count, cleared
+
+
+@router.message(F.text.casefold().startswith("обнулить всех"))
+async def admin_reset_all_players(message: Message):
+    if message.from_user.id not in ADMIN_IDS: return
+    parts = message.text.split(maxsplit=2)
+    confirm = parts[2].strip().upper() if len(parts) > 2 else ""
+    if confirm != "ОБНУЛИТЬ ВСЕХ":
+        await message.answer(
+            "⚠️ <b>ВНИМАНИЕ!</b>\n\n"
+            "Эта команда обнулит прогресс <b>ВСЕХ</b> игроков:\n"
+            "балансы, инвентарь, кейсы, квесты, достижения, батл-пасс, "
+            "компании, квартиры, симки, рынок, промо-активации и логи.\n\n"
+            "Аккаунты и их количество останутся прежними.\n\n"
+            "Если точно уверен, отправь:\n"
+            "<code>обнулить всех ОБНУЛИТЬ ВСЕХ</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        users_count, cleared = reset_all_players_progress(cursor)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        await message.answer(f"❌ Ошибка при обнулении, изменения отменены:\n{e}")
+        return
+    finally:
+        conn.close()
+
+    await message.answer(
+        "✅ <b>Все игроки обнулены!</b>\n\n"
+        f"👥 Сохранено аккаунтов: <b>{users_count}</b>\n"
+        f"🧹 Очищено таблиц: {len(cleared)}\n"
+        f"({', '.join(cleared) if cleared else '—'})\n\n"
+        "У всех снова стартовые значения: баланс 10 000 ¢, 0 коинов, "
+        "0 кейсов, пустой инвентарь, 0 XP в батл-пассе, квесты и достижения не пройдены.",
+        parse_mode="HTML"
+    )
+
+
 @router.message(F.text.casefold().startswith("обнулить "))
 async def admin_reset_user(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
-    uname = message.text.split(maxsplit=1)[1].strip().replace("@", "")
+    parts = message.text.split(maxsplit=1)
+    if len(parts) > 1 and parts[1].strip().casefold().startswith("всех"):
+        return  # «обнулить всех» обрабатывается отдельной командой
+    uname = parts[1].strip().replace("@", "")
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET balance = 10000, bank_balance = 0, nyachka = 0, invested = 0, bottles = 0, metal = 0 WHERE username = %s", (uname,))
     conn.commit()
     conn.close()
     await message.answer(f"🔄 Игрок @{uname} обнулен.")
+
 
 # --- СЕРВЕР И API ДЛЯ WEB APP КЕЙСОВ И РЫНКА ---
 INIT_DATA_MAX_AGE = 7 * 86400  # срок годности подписи initData (сек)

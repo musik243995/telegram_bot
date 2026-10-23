@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+.pg_url
+bot.py.bak
