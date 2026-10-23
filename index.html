@@ -1079,13 +1079,17 @@
             updateFreeCasesBadge();
         }
 
-        // Счётчик бесплатных кейсов «Квартира» — сверху слева в комнате кейса
         function updateFreeCasesBadge() {
             const badge = document.getElementById('free-cases-badge');
             const cnt = document.getElementById('free-cases-count');
             if (!badge || !cnt) return;
             cnt.textContent = userFreeCases;
-            badge.style.display = activeCaseId === 1 ? 'block' : 'none';
+            const caseRoom = document.getElementById('view-case-room');
+            if (caseRoom && caseRoom.classList.contains('active') && activeCaseId === 6 && userFreeCases > 0) {
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
         }
 
         function updateSellWonBtn() {
@@ -1137,7 +1141,7 @@
             const c = casesData.find(x => x.id === activeCaseId);
             if (!c) return;
             // «Хеллоуин кейс»: бесплатные кейсы из пасса списываются первыми
-            if (activeCaseId === 1 && userFreeCases > 0) {
+            if (activeCaseId === 6 && userFreeCases > 0) {
                 const free = Math.min(userFreeCases, activeCaseCount);
                 const paid = activeCaseCount - free;
                 if (paid === 0) {
@@ -1224,8 +1228,8 @@
             if(!activeCaseId) return;
             const caseItem = casesData.find(c => c.id === activeCaseId);
             const count = activeCaseCount;
-            // Бесплатные кейсы «Квартира» покрывают часть/всё открытие — проверяем только платную часть
-            const freeUsed = (activeCaseId === 1) ? Math.min(userFreeCases, count) : 0;
+            // Бесплатные кейсы «Хеллоуин кейс» покрывают часть/всё открытие — проверяем только платную часть
+            const freeUsed = (activeCaseId === 6) ? Math.min(userFreeCases, count) : 0;
             const paidCount = count - freeUsed;
             const totalPrice = caseItem.price * paidCount;
             if(paidCount > 0 && (caseItem.currency === 'coins' ? userCoins < totalPrice : userBalance < totalPrice)) {
@@ -2400,7 +2404,7 @@
             } else {
                 info = `<div class="bp-cell-info">
                             <span class="bp-cell-case">Кейс</span>
-                            <span class="bp-cell-case-name">«Квартира»${r.amount > 1 ? ' ×' + r.amount : ''}</span>
+                            <span class="bp-cell-case-name">«Хеллоуин кейс»${r.amount > 1 ? ' ×' + r.amount : ''}</span>
                         </div>`;
             }
             return `<div class="${cls}">
