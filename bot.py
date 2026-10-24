@@ -1388,34 +1388,47 @@ COMPANY_LEVELS = {
 }
 
 def get_company_data_and_keyboard(user_id):
+    """Показывает накопления и сохраняет начисленный доход в БД."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT level, last_claim, earned_balance FROM user_companies WHERE user_id = %s", (user_id,))
-    comp = cursor.fetchone()
-    conn.close()
-    
-    if not comp:
-        text = (
-            f"🏢 Компания по флипингу 💸\n\n"
-            f"У вас еще нет собственной компании.\n"
-            f"💰 Стоимость покупки: 100 000 000 ¢\n"
-            f"📈 Начальный доход: 2 500 000 ¢ в час (до 24 часов накопительно)."
-        ).replace(",", " ")
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🛒 Купить компанию (100 млн)", callback_data="buy_company")]
-        ])
-        return text, keyboard
-    else:
+    try:
+        # FOR UPDATE не позволяет одновременно начислять доход в двух обработчиках.
+        cursor.execute(
+            "SELECT level, last_claim, earned_balance "
+            "FROM user_companies WHERE user_id = %s FOR UPDATE",
+            (user_id,)
+        )
+        comp = cursor.fetchone()
+        if not comp:
+            conn.commit()
+            text = (
+                "🏢 Компания по флипингу 💸\n\n"
+                "У вас еще нет собственной компании.\n"
+                "💰 Стоимость покупки: 100 000 000 ¢\n"
+                "📈 Начальный доход: 2 500 000 ¢ в час (до 24 часов накопительно)."
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🛒 Купить компанию (100 млн)", callback_data="buy_company")]
+            ])
+            return text, keyboard
+
         level, last_claim, earned_bal = comp
         now = time.time()
-        # Защита от минуса: если часы отрицательные (рассинхрон) — берём 0, максимум 24ч
-        hours_passed = max(0.0, (now - last_claim) / 3600)
-        if hours_passed > 24: hours_passed = 24
-            
-        current_income_per_hour = COMPANY_LEVELS[level]["income"]
-        accrued = int(hours_passed * current_income_per_hour)
-        total_available = max(0, (earned_bal or 0) + accrued)
-        
+        # Защита от пустого/неверного времени и накопления более чем за 24 часа.
+        last_claim = last_claim or now
+        hours_passed = min(24.0, max(0.0, (now - last_claim) / 3600))
+        accrued = int(hours_passed * COMPANY_LEVELS[level]["income"])
+        total_available = max(0, int(earned_bal or 0)) + accrued
+
+        # Сохраняем начисленный доход и двигаем отметку времени. Благодаря этому
+        # интерфейс показывает реальный сохранённый остаток, а не пересчитывает
+        # один и тот же старый период при каждом открытии меню.
+        cursor.execute(
+            "UPDATE user_companies SET last_claim = %s, earned_balance = %s WHERE user_id = %s",
+            (now, total_available, user_id)
+        )
+        conn.commit()
+
         lvl_info = COMPANY_LEVELS[level]
         if level < 5:
             next_lvl_data = COMPANY_LEVELS[level + 1]
@@ -1428,16 +1441,19 @@ def get_company_data_and_keyboard(user_id):
         text = (
             f"🏢 Компания по флипингу 💸\n\n"
             f"• Статус: {lvl_info['name']} (Уровень {level}/5)\n"
-            f"• Доход: {current_income_per_hour:,} ¢ в час\n"
+            f"• Доход: {COMPANY_LEVELS[level]['income']:,} ¢ в час\n"
             f"• Накоплено прибыли: {total_available:,} ¢ (лимит 24ч)\n\n"
             f"{next_upgrade_text}"
         ).replace(",", " ")
-        
-        # Сделайте так:
         kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="company_get_profit")]]
-        if upgrade_btn: kb_rows.append([upgrade_btn])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=kb_rows)
-        return text, keyboard
+        if upgrade_btn:
+            kb_rows.append([upgrade_btn])
+        return text, InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 @router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
 async def text_company_menu(message: Message):
@@ -1489,17 +1505,13 @@ async def callback_claim_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-
     try:
-        # Блокируем строку компании: два одновременных нажатия не смогут
-        # забрать одну и ту же накопленную прибыль дважды.
         cursor.execute(
             "SELECT level, last_claim, earned_balance "
             "FROM user_companies WHERE user_id = %s FOR UPDATE",
             (user_id,)
         )
         comp = cursor.fetchone()
-
         if not comp:
             conn.rollback()
             await callback.answer("❌ У вас нет компании.", show_alert=True)
@@ -1507,43 +1519,34 @@ async def callback_claim_company(callback: CallbackQuery):
 
         level, last_claim, earned_bal = comp
         now = time.time()
-
-        # Максимум 24 часа накопления.
-        hours_passed = max(0.0, (now - (last_claim or now)) / 3600)
-        hours_passed = min(hours_passed, 24)
-
-        current_income_per_hour = COMPANY_LEVELS[level]["income"]
-        accrued = int(hours_passed * current_income_per_hour)
-        total_to_claim = max(0, (earned_bal or 0) + accrued)
+        last_claim = last_claim or now
+        hours_passed = min(24.0, max(0.0, (now - last_claim) / 3600))
+        accrued = int(hours_passed * COMPANY_LEVELS[level]["income"])
+        total_to_claim = max(0, int(earned_bal or 0)) + accrued
 
         if total_to_claim <= 0:
             conn.rollback()
-            await callback.answer(
-                "❌ Пока еще ничего не накопилось!",
-                show_alert=True
-            )
+            await callback.answer("❌ Пока еще ничего не накопилось!", show_alert=True)
             return
 
-        # Начисляем деньги и обнуляем накопления в одной транзакции.
+        # Оба изменения в одной транзакции: если выплата не прошла, сброс тоже отменится.
         cursor.execute(
             "UPDATE users SET balance = balance + %s WHERE user_id = %s",
             (total_to_claim, user_id)
         )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            await callback.answer("❌ Не удалось найти ваш баланс.", show_alert=True)
+            return
         cursor.execute(
-            "UPDATE user_companies "
-            "SET last_claim = %s, earned_balance = 0 "
-            "WHERE user_id = %s",
+            "UPDATE user_companies SET last_claim = %s, earned_balance = 0 WHERE user_id = %s",
             (now, user_id)
         )
         conn.commit()
-
     except Exception as e:
         conn.rollback()
         print(f"Ошибка получения прибыли компании для {user_id}: {e}")
-        await callback.answer(
-            "❌ Не удалось забрать прибыль. Попробуйте ещё раз.",
-            show_alert=True
-        )
+        await callback.answer("❌ Не удалось забрать прибыль. Попробуйте ещё раз.", show_alert=True)
         return
     finally:
         conn.close()
@@ -1554,9 +1557,7 @@ async def callback_claim_company(callback: CallbackQuery):
     )
     text, keyboard = get_company_data_and_keyboard(user_id)
     try:
-        await callback.message.edit_text(
-            text, reply_markup=keyboard, parse_mode="MARKDOWN"
-        )
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
     except Exception:
         pass
 
