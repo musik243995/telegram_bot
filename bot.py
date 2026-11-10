@@ -1468,7 +1468,8 @@ def get_company_data_and_keyboard(user_id):
             f"🏢 Компания по флипингу 💸\n\n"
             f"• Статус: {lvl_info['name']} (Уровень {level}/5)\n"
             f"• Доход: {hourly_income:,} ¢ в час (~{per_second_text} ¢/сек)\n"
-            f"• Накоплено прибыли: {total_available:,} ¢ (лимит 24ч)\n\n"
+            f"• Накоплено прибыли: {total_available:,} ¢ (лимит 24ч)\n"
+            f"• Забор забирает всю сумму до нуля, дальше копится с 0 по секундной ставке\n\n"
             f"{next_upgrade_text}"
         ).replace(",", " ")
         kb_rows = [[InlineKeyboardButton(text=f"💶 Забрать: {total_available:,} ¢".replace(",", " "), callback_data="company_get_profit")]]
@@ -1665,10 +1666,9 @@ async def callback_upgrade_company(callback: CallbackQuery):
         if cursor.rowcount == 0:
             await callback.answer("❌ Недостаточно средств", show_alert=True)
             return
-        # Сохраняем уже накопленную прибыль (включая доход с последнего клейма) и повышаем уровень
-        elapsed_seconds = min(24 * 3600, max(0, int(now - (last_claim or now))))
-        accrued = (elapsed_seconds * COMPANY_LEVELS[level]["income"]) // 3600
-        saved_earned = max(0, int(earned_bal or 0) + accrued)
+        # При прокачке: накопленный баланс остаётся ровно тот же, что был до этого.
+        # Ничего не доначисляем — дальше прибыль копится уже по ставке нового уровня, с нуля секунд.
+        saved_earned = max(0, int(earned_bal or 0))
         cursor.execute(
             "UPDATE user_companies SET level = %s, last_claim = %s, earned_balance = %s "
             "WHERE user_id = %s RETURNING level, earned_balance",
