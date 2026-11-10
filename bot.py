@@ -1478,6 +1478,18 @@ def get_company_data_and_keyboard(user_id):
     finally:
         conn.close()
 
+async def refresh_company_view(callback: CallbackQuery, user_id: int):
+    """Обновляет сообщение компании. Если правка не удалась — присылает новое сообщение,
+    чтобы игрок никогда не смотрел на устаревшую сумму."""
+    text, keyboard = get_company_data_and_keyboard(user_id)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception:
+        try:
+            await callback.message.answer(text, reply_markup=keyboard)
+        except Exception:
+            pass
+
 @router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
 async def text_company_menu(message: Message):
     if not await check_ban_and_register(message): return
@@ -1512,11 +1524,7 @@ async def callback_buy_company(callback: CallbackQuery):
         cursor.execute("INSERT INTO user_companies (user_id, level, last_claim, earned_balance) VALUES (%s, 1, %s, 0)", (user_id, time.time()))
         conn.commit()
         await callback.answer("🎉 Вы успешно купили компанию по флипингу 1 уровня!", show_alert=True)
-        text, keyboard = get_company_data_and_keyboard(user_id)
-        try:
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
-        except Exception:
-            pass
+        await refresh_company_view(callback, user_id)
     except Exception as e:
         conn.rollback()
         await callback.answer("❌ Ошибка при покупке компании", show_alert=True)
@@ -1623,11 +1631,7 @@ async def callback_claim_company(callback: CallbackQuery):
     except Exception as e:
         print(f"[company] Проверка после клейма для {user_id} не удалась: {e!r}")
 
-    text, keyboard = get_company_data_and_keyboard(user_id)
-    try:
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
-    except Exception:
-        pass
+    await refresh_company_view(callback, user_id)
 
 
 @router.callback_query(F.data == "upgrade_company")
@@ -1665,14 +1669,19 @@ async def callback_upgrade_company(callback: CallbackQuery):
         elapsed_seconds = min(24 * 3600, max(0, int(now - (last_claim or now))))
         accrued = (elapsed_seconds * COMPANY_LEVELS[level]["income"]) // 3600
         saved_earned = max(0, int(earned_bal or 0) + accrued)
-        cursor.execute("UPDATE user_companies SET level = %s, last_claim = %s, earned_balance = %s WHERE user_id = %s", (next_level, now, saved_earned, user_id))
+        cursor.execute(
+            "UPDATE user_companies SET level = %s, last_claim = %s, earned_balance = %s "
+            "WHERE user_id = %s RETURNING level, earned_balance",
+            (next_level, now, saved_earned, user_id)
+        )
+        up_row = cursor.fetchone()
+        if not up_row or up_row[0] != next_level:
+            conn.rollback()
+            await callback.answer("❌ Не удалось прокачать компанию. Попробуйте ещё раз.", show_alert=True)
+            return
         conn.commit()
         await callback.answer(f"📈 Компания успешно прокачана до {next_level} уровня!", show_alert=True)
-        text, keyboard = get_company_data_and_keyboard(user_id)
-        try:
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
-        except Exception:
-            pass
+        await refresh_company_view(callback, user_id)
     except Exception as e:
         conn.rollback()
         await callback.answer("❌ Ошибка при прокачке компании", show_alert=True)
