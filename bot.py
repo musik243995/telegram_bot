@@ -12,7 +12,7 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from urllib.parse import quote, parse_qsl
 from aiogram import F, Bot, Dispatcher, Router
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile, WebAppInfo
 from aiogram.filters import Command, CommandObject
 from aiohttp import web
 from aiogram.fsm.context import FSMContext
@@ -37,6 +37,7 @@ class AdminStates(StatesGroup):
     waiting_for_balance_change = State()
     waiting_for_coin_exchange = State()
     waiting_for_donate_pass = State()
+    waiting_for_creator_promo = State()
 
 # --- АНТИСПАМ ФИЛЬТРЫ ---
 original_send_message = bot.send_message
@@ -107,8 +108,6 @@ def get_private_keyboard(is_creator_flag=False):
         [KeyboardButton(text="🏪 Магазин"), KeyboardButton(text="⭐ Донат")],
         [KeyboardButton(text="Прочее")]
     ]
-    if is_creator_flag:
-        kb.append([KeyboardButton(text="🎬 Креатор")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 def get_cabbage_keyboard():
@@ -319,6 +318,31 @@ def init_db():
             user_id BIGINT,
             code TEXT,
             PRIMARY KEY (user_id, code)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS creator_promo_codes (
+            code TEXT PRIMARY KEY,
+            reward BIGINT,
+            activations_left INTEGER
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS creator_promo_used (
+            user_id BIGINT,
+            code TEXT,
+            PRIMARY KEY (user_id, code)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS update_ideas (
+            id SERIAL PRIMARY KEY,
+            creator_id BIGINT,
+            creator_name TEXT,
+            title TEXT,
+            body TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at REAL
         )
     """)
     cursor.execute("""
@@ -778,6 +802,14 @@ async def cmd_obran(message: Message, command: CommandObject):
     if not amount or amount <= 0 or count <= 0:
         return await message.answer("❌ Неверная сумма или количество людей!")
 
+    per_person = amount // count
+    remainder = amount - per_person * count  # остаток вернём тому, кто обранил
+    if per_person <= 0:
+        return await message.answer("❌ Сумма слишком мала для такого количества людей!")
+
+    if amount > 99_999_999_999:
+        return await message.answer("❌ Слишком большая сумма!")
+
     user_id = message.from_user.id
     conn = get_db()
     cursor = conn.cursor()
@@ -788,28 +820,30 @@ async def cmd_obran(message: Message, command: CommandObject):
         return await message.answer("❌ У вас недостаточно наличных для этой раздачи!")
 
     cursor.execute("UPDATE users SET balance = balance - %s WHERE user_id = %s", (amount, user_id))
+    if remainder > 0:
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (remainder, user_id))
     conn.commit()
     conn.close()
 
     drop_id = f"{user_id}_{int(time.time()*1000)}"
-    per_person = amount // count
+    effective = per_person * count
 
     ACTIVE_DROPS[drop_id] = {
         "owner_id": user_id,
-        "total": amount,
+        "total": effective,
         "slots_left": count,
         "per_user": per_person,
         "claimed": []
     }
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💸 Забрать деньги", callback_data=f"claim_{drop_id}")]
+        [InlineKeyboardButton(text=f"💸 Забрать {per_person:,} ¢".replace(",", " "), callback_data=f"claim_{drop_id}")]
     ])
 
     uname = message.from_user.username or message.from_user.first_name
     text = (
         f"🎁 **Пользователь @{uname} обранил деньги!**\n\n"
-        f"💰 Сумма: `{amount:,}` ¢\n"
+        f"💰 Сумма: `{effective:,}` ¢\n"
         f"👥 Мест: `{count}` (по `{per_person:,}` ¢ на человека)\n"
         f"👇 Успей забрать первым!"
     ).replace(",", " ")
@@ -820,14 +854,14 @@ async def callback_claim_drop(callback: CallbackQuery):
     drop_id = callback.data.split("_", 1)[1]
     drop = ACTIVE_DROPS.get(drop_id)
     if not drop:
-        return await callback.answer("❌ Эта раздача уже завершена или истекла!", show_alert=True)
+        return await callback.answer("❌ Все разобрали:( ", show_alert=True)
 
     user_id = callback.from_user.id
     if user_id in drop["claimed"]:
         return await callback.answer("❌ Вы уже забрали свой процент из этой раздачи!", show_alert=True)
 
     if drop["slots_left"] <= 0:
-        return await callback.answer("❌ Все места уже разобрали!", show_alert=True)
+        return await callback.answer("❌ Все разобрали:( ", show_alert=True)
 
     drop["claimed"].append(user_id)
     drop["slots_left"] -= 1
@@ -842,7 +876,7 @@ async def callback_claim_drop(callback: CallbackQuery):
 
     if drop["slots_left"] == 0:
         try:
-            await callback.message.edit_text(callback.message.text + "\n\n✅ **Раздача полностью завершена!**", parse_mode="MARKDOWN")
+            await callback.message.edit_text(callback.message.text + "\n\n❌ **Все разобрали:(**", parse_mode="MARKDOWN")
         except:
             pass
         del ACTIVE_DROPS[drop_id]
@@ -1400,9 +1434,9 @@ def get_company_data_and_keyboard(user_id):
         comp = cursor.fetchone()
         if not comp:
             text = (
-                "🏢 Компания по флипингу 💸\\n\\n"
-                "У вас еще нет собственной компании.\\n"
-                "💰 Стоимость покупки: 100 000 000 ¢\\n"
+                "🏢 Компания по флипингу 💸\n\n"
+                "У вас еще нет собственной компании.\n"
+                "💰 Стоимость покупки: 100 000 000 ¢\n"
                 "📈 Начальный доход: 2 500 000 ¢ в час (до 24 часов накопительно)."
             )
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1420,23 +1454,24 @@ def get_company_data_and_keyboard(user_id):
         total_available = max(0, int(earned_bal or 0)) + accrued
 
         lvl_info = COMPANY_LEVELS[level]
+        upgrade_btn = None
         if level < 5:
             next_lvl_data = COMPANY_LEVELS[level + 1]
-            next_upgrade_text = f"📈 Прокачать до {level+1} ур. за {next_lvl_data['cost']:,} ¢ (будет давать {next_lvl_data['income']:,} ¢/ч)".replace(",", " ")
-            upgrade_btn = InlineKeyboardButton(text="📈 Прокачать компанию", callback_data="upgrade_company")
+            upgrade_cost_str = f"{next_lvl_data['cost']:,}".replace(",", " ")
+            next_upgrade_text = f"📈 Прокачать до {level+1} ур. за {upgrade_cost_str} ¢ (будет давать {next_lvl_data['income']:,} ¢/ч)".replace(",", " ")
+            upgrade_btn = InlineKeyboardButton(text=f"📈 Прокачать компанию (нужно {upgrade_cost_str} ¢)", callback_data="upgrade_company")
         else:
             next_upgrade_text = "⭐️ У вас максимальный 5 уровень компании!"
-            upgrade_btn = None
 
         per_second_text = f"{hourly_income / 3600:.2f}"
         text = (
-            f"🏢 Компания по флипингу 💸\\n\\n"
-            f"• Статус: {lvl_info['name']} (Уровень {level}/5)\\n"
-            f"• Доход: {hourly_income:,} ¢ в час (~{per_second_text} ¢/сек)\\n"
-            f"• Накоплено прибыли: {total_available:,} ¢ (лимит 24ч)\\n\\n"
+            f"🏢 Компания по флипингу 💸\n\n"
+            f"• Статус: {lvl_info['name']} (Уровень {level}/5)\n"
+            f"• Доход: {hourly_income:,} ¢ в час (~{per_second_text} ¢/сек)\n"
+            f"• Накоплено прибыли: {total_available:,} ¢ (лимит 24ч)\n\n"
             f"{next_upgrade_text}"
         ).replace(",", " ")
-        kb_rows = [[InlineKeyboardButton(text="💶 Забрать прибыль", callback_data="company_get_profit")]]
+        kb_rows = [[InlineKeyboardButton(text=f"💶 Забрать: {total_available:,} ¢".replace(",", " "), callback_data="company_get_profit")]]
         if upgrade_btn:
             kb_rows.append([upgrade_btn])
         return text, InlineKeyboardMarkup(inline_keyboard=kb_rows)
@@ -2151,11 +2186,130 @@ async def activate_promo_code(message: Message):
     update_quest_progress(user_id, 3, 1)
     await message.answer(f"🎉 Промокод активирован! Получено: +{reward:,} ¢".replace(",", " "))
 
-@router.message(F.text.casefold().in_(["🎬 креатор"]))
+CREATOR_SITE_URL = "https://telegram-bot-tg9i.onrender.com/creator"
+
+def get_creator_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎟 Промокод", callback_data="creator_new_promo")],
+        [InlineKeyboardButton(text="💼 ЗП (500кк)", callback_data="creator_claim_salary")],
+        [InlineKeyboardButton(text="🌐 Сайт", web_app=WebAppInfo(url=f"{CREATOR_SITE_URL}?v={int(time.time())}"))],
+        [InlineKeyboardButton(text="🚫 Бан-лист", callback_data="creator_banlist")],
+    ])
+
+@router.message(F.text.casefold().in_(["креатор", "🎬 креатор"]))
 async def text_creator_command(message: Message):
     if not await is_creator(message.from_user.id): return
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💵 Забрать ЗП (7.5 млн)", callback_data="creator_claim_salary")]])
-    await message.answer("🎬 Меню креатора:\n• Зарплата: 7.5 млн ¢\n• Промокоды (от 1кк до 10кк): Промо [код] [сумма] [активации]\nПример: Промо GG 10кк 7", reply_markup=kb)
+    await message.answer("🎬 Панель креатора:", reply_markup=get_creator_keyboard())
+
+@router.callback_query(F.data == "creator_panel")
+async def callback_creator_panel(callback: CallbackQuery):
+    if not await is_creator(callback.from_user.id): return
+    try:
+        await callback.message.edit_text("🎬 Панель креатора:", reply_markup=get_creator_keyboard())
+    except Exception:
+        await callback.message.answer("🎬 Панель креатора:", reply_markup=get_creator_keyboard())
+    await callback.answer()
+
+@router.callback_query(F.data == "creator_new_promo")
+async def callback_creator_new_promo(callback: CallbackQuery, state: FSMContext):
+    if not await is_creator(callback.from_user.id): return
+    await callback.message.answer(
+        "🎟 Создание промокода:\n\n"
+        "Пример: промокод ASMM 1кк 16\n"
+        "• первый арг — сам промокод\n"
+        "• второе — сумма (кк / ккк)\n"
+        "• третье — количество людей, которые смогут забрать\n\n"
+        "🇰 Креаторы: максимум 5ккк · 💪 Админы: безлимит\n"
+        "→ Пиши одним сообщением (или /cancel для отмены):"
+    )
+    await state.set_state(AdminStates.waiting_for_creator_promo)
+    await callback.answer()
+
+async def _create_promo_core(message: Message, code: str, reward, activations: int, is_admin: bool) -> bool:
+    """Единая проверка+создание обычного промокода. Возвращает True, если промокод создан."""
+    if not reward or reward <= 0 or activations <= 0:
+        await message.answer("❌ Ошибка суммы или количества людей.")
+        return False
+    if not is_admin and reward > 5_000_000_000:
+        await message.answer("❌ Креаторы могут создавать промокоды максимум на 5ккк.")
+        return False
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO promo_codes (code, reward, activations_left) VALUES (%s, %s, %s) "
+        "ON CONFLICT (code) DO UPDATE SET reward = EXCLUDED.reward, activations_left = EXCLUDED.activations_left",
+        (code, reward, activations)
+    )
+    conn.commit()
+    conn.close()
+    await message.answer(f"✅ Промокод {code} создан на {reward:,} ¢ (активаций: {activations})!".replace(",", " "))
+    return True
+
+def _parse_promo_message(text: str):
+    """'промокод ASMM 1кк 16' -> (code, reward, activations) или None."""
+    parts = text.split()
+    if len(parts) != 4 or parts[0].casefold() != "промокод":
+        return None
+    code = parts[1].upper()
+    reward = parse_sum(parts[2])
+    try:
+        activations = int(parts[3])
+    except Exception:
+        activations = 0
+    return (code, reward, activations)
+
+@router.message(F.text.regexp(r"(?i)^промокод\s+для\s+кр\s+\w+\s+.+\s+\d+$"))
+async def create_creator_promo_admin_cmd(message: Message):
+    if message.from_user.id not in ADMIN_IDS: return
+    if not await check_ban_and_register(message): return
+    parts = message.text.split()
+    # формат: промокод для кр CODE SUM N
+    code = parts[4].upper()
+    reward = parse_sum(parts[5])
+    try:
+        activations = int(parts[6])
+    except Exception:
+        activations = 0
+    if not reward or reward <= 0 or activations <= 0:
+        return await message.answer("❌ Ошибка суммы или количества людей.\nПример: промокод для кр ANAPA 1ккк 13")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO creator_promo_codes (code, reward, activations_left) VALUES (%s, %s, %s) "
+        "ON CONFLICT (code) DO UPDATE SET reward = EXCLUDED.reward, activations_left = EXCLUDED.activations_left",
+        (code, reward, activations)
+    )
+    conn.commit()
+    conn.close()
+    await message.answer(f"✅ Промокод для креаторов {code} создан на {reward:,} ¢ (активаций: {activations})!".replace(",", " "))
+
+@router.message(AdminStates.waiting_for_creator_promo)
+async def creator_promo_process(message: Message, state: FSMContext):
+    if not await is_creator(message.from_user.id): return
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отменено.")
+        return
+    parsed = _parse_promo_message(message.text)
+    if not parsed:
+        await message.answer("❌ Неверный формат. Пример: промокод ASMM 1кк 16\n(или /cancel)")
+        return
+    await state.clear()
+    await _create_promo_core(message, parsed[0], parsed[1], parsed[2], message.from_user.id in ADMIN_IDS)
+
+@router.message(F.text.regexp(r"(?i)^промокод\s+\w+\s+.+\s+\d+$"))
+async def create_promo_message_cmd(message: Message):
+    user_id = message.from_user.id
+    is_adm = user_id in ADMIN_IDS
+    creatr = await is_creator(user_id)
+    if not is_adm and not creatr: return
+    if not await check_ban_and_register(message): return
+    if message.text.casefold().startswith("промокод для кр"):
+        return  # обрабатывается выше отдельным админским обработчиком
+    parsed = _parse_promo_message(message.text)
+    if not parsed:
+        return
+    await _create_promo_core(message, parsed[0], parsed[1], parsed[2], is_adm)
 
 @router.callback_query(F.data == "creator_claim_salary")
 async def callback_creator_salary(callback: CallbackQuery):
@@ -2168,10 +2322,36 @@ async def callback_creator_salary(callback: CallbackQuery):
     creator_salary_cooldowns[user_id] = now
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET balance = balance + 7500000 WHERE user_id = %s", (user_id,))
+    cursor.execute("UPDATE users SET balance = balance + 500000000 WHERE user_id = %s", (user_id,))
     conn.commit()
     conn.close()
-    await callback.answer("💼 ЗП получена: +7.5 млн ¢!", show_alert=True)
+    await callback.answer("💼 ЗП получена: +500кк ¢!", show_alert=True)
+
+@router.callback_query(F.data == "creator_banlist")
+async def callback_creator_banlist(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    if not await is_creator(user_id): return
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, user_id FROM users WHERE banned = 1 ORDER BY user_id DESC LIMIT 50")
+    banned = cursor.fetchall()
+    conn.close()
+    if not banned:
+        text = "🚫 Бан-лист пуст — забаненных нет."
+    else:
+        lines = ["🚫 Забаненные игроки:", ""]
+        for i, (uname, uid) in enumerate(banned, 1):
+            name = ("@" + uname) if uname else str(uid)
+            lines.append(f"{i}. {name} (ID: {uid})")
+        text = "\n".join(lines)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад к панели", callback_data="creator_panel")]
+    ])
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb)
+    await callback.answer()
 
 @router.message(F.text.regexp(r"(?i)^промо\s+\w+\s+.+\s+\d+$"))
 async def create_promo_universal(message: Message):
@@ -2186,8 +2366,8 @@ async def create_promo_universal(message: Message):
         await message.answer("❌ Ошибка суммы.")
         return
 
-    if not is_adm and creatr and not (1_000_000 <= reward <= 10_000_000):
-        await message.answer("❌ Креаторы могут ставить награду только от 1 000 000 до 10 000 000 ¢.")
+    if not is_adm and creatr and reward > 5_000_000_000:
+        await message.answer("❌ Креаторы могут ставить награду максимум 5ккк ¢.")
         return
 
     conn = get_db()
@@ -2549,7 +2729,7 @@ def api_uid(request) -> int:
 @web.middleware
 async def telegram_auth_middleware(request, handler):
     # Главная страница и статические файлы отдаются без проверки: initData подставит сам Telegram
-    if request.path == "/" or request.path.startswith("/cases/"):
+    if request.path == "/" or request.path == "/creator" or request.path == "/creator.html" or request.path.startswith("/cases/"):
         return await handler(request)
     if verify_init_data(request.headers.get("X-Init-Data", "")) is None:
         return web.json_response({"error": "Не авторизовано"}, status=401)
@@ -3737,9 +3917,130 @@ async def api_crash_bet(request):
     conn.close()
     return web.json_response({"error": "Неверное действие"}, status=400)
 
+# --- САЙТ ДЛЯ КРЕАТОРОВ (/creator): обнова, промо для кр, бан-лист ---
+async def creator_index_handler(request):
+    resp = web.FileResponse("creator.html")
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+async def _creator_access(user_id: int):
+    """(bool is_creator, bool is_admin)"""
+    if not user_id:
+        return False, False
+    return (await is_creator(user_id)), (user_id in ADMIN_IDS)
+
+async def api_ideas_get(request):
+    user_id = api_uid(request)
+    is_cr, is_adm = await _creator_access(user_id)
+    if not is_cr:
+        return web.json_response({"error": "Доступ только для креаторов"}, status=403)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, creator_name, title, body, status, created_at FROM update_ideas ORDER BY id DESC LIMIT 200")
+    ideas = [
+        {"id": r[0], "author": r[1], "title": r[2], "body": r[3], "status": r[4], "created_at": float(r[5] or 0)}
+        for r in cursor.fetchall()
+    ]
+    conn.close()
+    return web.json_response({"is_admin": is_adm, "ideas": ideas})
+
+async def api_ideas_post(request):
+    user_id = api_uid(request)
+    is_cr, _ = await _creator_access(user_id)
+    if not is_cr:
+        return web.json_response({"error": "Доступ только для креаторов"}, status=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    title = str(data.get("title", "")).strip()[:200]
+    body = str(data.get("body", "")).strip()[:4000]
+    if not title or not body:
+        return web.json_response({"error": "Заполните название и идею"}, status=400)
+    conn = get_db()
+    cursor = conn.cursor()
+    uname = None
+    cursor.execute("SELECT username, custom_name FROM users WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    if row:
+        uname = row[1] or ("@" + row[0] if row[0] else str(user_id))
+    cursor.execute(
+        "INSERT INTO update_ideas (creator_id, creator_name, title, body, status, created_at) VALUES (%s, %s, %s, %s, 'pending', %s)",
+        (user_id, uname, title, body, time.time())
+    )
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True})
+
+async def api_idea_status(request):
+    user_id = api_uid(request)
+    if user_id not in ADMIN_IDS:
+        return web.json_response({"error": "Только админ может одобрять/отклонять"}, status=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    idea_id = int(data.get("id", 0) or 0)
+    status = data.get("status")
+    if status not in ("approved", "rejected") or idea_id <= 0:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE update_ideas SET status = %s WHERE id = %s", (status, idea_id))
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True})
+
+async def api_creator_promo(request):
+    user_id = api_uid(request)
+    is_cr, _ = await _creator_access(user_id)
+    if not is_cr:
+        return web.json_response({"error": "Промокоды для кр могут вводить только креаторы"}, status=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    code = str(data.get("code", "")).strip().upper()
+    if not code:
+        return web.json_response({"success": False, "message": "❌ Введите промокод"})
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM creator_promo_used WHERE user_id = %s AND code = %s", (user_id, code))
+    if cursor.fetchone():
+        conn.commit(); conn.close()
+        return web.json_response({"success": False, "message": "❌ Вы уже вводили этот промокод"})
+    cursor.execute("SELECT reward, activations_left FROM creator_promo_codes WHERE code = %s", (code,))
+    promo = cursor.fetchone()
+    if not promo or promo[1] <= 0:
+        conn.commit(); conn.close()
+        return web.json_response({"success": False, "message": "❌ Этого промокода еще никто не создал"})
+    reward = promo[0]
+    cursor.execute("INSERT INTO creator_promo_used (user_id, code) VALUES (%s, %s)", (user_id, code))
+    cursor.execute("UPDATE creator_promo_codes SET activations_left = activations_left - 1 WHERE code = %s", (code,))
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (reward, user_id))
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "message": f"✅ Промокод активирован! Получено: +{reward:,} ¢".replace(",", " ")})
+
+async def api_banlist_get(request):
+    user_id = api_uid(request)
+    is_cr, _ = await _creator_access(user_id)
+    if not is_cr:
+        return web.json_response({"error": "Доступ только для креаторов"}, status=403)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, user_id FROM users WHERE banned = 1 ORDER BY user_id DESC LIMIT 100")
+    banned = [{"username": r[0], "user_id": r[1]} for r in cursor.fetchall()]
+    conn.close()
+    return web.json_response({"is_admin": user_id in ADMIN_IDS, "banned": banned})
+
 async def web_server():
     app = web.Application(middlewares=[telegram_auth_middleware])
     app.router.add_get("/", index_handler)
+    app.router.add_get("/creator", creator_index_handler)
+    app.router.add_get("/creator.html", creator_index_handler)
     # 3D-кейсы (SVG с прозрачным фоном)
     cases_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cases")
     app.router.add_static("/cases/", path=cases_dir, name="cases")
@@ -3766,6 +4067,13 @@ async def web_server():
     app.router.add_post("/api/market/list_sim", api_market_list_sim)
     app.router.add_post("/api/market/buy_sim", api_market_buy_sim)
     app.router.add_post("/api/market/cancel_sim", api_market_cancel_sim)
+
+    # --- Сайт креаторов ---
+    app.router.add_get("/api/ideas", api_ideas_get)
+    app.router.add_post("/api/ideas", api_ideas_post)
+    app.router.add_post("/api/idea/status", api_idea_status)
+    app.router.add_post("/api/creator_promo", api_creator_promo)
+    app.router.add_get("/api/banlist", api_banlist_get)
     
     runner = web.AppRunner(app)
     await runner.setup()

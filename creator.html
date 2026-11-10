@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Панель креатора</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #12141c;
+    --card: #1c1f2b;
+    --card2: #232736;
+    --accent: #7c5cff;
+    --green: #2ecc71;
+    --red: #e74c3c;
+    --text: #e8eaf2;
+    --muted: #8b90a3;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; padding-bottom: 92px;
+  }
+  header {
+    padding: 16px 16px 10px;
+    background: linear-gradient(160deg, #241f47, #12141c 75%);
+    border-bottom: 1px solid #2c3050;
+  }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header p { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  main { padding: 14px; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .panel-title {
+    font-size: 16px; font-weight: 700; margin: 6px 2px 12px;
+  }
+
+  .idea-card {
+    position: relative;
+    background: var(--card);
+    border: 1px solid #2b2f42;
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: transform .08s ease;
+  }
+  .idea-card:active { transform: scale(.985); }
+  .idea-card .badge {
+    position: absolute; top: 10px; right: 12px;
+    font-size: 17px;
+  }
+  .idea-card .author { color: var(--accent); font-size: 12px; font-weight: 600; }
+  .idea-card .title { font-size: 15px; font-weight: 700; margin-top: 3px; padding-right: 26px; }
+  .idea-card .body { color: var(--muted); font-size: 13px; margin-top: 5px; white-space: pre-wrap; word-break: break-word; }
+  .idea-card .date { color: var(--muted); font-size: 11px; margin-top: 7px; }
+  .status-approved { color: var(--green); }
+  .status-rejected { color: var(--red); }
+
+  /* форма добавления идеи */
+  .add-form {
+    display: none;
+    background: var(--card);
+    border: 1px solid #2b2f42;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .add-form.open { display: block; }
+  .add-form input, .add-form textarea {
+    width: 100%;
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid #343a52;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  .add-form input { margin-bottom: 8px; }
+  .add-form textarea { min-height: 110px; resize: vertical; }
+  .add-form label { font-size: 11px; color: var(--muted); display: block; margin: 6px 2px; }
+
+  .btn {
+    display: block; width: 100%;
+    border: none; border-radius: 12px;
+    padding: 12px; font-size: 15px; font-weight: 700;
+    color: #fff; cursor: pointer;
+    transition: opacity .15s ease;
+  }
+  .btn:active { opacity: .7; }
+  .btn-primary { background: var(--accent); margin-top: 12px; }
+  .btn-green { background: var(--green); margin-top: 8px; }
+  .btn-red { background: var(--red); margin-top: 8px; }
+
+  /* промо для кр */
+  .promo-box {
+    background: var(--card);
+    border: 1px solid #2b2f42;
+    border-radius: 14px;
+    padding: 16px 14px;
+    margin-top: 10px;
+  }
+  .promo-box input {
+    width: 100%;
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid #343a52;
+    border-radius: 10px;
+    padding: 13px 14px;
+    font-size: 16px;
+    text-transform: uppercase;
+    outline: none;
+    letter-spacing: 1px;
+  }
+  .promo-msg {
+    min-height: 44px;
+    display: flex; align-items: center;
+    margin-top: 12px;
+    background: var(--card2);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    visibility: hidden;
+  }
+  .promo-msg.show { visibility: visible; }
+  .promo-msg.ok { border: 1px solid var(--green); }
+  .promo-msg.err { border: 1px solid var(--red); }
+
+  /* бан-лист */
+  .ban-item {
+    background: var(--card);
+    border: 1px solid #2b2f42;
+    border-radius: 12px;
+    padding: 11px 14px;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  .ban-item .id { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 28px 12px; font-size: 14px; }
+  .hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+  /* нижнее меню из 3 кнопок */
+  .bottom-bar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(18,20,28,.96);
+    border-top: 1px solid #2b2f42;
+    backdrop-filter: blur(8px);
+  }
+  .bottom-bar button {
+    flex: 1;
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid #343a52;
+    border-radius: 12px;
+    padding: 12px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease;
+  }
+  .bottom-bar button.active { background: var(--accent); border-color: var(--accent); }
+
+  /* кнопка + слева внизу (над нижним баром) */
+  .fab-plus {
+    position: fixed;
+    left: 16px; bottom: 78px;
+    width: 54px; height: 54px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 26px;
+    font-weight: 300;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(124,92,255,.45);
+    display: none;
+    z-index: 5;
+  }
+  .fab-plus.show { display: block; }
+
+  /* детальный просмотр идеи (для админа) */
+  .modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.6);
+    display: none;
+    z-index: 20;
+    padding: 20px 14px;
+    overflow-y: auto;
+  }
+  .modal.open { display: block; }
+  .modal-content {
+    background: var(--card);
+    border: 1px solid #2b2f42;
+    border-radius: 16px;
+    padding: 18px 16px;
+    position: relative;
+    margin-top: 40px;
+  }
+  .modal-content .badge { position: absolute; top: 14px; right: 16px; font-size: 20px; }
+  .modal-content h3 { font-size: 18px; margin-bottom: 4px; padding-right: 30px; }
+  .modal-content .author { color: var(--accent); font-size: 13px; font-weight: 600; }
+  .modal-content .body { color: var(--text); font-size: 14px; margin-top: 12px; white-space: pre-wrap; }
+  .modal-content .date { color: var(--muted); font-size: 12px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌐 Панель креатора</h1>
+  <p id="whoami">…</p>
+</header>
+<main>
+  <!-- ОБНОВА -->
+  <section class="panel active" id="panel-ideas">
+    <div class="panel-title">💡 Обнова — предложения к обнове</div>
+    <div class="add-form" id="idea-form">
+      <label>Название обновы</label>
+      <input id="idea-title" placeholder="Например: Новые кейсы" maxlength="200">
+      <label>Идея к обнове</label>
+      <textarea id="idea-body" placeholder="Напиши, что можно придумать и добавить…" maxlength="4000"></textarea>
+      <button class="btn btn-primary" id="idea-send">📤 Отправить</button>
+    </div>
+    <div id="ideas-list"><div class="empty">Загрузка…</div></div>
+    <div class="hint">Нажми «+» слева внизу, чтобы предложить свою идею к обнове</div>
+  </section>
+
+  <!-- ПРОМО ДЛЯ КР -->
+  <section class="panel" id="panel-promo">
+    <div class="panel-title">🎟 Промо для креаторов</div>
+    <div class="promo-box">
+      <input id="promo-code" placeholder="ВВЕДИ ПРОМОКОД" maxlength="40" autocapitalize="characters">
+      <button class="btn btn-primary" id="promo-activate" style="margin-top:12px">✅ Активировать</button>
+      <div class="promo-msg" id="promo-msg"></div>
+    </div>
+  </section>
+
+  <!-- БАН-ЛИСТ -->
+  <section class="panel" id="panel-bans">
+    <div class="panel-title">🚫 Бан-лист</div>
+    <div id="bans-list"><div class="empty">Загрузка…</div></div>
+  </section>
+</main>
+
+<!-- кнопка + для добавления идеи -->
+<button class="fab-plus" id="fab-plus" title="Добавить идею">+</button>
+
+<!-- модалка идеи (админ) -->
+<div class="modal" id="idea-modal">
+  <div class="modal-content">
+    <span class="badge" id="m-badge"></span>
+    <div class="author" id="m-author"></div>
+    <h3 id="m-title"></h3>
+    <div class="body" id="m-body"></div>
+    <div class="date" id="m-date"></div>
+    <div id="m-actions" style="margin-top:16px; display:none">
+      <button class="btn btn-red" id="m-reject">🔴 Отказано</button>
+      <button class="btn btn-green" id="m-approve">🟢 Одобрено</button>
+    </div>
+    <button class="btn" style="background:var(--card2); margin-top:8px" id="m-back">🔙 Назад</button>
+  </div>
+</div>
+
+<!-- нижние 3 кнопки -->
+<nav class="bottom-bar">
+  <button id="tab-ideas" class="active">📢 Обнова</button>
+  <button id="tab-promo">🎟 Промо для кр</button>
+  <button id="tab-bans">🚫 Бан-лист</button>
+</nav>
+
+<script>
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  try { tg && tg.expand(); tg && tg.ready(); } catch (e) {}
+  const initData = tg && tg.initData ? tg.initData : "";
+  const AUTH = { "X-Init-Data": initData, "Content-Type": "application/json" };
+
+  const S = { isAdmin: false, isCreator: true, ideas: [], bans: [] };
+
+  function apiGet(url) {
+    return fetch(url, { headers: AUTH }).then(r => r.json());
+  }
+  function apiPost(url, data) {
+    return fetch(url, { method: "POST", headers: AUTH, body: JSON.stringify(data) }).then(r => r.json());
+  }
+
+  function uidFromInitData() {
+    try {
+      const p = new URLSearchParams(initData);
+      const user = JSON.parse(p.get("user") || "{}");
+      return user.id || 0;
+    } catch (e) { return 0; }
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return "";
+    const d = new Date(ts * 1000);
+    const pad = n => String(n).padStart(2, "0");
+    return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear() +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function fmtNum(n) {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+
+  const STATUS_BADGE = { pending: "", approved: "✅", rejected: "❌" };
+
+  function renderIdeas() {
+    const list = document.getElementById("ideas-list");
+    if (!S.ideas.length) {
+      list.innerHTML = '<div class="empty">Пока никто не написал предложения…<br>Будь первым — жми «+» слева внизу!</div>';
+      return;
+    }
+    list.innerHTML = "";
+    S.ideas.forEach(idea => {
+      const el = document.createElement("div");
+      el.className = "idea-card";
+      el.innerHTML =
+        '<span class="badge ' + (idea.status === "approved" ? "status-approved" : idea.status === "rejected" ? "status-rejected" : "") + '">' + (STATUS_BADGE[idea.status] || "") + '</span>' +
+        '<div class="author">От кого: ' + escHtml(idea.author || "неизвестно") + '</div>' +
+        '<div class="title">' + escHtml(idea.title) + '</div>' +
+        '<div class="body">' + escHtml(idea.body.length > 120 ? idea.body.slice(0, 120) + "…" : idea.body) + '</div>' +
+        '<div class="date">🕒 ' + fmtDate(idea.created_at) + '</div>';
+      el.addEventListener("click", () => openIdeaModal(idea));
+      list.appendChild(el);
+    });
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  // модалка админа
+  let currentIdea = null;
+  function openIdeaModal(idea) {
+    currentIdea = idea;
+    document.getElementById("m-author").textContent = "От кого: " + (idea.author || "неизвестно");
+    document.getElementById("m-title").textContent = idea.title;
+    document.getElementById("m-body").textContent = idea.body;
+    document.getElementById("m-date").textContent = "🕒 " + fmtDate(idea.created_at);
+    const badge = document.getElementById("m-badge");
+    badge.textContent = STATUS_BADGE[idea.status] || "";
+    badge.className = "badge " + (idea.status === "approved" ? "status-approved" : idea.status === "rejected" ? "status-rejected" : "");
+    document.getElementById("m-actions").style.display = (S.isAdmin && idea.status === "pending") ? "block" : "none";
+    document.getElementById("idea-modal").classList.add("open");
+  }
+
+  document.getElementById("m-back").addEventListener("click", closeIdeaModal);
+  function closeIdeaModal() { document.getElementById("idea-modal").classList.remove("open"); }
+  document.getElementById("idea-modal").addEventListener("click", e => {
+    if (e.target === e.currentTarget) closeIdeaModal();
+  });
+
+  document.getElementById("m-approve").addEventListener("click", () => setIdeaStatus("approved"));
+  document.getElementById("m-reject").addEventListener("click", () => setIdeaStatus("rejected"));
+  async function setIdeaStatus(status) {
+    if (!currentIdea) return;
+    const res = await apiPost("/api/idea/status", { id: currentIdea.id, status: status });
+    if (res && res.success) {
+      currentIdea.status = status;
+      renderIdeas();
+      closeIdeaModal();
+      toast(status === "approved" ? "🟢 Одобрено" : "🔴 Отказано");
+    } else {
+      toast((res && res.error) || "❌ Не удалось сохранить");
+    }
+  }
+
+  function toast(text) {
+    try { tg && tg.showAlert && tg.showAlert(text); } catch (e) { alert(text); }
+  }
+
+  // форма идеи
+  const fab = document.getElementById("fab-plus");
+  const form = document.getElementById("idea-form");
+  fab.addEventListener("click", () => {
+    form.classList.toggle("open");
+    if (form.classList.contains("open")) {
+      document.getElementById("idea-title").focus();
+    }
+  });
+  document.getElementById("idea-send").addEventListener("click", async () => {
+    const title = document.getElementById("idea-title").value.trim();
+    const body = document.getElementById("idea-body").value.trim();
+    if (!title || !body) { toast("❌ Заполните название и идею"); return; }
+    const res = await apiPost("/api/ideas", { title: title, body: body });
+    if (res && res.success) {
+      document.getElementById("idea-title").value = "";
+      document.getElementById("idea-body").value = "";
+      form.classList.remove("open");
+      await loadIdeas();
+      toast("✅ Предложение отправлено!");
+    } else {
+      toast((res && res.error) || "❌ Ошибка отправки");
+    }
+  });
+
+  // промо для кр
+  document.getElementById("promo-activate").addEventListener("click", activatePromo);
+  document.getElementById("promo-code").addEventListener("keydown", e => {
+    if (e.key === "Enter") activatePromo();
+  });
+  async function activatePromo() {
+    const input = document.getElementById("promo-code");
+    const code = input.value.trim();
+    const msg = document.getElementById("promo-msg");
+    if (!code) {
+      msg.className = "promo-msg show err";
+      msg.textContent = "❌ Введите промокод";
+      return;
+    }
+    const res = await apiPost("/api/creator_promo", { code: code });
+    if (res && res.success) {
+      msg.className = "promo-msg show ok";
+      msg.textContent = "✅ " + (res.message || "Промокод активирован");
+      input.value = "";
+    } else {
+      msg.className = "promo-msg show err";
+      msg.textContent = (res && res.message) || (res && res.error) || "❌ Ошибка";
+    }
+  }
+
+  // бан-лист
+  function renderBans() {
+    const list = document.getElementById("bans-list");
+    if (!S.bans.length) {
+      list.innerHTML = '<div class="empty">Бан-лист пуст — забаненных нет 🙂</div>';
+      return;
+    }
+    list.innerHTML = "";
+    S.bans.forEach((b, i) => {
+      const el = document.createElement("div");
+      el.className = "ban-item";
+      el.innerHTML = (i + 1) + ". " + escHtml(b.username ? "@" + b.username : "без ника") +
+        '<div class="id">ID: ' + b.user_id + '</div>';
+      list.appendChild(el);
+    });
+  }
+
+  // загрузки
+  async function loadIdeas() {
+    try {
+      const res = await apiGet("/api/ideas");
+      if (res && res.ideas) {
+        S.isAdmin = !!res.is_admin;
+        S.ideas = res.ideas;
+        renderIdeas();
+        document.getElementById("whoami").textContent = (S.isAdmin ? "👑 Админ" : "🎬 Креатор") + " · предложений: " + S.ideas.length;
+      } else if (res && res.error) {
+        document.getElementById("ideas-list").innerHTML = '<div class="empty">⚠️ ' + escHtml(res.error) + '</div>';
+      }
+    } catch (e) {
+      document.getElementById("ideas-list").innerHTML = '<div class="empty">Ошибка загрузки</div>';
+    }
+  }
+  async function loadBans() {
+    try {
+      const res = await apiGet("/api/banlist");
+      if (res && res.banned) { S.bans = res.banned; renderBans(); }
+    } catch (e) {
+      document.getElementById("bans-list").innerHTML = '<div class="empty">Ошибка загрузки</div>';
+    }
+  }
+
+  // нижние вкладки
+  function switchTab(name) {
+    ["ideas", "promo", "bans"].forEach(t => {
+      document.getElementById("panel-" + t).classList.toggle("active", t === name);
+      document.getElementById("tab-" + t).classList.toggle("active", t === name);
+    });
+    fab.classList.toggle("show", name === "ideas");
+    if (name === "ideas") loadIdeas();
+    if (name === "bans") loadBans();
+  }
+  document.getElementById("tab-ideas").addEventListener("click", () => switchTab("ideas"));
+  document.getElementById("tab-promo").addEventListener("click", () => switchTab("promo"));
+  document.getElementById("tab-bans").addEventListener("click", () => switchTab("bans"));
+
+  // старт
+  switchTab("ideas");
+})();
+</script>
+</body>
+</html>
