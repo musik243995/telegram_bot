@@ -1528,6 +1528,8 @@ async def callback_claim_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
+    total_to_claim = 0
+    reset_time = 0.0
     try:
         cursor.execute(
             "SELECT level, last_claim, earned_balance "
@@ -1542,7 +1544,7 @@ async def callback_claim_company(callback: CallbackQuery):
 
         level, last_claim, earned_bal = comp
         now = time.time()
-        last_claim = last_claim or now
+        last_claim = float(last_claim or now)
         elapsed_seconds = min(24 * 3600, max(0, int(now - last_claim)))
         accrued = (elapsed_seconds * COMPANY_LEVELS[level]["income"]) // 3600
         total_to_claim = max(0, int(earned_bal or 0)) + accrued
@@ -1561,14 +1563,29 @@ async def callback_claim_company(callback: CallbackQuery):
             conn.rollback()
             await callback.answer("❌ Не удалось найти ваш баланс.", show_alert=True)
             return
+        # RETURNING подтверждает, что строка реально найдена и сброс применён.
         cursor.execute(
-            "UPDATE user_companies SET last_claim = %s, earned_balance = 0 WHERE user_id = %s",
+            "UPDATE user_companies SET last_claim = %s, earned_balance = 0 "
+            "WHERE user_id = %s RETURNING last_claim, earned_balance",
             (now, user_id)
         )
+        reset_row = cursor.fetchone()
+        if not reset_row:
+            conn.rollback()
+            await callback.answer("❌ Не удалось сбросить накопления. Попробуйте ещё раз.", show_alert=True)
+            return
+        saved_lc, saved_earned = reset_row[0], reset_row[1]
+        if int(saved_earned or 0) != 0:
+            conn.rollback()
+            print(f"[company] КЛЕЙМ {user_id}: UPDATE вернул earned_balance={saved_earned}, откатываю!")
+            await callback.answer("❌ Не удалось сбросить накопления. Попробуйте ещё раз.", show_alert=True)
+            return
+        reset_time = float(saved_lc or now)
         conn.commit()
     except Exception as e:
+        total_to_claim = 0
         conn.rollback()
-        print(f"Ошибка получения прибыли компании для {user_id}: {e}")
+        print(f"[company] Ошибка получения прибыли для {user_id}: {e!r}")
         await callback.answer("❌ Не удалось забрать прибыль. Попробуйте ещё раз.", show_alert=True)
         return
     finally:
@@ -1578,6 +1595,34 @@ async def callback_claim_company(callback: CallbackQuery):
         f"💶 Вы успешно забрали прибыль: +{total_to_claim:,} ¢!".replace(",", " "),
         show_alert=True
     )
+
+    # Контрольная проверка на новом соединении: накопления обязаны быть обнулены.
+    try:
+        conn2 = get_db()
+        cur2 = conn2.cursor()
+        cur2.execute("SELECT last_claim, earned_balance FROM user_companies WHERE user_id = %s", (user_id,))
+        after = cur2.fetchone()
+        if not after:
+            print(f"[company] ПОСЛЕ КЛЕЙМА у {user_id} нет строки в user_companies!")
+        else:
+            after_lc, after_earned = float(after[0] or 0.0), int(after[1] or 0)
+            broken = (after_earned != 0) or (abs(after_lc - reset_time) > 1.0)
+            if broken:
+                print(
+                    f"[company] ВНИМАНИЕ {user_id}: накопления не обнулились после коммита "
+                    f"(earned={after_earned}, last_claim={after_lc}, ожидалось last_claim≈{reset_time}) — исправляю принудительно"
+                )
+                cur2.execute(
+                    "UPDATE user_companies SET last_claim = %s, earned_balance = 0 WHERE user_id = %s",
+                    (time.time(), user_id)
+                )
+                conn2.commit()
+            else:
+                print(f"[company] Клейм {user_id}: OK, выплачено {total_to_claim:,}, сброс подтверждён".replace(",", " "))
+        conn2.close()
+    except Exception as e:
+        print(f"[company] Проверка после клейма для {user_id} не удалась: {e!r}")
+
     text, keyboard = get_company_data_and_keyboard(user_id)
     try:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="MARKDOWN")
