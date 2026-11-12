@@ -1143,6 +1143,12 @@
                 document.getElementById(v).classList.toggle('active', v === id);
             });
             document.getElementById('section-cases').classList.add('active');
+            setBottomNav(true); // на страницах битв нижних кнопок нет
+        }
+
+        function setBottomNav(hidden) {
+            const nav = document.querySelector('.bottom-nav');
+            if (nav) nav.style.display = hidden ? 'none' : 'flex';
         }
 
         function openBattlesMenu() {
@@ -1453,6 +1459,7 @@
         function switchNavTab(tab) {
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+            setBottomNav(false); // верхние вкладки всегда с нижней навигацией
 
             if(tab === 'cases') {
                 document.getElementById('nav-cases-btn').classList.add('active');
@@ -1493,6 +1500,7 @@
 
         function openCaseRoom(caseId) {
             activeCaseId = caseId;
+            setBottomNav(true); // в комнате кейса нижних кнопок нет
             const c = casesData.find(x => x.id === caseId);
             document.getElementById('room-case-title').innerText = `${c.name} (${c.price.toLocaleString('ru-RU')} ${c.currency === 'coins' ? 'коинов' : '¢'})`;
             document.getElementById('room-drop-list').innerHTML = renderDropList(c);
@@ -1602,6 +1610,7 @@
             document.getElementById('view-bp-quests').classList.remove('active');
             document.getElementById('view-cases-list').classList.add('active');
             activeCaseId = null;
+            setBottomNav(false); // на главном списке нижние кнопки возвращаются
             updateFreeCasesBadge();
         }
 
