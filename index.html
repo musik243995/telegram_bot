@@ -109,6 +109,21 @@
         .battle-wait { text-align: center; color: #b8a0c8; font-size: .85rem; margin-top: 10px; }
         .battle-bot-btn { width: 100%; padding: 12px; border: none; border-radius: 12px; background: #7c3aed; color: #fff; font-weight: 700; margin-top: 8px; cursor: pointer; }
 
+        /* --- АДМИН-КРУЖОЧЕК И КЛЕВЕР --- */
+        #admin-orb { position: fixed; top: 66px; right: 10px; width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; display: none; align-items: center; justify-content: center; font-weight: 700; font-size: 1.3rem; z-index: 500; box-shadow: 0 4px 14px rgba(124,92,255,.5); cursor: pointer; touch-action: none; user-select: none; border: 2px solid #c4b5fd; }
+        #luck-clover { position: fixed; left: 10px; bottom: 80px; display: none; align-items: center; gap: 6px; background: rgba(18,12,36,.92); border: 1px solid #2ecc71; border-radius: 20px; padding: 6px 12px; z-index: 500; font-size: .82rem; font-weight: 700; color: #fff; }
+        #luck-clover .mult { color: #2ecc71; }
+        #luck-clover .timer { color: #fbbf24; font-variant-numeric: tabular-nums; }
+        .admin-boost-btn { display: block; width: 100%; margin-bottom: 8px; padding: 12px; border: none; border-radius: 10px; color: #fff; font-weight: 700; cursor: pointer; font-size: .9rem; }
+        .admin-boost-btn.b2 { background: #22c55e; }
+        .admin-boost-btn.b4 { background: #f59e0b; }
+        .admin-boost-btn.b6 { background: #8b5cf6; }
+        .admin-boost-btn.b10 { background: #ef4444; }
+        .admin-clear-btn { display: block; width: 100%; margin-top: 6px; padding: 12px; border: none; border-radius: 10px; background: #334155; color: #fff; font-weight: 700; cursor: pointer; }
+        .admin-close-btn { display: block; width: 100%; margin-top: 8px; padding: 10px; border: none; border-radius: 10px; background: #1f0e03; color: #b8a0c8; cursor: pointer; }
+        #admin-boost-form input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #4c3a7a; background: #120e24; color: #fff; margin-bottom: 8px; box-sizing: border-box; }
+        #admin-boost-form button { width: 100%; padding: 10px; border: none; border-radius: 8px; background: #22c55e; color: #fff; font-weight: 700; cursor: pointer; }
+
 
         .cases-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         .case-card { background: #120e24; border-radius: 18px; overflow: hidden; border: 1px solid #2a224c; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.2s; }
@@ -862,6 +877,29 @@
         <span class="clover" id="bp-boost-clover">🍀</span>
         <span class="mult" id="bp-boost-mult">x2</span>
         <span class="timer" id="bp-boost-timer">1:00</span>
+    </div>
+
+    <!-- Админ-кружочек (только у админов) -->
+    <div id="admin-orb">А</div>
+
+    <!-- Клевер везения (слева снизу) -->
+    <div id="luck-clover">🍀 <span class="mult" id="luck-clover-mult">x2</span> <span class="timer" id="luck-clover-timer">0:00</span></div>
+
+    <!-- Админ-панель везения -->
+    <div class="modal" id="admin-modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 12px;">👑 Админ · Везение</h3>
+            <button class="admin-boost-btn b2" onclick="adminBoostPrompt(2)">🍀 Сделать х2 всем игрокам</button>
+            <button class="admin-boost-btn b4" onclick="adminBoostPrompt(4)">🍀 Сделать х4 всем игрокам</button>
+            <button class="admin-boost-btn b6" onclick="adminBoostPrompt(6)">🍀 Сделать х6 всем игрокам</button>
+            <button class="admin-boost-btn b10" onclick="adminBoostPrompt(10)">🍀 Сделать х10 всем игрокам</button>
+            <div id="admin-boost-form" style="display:none; margin-bottom: 10px;">
+                <input id="admin-boost-seconds" type="number" min="1" max="86400" placeholder="На сколько секунд?">
+                <button onclick="adminBoostApply()">✅ Применить</button>
+            </div>
+            <button class="admin-clear-btn" onclick="adminClearBoosts()">🧹 Убрать все везения</button>
+            <button class="admin-close-btn" onclick="closeAdminModal()">Закрыть</button>
+        </div>
     </div>
 
     <div class="bottom-nav">
@@ -1657,6 +1695,10 @@
                 // Батл-пасс: бесплатные кейсы, активный буст, сезон (кнопка исчезает после 31 дня)
                 if (typeof data.free_cases === 'number') userFreeCases = data.free_cases;
                 if (data.bp_boost) setBpBoost(data.bp_boost);
+                if (typeof data.is_admin === 'boolean') {
+                    const orb = document.getElementById('admin-orb');
+                    if (orb) orb.style.display = data.is_admin ? 'flex' : 'none';
+                }
                 if (data.bp_season) {
                     bpSeason = data.bp_season;
                     const bpBtn = document.getElementById('bp-entry-btn');
@@ -2825,6 +2867,96 @@
             }
         }
         setInterval(updateBoostBadge, 500);
+
+        // ================= АДМИН-КРУЖОЧЕК И КЛЕВЕР =================
+        function updateLuckClover() {
+            const el = document.getElementById('luck-clover');
+            if (!el) return;
+            const left = Math.ceil(bpBoostLeftSec());
+            if (bpBoost && left > 0) {
+                el.style.display = 'flex';
+                document.getElementById('luck-clover-mult').textContent = 'x' + bpBoost.boost;
+                document.getElementById('luck-clover-timer').textContent =
+                    Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+            } else {
+                el.style.display = 'none';
+            }
+        }
+        setInterval(updateLuckClover, 500);
+
+        // Кружочек админа: тап — открыть панель, зажать и вести — перетащить
+        (function initAdminOrb() {
+            const orb = document.getElementById('admin-orb');
+            if (!orb) return;
+            let down = null, dragged = false;
+            orb.addEventListener('pointerdown', e => {
+                down = { x: e.clientX, y: e.clientY, left: orb.offsetLeft, top: orb.offsetTop };
+                dragged = false;
+                try { orb.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+            orb.addEventListener('pointermove', e => {
+                if (!down) return;
+                const dx = e.clientX - down.x, dy = e.clientY - down.y;
+                if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+                    dragged = true;
+                    orb.style.right = 'auto';
+                    orb.style.left = Math.max(2, Math.min(window.innerWidth - 48, down.left + dx)) + 'px';
+                    orb.style.top = Math.max(2, Math.min(window.innerHeight - 48, down.top + dy)) + 'px';
+                }
+            });
+            orb.addEventListener('pointerup', () => {
+                if (down && !dragged) openAdminModal();
+                down = null;
+            });
+            orb.addEventListener('pointercancel', () => { down = null; });
+        })();
+
+        function openAdminModal() {
+            document.getElementById('admin-modal').style.display = 'flex';
+        }
+        function closeAdminModal() {
+            document.getElementById('admin-modal').style.display = 'none';
+            document.getElementById('admin-boost-form').style.display = 'none';
+        }
+
+        let adminBoostSel = null;
+        function adminBoostPrompt(mult) {
+            adminBoostSel = mult;
+            document.getElementById('admin-boost-form').style.display = 'block';
+            const inp = document.getElementById('admin-boost-seconds');
+            inp.value = '';
+            inp.focus();
+        }
+
+        async function adminBoostApply() {
+            if (!adminBoostSel) return;
+            const sec = parseInt(document.getElementById('admin-boost-seconds').value, 10);
+            if (!sec || sec <= 0) { alertBattle('❌ Введи количество секунд'); return; }
+            try {
+                const res = await fetch('/api/admin_boost', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ boost: adminBoostSel, seconds: sec })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alertBattle(`✅ Везение х${adminBoostSel} выдано всем на ${sec} сек.!`);
+                    document.getElementById('admin-boost-form').style.display = 'none';
+                    await fetchData();
+                } else alertBattle(data.error || '❌ Ошибка');
+            } catch (e) { alertBattle('❌ Ошибка сети'); }
+        }
+
+        async function adminClearBoosts() {
+            try {
+                const res = await fetch('/api/admin_boost_clear', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    alertBattle('🧹 Все везения убраны у всех игроков');
+                    await fetchData();
+                } else alertBattle(data.error || '❌ Ошибка');
+            } catch (e) { alertBattle('❌ Ошибка сети'); }
+        }
 
         async function openBattlePass() {
             document.getElementById('view-cases-list').classList.remove('active');

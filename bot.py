@@ -2880,8 +2880,47 @@ async def api_get_data(request):
         "free_cases": fr[0] if fr else 0,
         "bp_boost": boost,
         "bp_season": season,
+        "is_admin": user_id in ADMIN_IDS,
         "server_now": time.time()
     })
+
+# --- АДМИН: выдача везения всем игрокам через WebApp ---
+async def api_admin_boost(request):
+    user_id = api_uid(request)
+    if user_id not in ADMIN_IDS:
+        return web.json_response({"error": "Только для админов"}, status=403)
+    try:
+        data = await request.json()
+        boost = int(data.get("boost", 0))
+        seconds = int(data.get("seconds", 0))
+    except Exception:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    if boost not in (2, 4, 6, 10):
+        return web.json_response({"error": "Неверный множитель везения"}, status=400)
+    if seconds <= 0 or seconds > 86400:
+        return web.json_response({"error": "Время: от 1 секунды до 24 часов"}, status=400)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO battle_pass_boosts (user_id, boost, until_ts) "
+        "SELECT user_id, %s, %s FROM users "
+        "ON CONFLICT (user_id) DO UPDATE SET boost = EXCLUDED.boost, until_ts = EXCLUDED.until_ts",
+        (boost, time.time() + seconds)
+    )
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True, "boost": boost, "seconds": seconds})
+
+async def api_admin_boost_clear(request):
+    user_id = api_uid(request)
+    if user_id not in ADMIN_IDS:
+        return web.json_response({"error": "Только для админов"}, status=403)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM battle_pass_boosts")
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True})
 
 async def api_get_inventory(request):
     user_id = api_uid(request)
@@ -3031,7 +3070,7 @@ def bp_get_boost(cursor, user_id):
     cursor.execute("SELECT boost, until_ts FROM battle_pass_boosts WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     now = time.time()
-    if row and row[0] in (2, 4) and row[1] > now:
+    if row and row[0] in (2, 4, 6, 10) and row[1] > now:
         # left — секунды до конца буста, посчитанные на СЕРВЕРЕ: клиент отсчитывает
         # их своим монотонным таймером, поэтому кривые часы устройства не влияют
         return {"boost": row[0], "until": row[1], "left": max(0.0, row[1] - now)}
@@ -4245,6 +4284,9 @@ def _battle_roll(case_ids):
             if roll <= cur:
                 won = (name, price)
                 break
+        # «Игровой кейс» в битвах никогда не даёт пустоту — всегда предмет
+        if won is None and cid == 1:
+            won = random.choice(info["items"])[:2]
         if won:
             items.append({"name": won[0], "price": won[1], "case_id": cid})
             total += won[1]
@@ -4469,6 +4511,10 @@ async def web_server():
     app.router.add_post("/api/battles/create", api_battle_create)
     app.router.add_post("/api/battles/join", api_battle_join)
     app.router.add_get("/api/battle/state", api_battle_state)
+
+    # --- Админ: везение всем игрокам ---
+    app.router.add_post("/api/admin_boost", api_admin_boost)
+    app.router.add_post("/api/admin_boost_clear", api_admin_boost_clear)
     
     runner = web.AppRunner(app)
     await runner.setup()
