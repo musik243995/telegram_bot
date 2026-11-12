@@ -306,6 +306,23 @@ def init_db():
             earned_balance BIGINT DEFAULT 0
         )
     """)
+    # REAL (float32) на эпохе ~1.8e9 округляет с шагом 128 секунд — из-за этого
+    # прибыль компании «прыгала» вместо посекундного начисления. Переводим на double.
+    cursor.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'user_companies'
+                  AND column_name = 'last_claim' AND data_type <> 'double precision'
+            ) THEN
+                ALTER TABLE user_companies ALTER COLUMN last_claim TYPE DOUBLE PRECISION USING last_claim::DOUBLE PRECISION;
+            END IF;
+        END $$;
+    """)
+    # Остаток от посекундного начисления (в миллионных долях ¢), чтобы за час
+    # набегало ровно income, без накопления ошибки округления.
+    cursor.execute("ALTER TABLE user_companies ADD COLUMN IF NOT EXISTS accrual_remainder BIGINT DEFAULT 0")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS promo_codes (
             code TEXT PRIMARY KEY,
@@ -1445,13 +1462,8 @@ def get_company_data_and_keyboard(user_id):
             return text, keyboard
 
         level, last_claim, earned_bal = comp
-        now = time.time()
-        last_claim = float(last_claim or now)
-        elapsed_seconds = min(24 * 3600, max(0, int(now - last_claim)))
         hourly_income = COMPANY_LEVELS[level]["income"]
-        # Кумулятивное округление: через ровно 3600 секунд будет ровно hourly_income.
-        accrued = (elapsed_seconds * hourly_income) // 3600
-        total_available = max(0, int(earned_bal or 0)) + accrued
+        total_available = int(earned_bal or 0)
 
         lvl_info = COMPANY_LEVELS[level]
         upgrade_btn = None
@@ -1468,7 +1480,7 @@ def get_company_data_and_keyboard(user_id):
             f"🏢 Компания по флипингу 💸\n\n"
             f"• Статус: {lvl_info['name']} (Уровень {level}/5)\n"
             f"• Доход: {hourly_income:,} ¢ в час (~{per_second_text} ¢/сек)\n"
-            f"• Накоплено прибыли: {total_available:,} ¢ (лимит 24ч)\n"
+            f"• Накоплено прибыли: {total_available:,} ¢ (начисляется каждую секунду, лимит 24ч)\n"
             f"• Забор забирает всю сумму до нуля, дальше копится с 0 по секундной ставке\n\n"
             f"{next_upgrade_text}"
         ).replace(",", " ")
@@ -1537,100 +1549,50 @@ async def callback_claim_company(callback: CallbackQuery):
     user_id = callback.from_user.id
     conn = get_db()
     cursor = conn.cursor()
-    total_to_claim = 0
-    reset_time = 0.0
     try:
         cursor.execute(
-            "SELECT level, last_claim, earned_balance "
-            "FROM user_companies WHERE user_id = %s FOR UPDATE",
+            "SELECT earned_balance FROM user_companies WHERE user_id = %s FOR UPDATE",
             (user_id,)
         )
-        comp = cursor.fetchone()
-        if not comp:
+        row = cursor.fetchone()
+        if not row:
             conn.rollback()
             await callback.answer("❌ У вас нет компании.", show_alert=True)
             return
-
-        level, last_claim, earned_bal = comp
-        now = time.time()
-        last_claim = float(last_claim or now)
-        elapsed_seconds = min(24 * 3600, max(0, int(now - last_claim)))
-        accrued = (elapsed_seconds * COMPANY_LEVELS[level]["income"]) // 3600
-        total_to_claim = max(0, int(earned_bal or 0)) + accrued
-
-        if total_to_claim <= 0:
+        earned_bal = row[0]
+        if earned_bal <= 0:
             conn.rollback()
             await callback.answer("❌ Пока еще ничего не накопилось!", show_alert=True)
             return
 
-        # Оба изменения в одной транзакции: если выплата не прошла, сброс тоже отменится.
+        # Забираем накопленную прибыль
         cursor.execute(
             "UPDATE users SET balance = balance + %s WHERE user_id = %s",
-            (total_to_claim, user_id)
+            (int(earned_bal), user_id)
         )
         if cursor.rowcount == 0:
             conn.rollback()
             await callback.answer("❌ Не удалось найти ваш баланс.", show_alert=True)
             return
-        # RETURNING подтверждает, что строка реально найдена и сброс применён.
+        # Сбрасываем накопления и ставим отметку времени, чтобы посекундный счет шел с нуля
         cursor.execute(
-            "UPDATE user_companies SET last_claim = %s, earned_balance = 0 "
-            "WHERE user_id = %s RETURNING last_claim, earned_balance",
-            (now, user_id)
+            "UPDATE user_companies SET last_claim = %s, earned_balance = 0 WHERE user_id = %s",
+            (time.time(), user_id)
         )
-        reset_row = cursor.fetchone()
-        if not reset_row:
-            conn.rollback()
-            await callback.answer("❌ Не удалось сбросить накопления. Попробуйте ещё раз.", show_alert=True)
-            return
-        saved_lc, saved_earned = reset_row[0], reset_row[1]
-        if int(saved_earned or 0) != 0:
-            conn.rollback()
-            print(f"[company] КЛЕЙМ {user_id}: UPDATE вернул earned_balance={saved_earned}, откатываю!")
-            await callback.answer("❌ Не удалось сбросить накопления. Попробуйте ещё раз.", show_alert=True)
-            return
-        reset_time = float(saved_lc or now)
         conn.commit()
     except Exception as e:
-        total_to_claim = 0
         conn.rollback()
-        print(f"[company] Ошибка получения прибыли для {user_id}: {e!r}")
+        print(f"[company] Ошибка клейма для {user_id}: {e!r}")
         await callback.answer("❌ Не удалось забрать прибыль. Попробуйте ещё раз.", show_alert=True)
         return
     finally:
         conn.close()
 
     await callback.answer(
-        f"💶 Вы успешно забрали прибыль: +{total_to_claim:,} ¢!".replace(",", " "),
+        f"💶 Вы успешно забрали прибыль: +{int(earned_bal):,} ¢!".replace(",", " "),
         show_alert=True
     )
-
-    # Контрольная проверка на новом соединении: накопления обязаны быть обнулены.
-    try:
-        conn2 = get_db()
-        cur2 = conn2.cursor()
-        cur2.execute("SELECT last_claim, earned_balance FROM user_companies WHERE user_id = %s", (user_id,))
-        after = cur2.fetchone()
-        if not after:
-            print(f"[company] ПОСЛЕ КЛЕЙМА у {user_id} нет строки в user_companies!")
-        else:
-            after_lc, after_earned = float(after[0] or 0.0), int(after[1] or 0)
-            broken = (after_earned != 0) or (abs(after_lc - reset_time) > 1.0)
-            if broken:
-                print(
-                    f"[company] ВНИМАНИЕ {user_id}: накопления не обнулились после коммита "
-                    f"(earned={after_earned}, last_claim={after_lc}, ожидалось last_claim≈{reset_time}) — исправляю принудительно"
-                )
-                cur2.execute(
-                    "UPDATE user_companies SET last_claim = %s, earned_balance = 0 WHERE user_id = %s",
-                    (time.time(), user_id)
-                )
-                conn2.commit()
-            else:
-                print(f"[company] Клейм {user_id}: OK, выплачено {total_to_claim:,}, сброс подтверждён".replace(",", " "))
-        conn2.close()
-    except Exception as e:
-        print(f"[company] Проверка после клейма для {user_id} не удалась: {e!r}")
+    await refresh_company_view(callback, user_id)
 
     await refresh_company_view(callback, user_id)
 
@@ -4042,9 +4004,39 @@ async def api_idea_status(request):
         return web.json_response({"error": "Некорректные данные"}, status=400)
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("SELECT status, creator_id FROM update_ideas WHERE id = %s", (idea_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return web.json_response({"error": "Предложение не найдено"}, status=404)
+    prev_status, creator_id = row[0], row[1]
     cursor.execute("UPDATE update_ideas SET status = %s WHERE id = %s", (status, idea_id))
     conn.commit()
     conn.close()
+
+    # Уведомляем креатора в боте. За одобрение — выплата 500кк (один раз).
+    if creator_id:
+        try:
+            if status == "approved" and prev_status != "approved":
+                conn2 = get_db()
+                cur2 = conn2.cursor()
+                cur2.execute(
+                    "UPDATE users SET balance = balance + 500000000 WHERE user_id = %s",
+                    (creator_id,)
+                )
+                conn2.commit()
+                conn2.close()
+                await bot.send_message(
+                    creator_id,
+                    "✅ Вы получили 500кк за хорошее предложение в обнове!"
+                )
+            elif status == "rejected" and prev_status != "rejected":
+                await bot.send_message(
+                    creator_id,
+                    "😔 К сожалению, ваше предложение к обнове было отклонено. Вы ничего не получите."
+                )
+        except Exception as e:
+            print(f"[ideas] Не удалось уведомить креатора {creator_id}: {e!r}")
     return web.json_response({"success": True})
 
 async def api_creator_promo(request):
@@ -4076,6 +4068,13 @@ async def api_creator_promo(request):
     cursor.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (reward, user_id))
     conn.commit()
     conn.close()
+    try:
+        await bot.send_message(
+            user_id,
+            f"✅ Вы успешно вписали промокод и получили {reward:,} ¢!".replace(",", " ")
+        )
+    except Exception as e:
+        print(f"[creator_promo] Не удалось отправить сообщение {user_id}: {e!r}")
     return web.json_response({"success": True, "message": f"✅ Промокод активирован! Получено: +{reward:,} ¢".replace(",", " ")})
 
 async def api_banlist_get(request):
@@ -4135,6 +4134,57 @@ async def web_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
+async def company_accrual_loop():
+    """Каждую секунду начисляет прибыль компаний в накопленный баланс.
+    Точность: остаток от деления хранится в accrual_remainder (миллионные доли ¢),
+    поэтому за час набегает ровно income, без накопления ошибки округления."""
+    while True:
+        conn = None
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            now = time.time()
+            cursor.execute(
+                "SELECT user_id, level, last_claim, earned_balance, accrual_remainder "
+                "FROM user_companies"
+            )
+            rows = cursor.fetchall()
+            for user_id, level, last_claim, earned_bal, rem in rows:
+                income = COMPANY_LEVELS.get(level, {}).get("income", 0)
+                if income <= 0:
+                    continue
+                cap = 24 * income
+                cur_bal = int(earned_bal or 0)
+                if cur_bal >= cap:
+                    continue
+                last = float(last_claim) if last_claim is not None else now
+                elapsed_ms = max(0, int((now - last) * 1000))
+                if elapsed_ms <= 0:
+                    continue
+                total = income * elapsed_ms
+                add = total // 3_600_000
+                new_rem = int(rem or 0) + (total % 3_600_000)
+                add += new_rem // 3_600_000
+                new_rem = new_rem % 3_600_000
+                new_bal = min(cap, cur_bal + add)
+                cursor.execute(
+                    "UPDATE user_companies SET earned_balance = %s, last_claim = %s, "
+                    "accrual_remainder = %s WHERE user_id = %s",
+                    (new_bal, now, new_rem, user_id)
+                )
+            conn.commit()
+        except Exception as e:
+            print(f"[company] Ошибка посекундного начисления: {e!r}")
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        finally:
+            if conn is not None:
+                conn.close()
+        await asyncio.sleep(1)
+
 async def main():
     init_db()
     
@@ -4150,7 +4200,8 @@ async def main():
     
     await asyncio.gather(
         web_server(),
-        dp.start_polling(bot)
+        dp.start_polling(bot),
+        company_accrual_loop()
     )
 
 if __name__ == "__main__":
