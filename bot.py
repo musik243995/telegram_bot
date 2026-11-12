@@ -136,8 +136,7 @@ def get_admin_keyboard():
             [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
             [InlineKeyboardButton(text="🎁 Донат-пасс", callback_data="admin_donate_pass")],
             [InlineKeyboardButton(text="🚫 Баны / Креаторы", callback_data="admin_ban_menu")],
-            [InlineKeyboardButton(text="📋 История игрока", callback_data="admin_history_help")],
-            [InlineKeyboardButton(text="🎟 Создать промокоды 10/01", callback_data="admin_create_special_promo")]
+            [InlineKeyboardButton(text="📋 История игрока", callback_data="admin_history_help")]
         ]
     )
 
@@ -2403,23 +2402,6 @@ async def cmd_admin_panel(message: Message):
 async def admin_history_help_callback(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return
     await callback.message.answer("📋 История игрока\n\nНапиши: история @username\nНапример: история @chapa")
-    await callback.answer()
-
-@router.callback_query(F.data == "admin_create_special_promo")
-async def admin_create_special_promo(callback: CallbackQuery):
-    if callback.from_user.id not in ADMIN_IDS: return
-    conn = get_db()
-    cursor = conn.cursor()
-    # Создаем два промокода: 10 и 01 с наградой 100000¢ (100к) и 50 активациями
-    for code in ("10", "01"):
-        cursor.execute(
-            "INSERT INTO creator_promo_codes (code, reward, activations_left) VALUES (%s, %s, %s) "
-            "ON CONFLICT (code) DO UPDATE SET reward = EXCLUDED.reward, activations_left = EXCLUDED.activations_left",
-            (code, 100000, 50)
-        )
-    conn.commit()
-    conn.close()
-    await callback.message.answer("✅ Созданы специальные промокоды:\n• /promokod 10 — 100 000¢ (50 активаций)\n• /promokod 01 — 100 000¢ (50 активаций)\nКреаторы могут использовать их на сайте.")
     await callback.answer()
 
 @router.message(F.text.regexp(r"(?i)^(история|действия)\s+@?\w+$"))
