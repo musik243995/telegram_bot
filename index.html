@@ -95,6 +95,11 @@
         .battle-reel-cell { width: 70px; flex-shrink: 0; text-align: center; padding: 4px 2px; }
         .battle-reel-cell .emoji { font-size: 1.4rem; }
         .battle-reel-cell .price { font-size: .58rem; color: #b8a0c8; }
+        /* стрелка-указатель сверху и стенки по бокам рулетки */
+        .battle-reel-pointer { position: absolute; top: -1px; left: 50%; transform: translateX(-50%); z-index: 3; color: #ff8c00; font-size: .8rem; line-height: 1; text-shadow: 0 1px 2px #000; pointer-events: none; }
+        .battle-reel-line { position: absolute; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg,#ff8c00,#b45309); z-index: 2; pointer-events: none; }
+        .battle-reel-line.l { left: 0; border-radius: 10px 0 0 10px; }
+        .battle-reel-line.r { right: 0; border-radius: 0 10px 10px 0; }
         .battle-items-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; min-height: 30px; }
         .battle-item-chip { background: #120e24; border: 1px solid #2a224c; border-radius: 8px; padding: 3px 5px; font-size: .62rem; text-align: center; }
         .battle-item-chip.none { opacity: .45; }
@@ -1181,8 +1186,12 @@
                     btn = `<button class="battle-join-btn" onclick="joinBattle(${b.id})">Join</button>`;
                 } else if (b.status === 'open') {
                     btn = `<button class="battle-view-btn muted" onclick="openBattleRoom(${b.id})">⏳ Ждём…</button>`;
-                } else {
+                } else if (b.status === 'playing') {
+                    // смотреть можно только пока битва крутится
                     btn = `<button class="battle-view-btn" onclick="openBattleRoom(${b.id})">View</button>`;
+                } else {
+                    // завершённые битвы смотреть нельзя
+                    btn = `<span class="empty-battles" style="padding:0">Завершена</span>`;
                 }
                 const winnerInfo = (b.status === 'done' && b.winner_id)
                     ? `🏆 ${b.winner_id === b.creator_id ? (b.creator_name || '') : (b.opponent_name || '🤖 Бот')}`
@@ -1217,6 +1226,10 @@
         }
 
         function battlePickAdd(cid, delta) {
+            if (delta > 0 && battleSelectedCases().length >= 10) {
+                alertBattle('❌ Максимум 10 кейсов в одной битве');
+                return;
+            }
             battlePick[cid] = Math.max(0, (battlePick[cid] || 0) + delta);
             document.getElementById(`bp-count-${cid}`).innerText = battlePick[cid];
             updateBattleTotal();
@@ -1310,7 +1323,12 @@
 
         function battleSideHTML(side, nameHtml) {
             return `<div class="battle-player">${nameHtml}</div>
-                <div class="battle-reel"><div class="battle-reel-track" id="reel-${side}"></div></div>
+                <div class="battle-reel">
+                    <div class="battle-reel-pointer">▼</div>
+                    <div class="battle-reel-line l"></div>
+                    <div class="battle-reel-line r"></div>
+                    <div class="battle-reel-track" id="reel-${side}"></div>
+                </div>
                 <div class="battle-items-row" id="items-${side}"></div>
                 <div class="battle-col-total" id="total-${side}">0 ¢</div>`;
         }
@@ -1363,6 +1381,9 @@
                 const track = document.getElementById(`reel-${side}`);
                 if (!track || !c) { resolve(); return; }
                 const TARGET = 16, CELL = 70;
+                const reelW = track.parentElement.clientWidth || 150;
+                // останавливаем выигрышный предмет точно под стрелкой (по центру рулетки)
+                const offset = TARGET * CELL + CELL / 2 - reelW / 2;
                 const rnd = () => c.items[Math.floor(Math.random() * c.items.length)];
                 let cells = '';
                 for (let i = 0; i < TARGET; i++) {
@@ -1380,8 +1401,8 @@
                 track.style.transform = 'translateX(0px)';
                 track.innerHTML = cells;
                 void track.offsetWidth; // перезапуск CSS-перехода
-                track.style.transition = 'transform 1.6s cubic-bezier(.12,.75,.2,1)';
-                track.style.transform = `translateX(-${TARGET * CELL}px)`;
+                track.style.transition = 'transform 2.4s cubic-bezier(.1,.8,.18,1)';
+                track.style.transform = `translateX(-${offset}px)`;
                 setTimeout(() => {
                     const box = document.getElementById(`items-${side}`);
                     if (box && item) {
@@ -1390,7 +1411,7 @@
                             : `<div class="battle-item-chip none">💤<br>—</div>`;
                     }
                     resolve();
-                }, 1700);
+                }, 2500);
             });
         }
 
@@ -1410,7 +1431,7 @@
                 if (itemsR[i] && itemsR[i].name) totR += itemsR[i].price;
                 document.getElementById('total-left').innerText = fmtB(totL) + ' ¢';
                 document.getElementById('total-right').innerText = fmtB(totR) + ' ¢';
-                await new Promise(r => setTimeout(r, 400));
+                await new Promise(r => setTimeout(r, 500));
             }
             const banner = document.getElementById('battle-winner-banner');
             banner.style.display = 'block';

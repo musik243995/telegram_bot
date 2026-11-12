@@ -4255,10 +4255,15 @@ def _battle_roll(case_ids):
 async def api_battles_list(request):
     conn = get_db()
     cursor = conn.cursor()
+    # Показываем только живые битвы: открытые и те, что прямо сейчас крутятся.
+    # Законченные — исчезают, смотреть их нельзя.
     cursor.execute(
         "SELECT id, creator_id, creator_name, opponent_id, opponent_name, vs_bot, "
         "cases, status, creator_total, opp_total, winner_id, created_at "
-        "FROM case_battles ORDER BY id DESC LIMIT 30"
+        "FROM case_battles WHERE status = 'open' "
+        "OR (status = 'playing' AND finished_at IS NOT NULL AND finished_at > %s) "
+        "ORDER BY id DESC LIMIT 30",
+        (time.time(),)
     )
     battles = [{
         "id": r[0], "creator_id": r[1], "creator_name": r[2],
@@ -4367,13 +4372,15 @@ async def api_battle_join(request):
                         "VALUES (%s, %s, %s, 0, 'normal')",
                         (winner_id, it["name"], it["price"])
                     )
+        # Статус «playing»: битва доступна для просмотра только пока крутится анимация
+        play_duration = len(case_ids) * 3.0 + 2.0
         cursor.execute(
-            "UPDATE case_battles SET opponent_id=%s, opponent_name=%s, vs_bot=%s, status='done', "
+            "UPDATE case_battles SET opponent_id=%s, opponent_name=%s, vs_bot=%s, status='playing', "
             "creator_items=%s, opp_items=%s, creator_total=%s, opp_total=%s, winner_id=%s, finished_at=%s "
             "WHERE id=%s",
             (opponent_id, oname, 1 if with_bot else 0,
              json.dumps(creator_items), json.dumps(opp_items),
-             creator_total, opp_total, winner_id, time.time(), bid)
+             creator_total, opp_total, winner_id, time.time() + play_duration, bid)
         )
         conn.commit()
         return web.json_response({"success": True})
@@ -4395,16 +4402,21 @@ async def api_battle_state(request):
     cursor = conn.cursor()
     cursor.execute(
         "SELECT id, creator_id, creator_name, opponent_id, opponent_name, vs_bot, cases, status, "
-        "creator_items, opp_items, creator_total, opp_total, winner_id, created_at "
+        "creator_items, opp_items, creator_total, opp_total, winner_id, created_at, finished_at "
         "FROM case_battles WHERE id = %s", (bid,))
     r = cursor.fetchone()
     conn.close()
     if not r:
         return web.json_response({"error": "Битва не найдена"}, status=404)
+    status = r[7]
+    finished_at = float(r[14] or 0)
+    # Если время показа истекло — битва считается законченной (смотреть нельзя)
+    if status == "playing" and finished_at and time.time() >= finished_at:
+        status = "done"
     return web.json_response({
         "id": r[0], "creator_id": r[1], "creator_name": r[2],
         "opponent_id": r[3], "opponent_name": r[4], "vs_bot": r[5],
-        "case_ids": json.loads(r[6] or "[]"), "status": r[7],
+        "case_ids": json.loads(r[6] or "[]"), "status": status,
         "creator_items": json.loads(r[8]) if r[8] else None,
         "opp_items": json.loads(r[9]) if r[9] else None,
         "creator_total": r[10] or 0, "opp_total": r[11] or 0,
