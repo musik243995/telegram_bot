@@ -252,14 +252,15 @@
         .profile-inventory-section { background: var(--card); border: 1px solid #231d42; border-radius: 18px; padding: 16px; margin-top: 5px; }
         .profile-inv-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-weight: bold; font-size: 0.95rem; }
         .profile-inv-count { background: #2a224c; color: var(--muted); padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; }
-        .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .inv-item { background: #0e0a1f; border-radius: 12px; padding: 12px; text-align: center; border: 1px solid #2b234d; cursor: pointer; transition: 0.2s; }
+        .inventory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .inv-item { background: #0e0a1f; border-radius: 12px; padding: 12px; text-align: center; border: 1px solid #2b234d; cursor: pointer; transition: 0.2s; min-width: 0; max-width: 100%; overflow: hidden; }
+        .inv-item .inv-name { font-weight: bold; font-size: 0.85rem; margin: 4px 0; word-break: break-word; overflow-wrap: anywhere; }
         .inv-item:hover { border-color: #8b5cf6; }
         .empty-inv-box { text-align: center; padding: 25px 10px; color: var(--muted); font-size: 0.85rem; display: flex; flex-direction: column; align-items: center; gap: 10px; }
         .empty-inv-btn { background: #2a224c; color: #fff; border: 1px solid #4c3f85; padding: 8px 16px; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; }
 
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 100; }
-        .modal-content { background: var(--card); padding: 20px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; border: 1px solid #312e81; }
+        .modal-content { background: var(--card); padding: 20px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; border: 1px solid #312e81; word-break: break-word; overflow-wrap: anywhere; }
         .modal-btns { display: flex; gap: 10px; margin-top: 15px; }
         .modal-btns button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .btn-yes { background: linear-gradient(135deg, #ef4444, #dc2626); }
@@ -2553,7 +2554,7 @@
                 grid.innerHTML = inventory.map((item, idx) => `
                     <div class="inv-item" onclick="openSellModal(${idx})">
                         <div style="font-size: 2rem;">${item.emoji || '🎁'}</div>
-                        <div style="font-weight: bold; font-size: 0.85rem; margin: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</div>
+                        <div class="inv-name">${item.name}</div>
                         <div style="color: ${item.item_type === 'electronics' ? '#fbbf24' : '#4ade80'}; font-size: 0.8rem; font-weight: bold;">${item.price.toLocaleString()} ${item.item_type === 'electronics' ? 'коинов' : '¢'}</div>
                     </div>
                 `).join('');
