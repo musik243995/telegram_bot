@@ -816,7 +816,7 @@ async def shop_buy_callback(callback: CallbackQuery):
 
 ACTIVE_DROPS = {}
 
-@router.message(F.text.regexp(r"(?i)^обранить\s+(\d+[ккмилн]*)\s+(\d+)$"))
+@router.message(F.text.regexp(r"(?i)^/?обранить(?:@\w+)?\s+(\d+[ккмилн]*)\s+(\d+)$"))
 async def cmd_obran(message: Message):
     if not await check_ban_and_register(message): return
     parts = message.text.split()
