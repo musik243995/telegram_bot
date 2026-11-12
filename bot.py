@@ -1506,16 +1506,14 @@ def get_company_data_and_keyboard(user_id):
         conn.close()
 
 async def refresh_company_view(callback: CallbackQuery, user_id: int):
-    """Обновляет сообщение компании. Если правка не удалась — присылает новое сообщение,
-    чтобы игрок никогда не смотрел на устаревшую сумму."""
+    """Обновляет сообщение компании ТОЛЬКО правкой текста.
+    Никаких повторных отправок: если правка не удалась (устаревшее сообщение и т.п.) —
+    просто молча пропускаем, чтобы не спамить новыми сообщениями."""
     text, keyboard = get_company_data_and_keyboard(user_id)
     try:
         await callback.message.edit_text(text, reply_markup=keyboard)
     except Exception:
-        try:
-            await callback.message.answer(text, reply_markup=keyboard)
-        except Exception:
-            pass
+        pass  # молча: сообщение не перезасылаем
 
 @router.message(F.text.casefold().in_(["компания", "компания по флипингу", "🏢 компания по флипингу 💸"]))
 async def text_company_menu(message: Message):
@@ -1603,11 +1601,8 @@ async def callback_claim_company(callback: CallbackQuery):
         conn.close()
 
     await callback.answer(
-        f"💶 Вы успешно забрали прибыль: +{int(earned_bal):,} ¢!".replace(",", " "),
-        show_alert=True
+        f"💶 Вы успешно забрали прибыль: +{int(earned_bal):,} ¢!".replace(",", " ")
     )
-    await refresh_company_view(callback, user_id)
-
     await refresh_company_view(callback, user_id)
 
 
