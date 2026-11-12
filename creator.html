@@ -194,6 +194,17 @@
     overflow-y: auto;
   }
   .modal.open { display: block; }
+
+  /* летающие бинарные коды на заднем фоне */
+  #bin-bg {
+    position: fixed; inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: .5;
+  }
+  header, main { position: relative; z-index: 1; }
+  .bottom-bar { z-index: 2; }
+
   .modal-content {
     background: var(--card);
     border: 1px solid #2b2f42;
@@ -210,6 +221,7 @@
 </style>
 </head>
 <body>
+<canvas id="bin-bg"></canvas>
 <header>
   <h1>🌐 Панель креатора</h1>
   <p id="whoami">…</p>
@@ -261,6 +273,7 @@
       <button class="btn btn-red" id="m-reject">🔴 Отказано</button>
       <button class="btn btn-green" id="m-approve">🟢 Одобрено</button>
     </div>
+    <button class="btn" id="m-delete" style="display:none; background:var(--card2); color:var(--red); border:1px solid var(--red); margin-top:8px">🗑 Удалить предложение</button>
     <button class="btn" style="background:var(--card2); margin-top:8px" id="m-back">🔙 Назад</button>
   </div>
 </div>
@@ -349,6 +362,8 @@
     badge.textContent = STATUS_BADGE[idea.status] || "";
     badge.className = "badge " + (idea.status === "approved" ? "status-approved" : idea.status === "rejected" ? "status-rejected" : "");
     document.getElementById("m-actions").style.display = (S.isAdmin && idea.status === "pending") ? "block" : "none";
+    // Удаление доступно админу после одобрения/отклонения
+    document.getElementById("m-delete").style.display = (S.isAdmin && idea.status !== "pending") ? "block" : "none";
     document.getElementById("idea-modal").classList.add("open");
   }
 
@@ -375,6 +390,28 @@
 
   function toast(text) {
     try { tg && tg.showAlert && tg.showAlert(text); } catch (e) { alert(text); }
+  }
+
+  function confirmDlg(text) {
+    return new Promise(resolve => {
+      if (tg && tg.showConfirm) tg.showConfirm(text, v => resolve(!!v));
+      else resolve(confirm(text));
+    });
+  }
+
+  document.getElementById("m-delete").addEventListener("click", deleteIdea);
+  async function deleteIdea() {
+    if (!currentIdea) return;
+    const ok = await confirmDlg("Удалить предложение к обнове с сайта?");
+    if (!ok) return;
+    const res = await apiPost("/api/idea/delete", { id: currentIdea.id });
+    if (res && res.success) {
+      closeIdeaModal();
+      toast("🗑 Предложение удалено");
+      await loadIdeas();
+    } else {
+      toast((res && res.error) || "❌ Не удалось удалить");
+    }
   }
 
   // форма идеи
@@ -468,6 +505,52 @@
       document.getElementById("bans-list").innerHTML = '<div class="empty">Ошибка загрузки</div>';
     }
   }
+
+  // летающие бинарные коды «10 01» на заднем фоне (зелёные)
+  (function binaryBackground() {
+    const canvas = document.getElementById("bin-bg");
+    const ctx = canvas.getContext("2d");
+    let W, H, parts = [];
+
+    function resize() {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    function newPart(spawnBottom) {
+      const len = 3 + Math.floor(Math.random() * 4); // 3–6 пар
+      let text = "";
+      for (let i = 0; i < len; i++) text += (Math.random() < .5 ? "10" : "01") + " ";
+      return {
+        text: text.trim(),
+        x: Math.random() * W,
+        y: spawnBottom ? H + Math.random() * 60 : Math.random() * H,
+        size: 10 + Math.random() * 8,
+        speed: 0.25 + Math.random() * 0.55,
+        sway: Math.random() * 2 * Math.PI,
+        swaySpeed: 0.004 + Math.random() * 0.01,
+        alpha: 0.25 + Math.random() * 0.4
+      };
+    }
+    for (let i = 0; i < 38; i++) parts.push(newPart(false));
+
+    function tick() {
+      ctx.clearRect(0, 0, W, H);
+      for (const p of parts) {
+        p.y -= p.speed;
+        p.sway += p.swaySpeed;
+        const x = p.x + Math.sin(p.sway) * 14;
+        if (p.y < -40) Object.assign(p, newPart(true));
+        ctx.font = p.size + "px monospace";
+        ctx.fillStyle = "rgba(46, 232, 106, " + p.alpha + ")";
+        ctx.fillText(p.text, x, p.y);
+      }
+      requestAnimationFrame(tick);
+    }
+    tick();
+  })();
 
   // нижние вкладки
   function switchTab(name) {

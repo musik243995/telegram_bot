@@ -38,6 +38,7 @@ class AdminStates(StatesGroup):
     waiting_for_coin_exchange = State()
     waiting_for_donate_pass = State()
     waiting_for_creator_promo = State()
+    waiting_for_admin_creator_promo = State()
 
 # --- АНТИСПАМ ФИЛЬТРЫ ---
 original_send_message = bot.send_message
@@ -136,6 +137,7 @@ def get_admin_keyboard():
             [InlineKeyboardButton(text="💰 Изменить баланс", callback_data="admin_balance")],
             [InlineKeyboardButton(text="🎁 Донат-пасс", callback_data="admin_donate_pass")],
             [InlineKeyboardButton(text="🚫 Баны / Креаторы", callback_data="admin_ban_menu")],
+            [InlineKeyboardButton(text="🎟 Промо для кр", callback_data="admin_creator_promo")],
             [InlineKeyboardButton(text="📋 История игрока", callback_data="admin_history_help")]
         ]
     )
@@ -2287,15 +2289,16 @@ def _parse_promo_message(text: str):
     return (code, reward, activations)
 
 @router.message(F.text.regexp(r"(?i)^промокод\s+для\s+кр\s+\w+\s+.+\s+\d+$"))
-async def create_creator_promo_admin_cmd(message: Message):
+async def create_creator_promo_admin_cmd(message: Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS: return
     if not await check_ban_and_register(message): return
+    await state.clear()  # если админ был в режиме создания — выходим
     parts = message.text.split()
     # формат: промокод для кр CODE SUM N
-    code = parts[4].upper()
-    reward = parse_sum(parts[5])
+    code = parts[3].upper()
+    reward = parse_sum(parts[4])
     try:
-        activations = int(parts[6])
+        activations = int(parts[5])
     except Exception:
         activations = 0
     if not reward or reward <= 0 or activations <= 0:
@@ -2309,6 +2312,65 @@ async def create_creator_promo_admin_cmd(message: Message):
     )
     conn.commit()
     conn.close()
+    await message.answer(f"✅ Промокод для креаторов {code} создан на {reward:,} ¢ (активаций: {activations})!".replace(",", " "))
+
+@router.callback_query(F.data == "admin_creator_promo")
+async def admin_creator_promo_callback(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS: return
+    await callback.message.answer(
+        "🎟 Создание промокода для креаторов:\n\n"
+        "Напиши одной строкой:\n"
+        "<code>промокод для кр КОД СУММА КОЛ-ВО</code>\n\n"
+        "Пример: <code>промокод для кр ANAPA 1ккк 13</code>\n"
+        "• КОД — сам промокод\n"
+        "• СУММА — сколько получит каждый (кк / ккк)\n"
+        "• КОЛ-ВО — сколько всего активаций\n"
+        "(каждый креатор может активировать промокод только 1 раз)\n\n"
+        "→ Пиши одним сообщением (или /cancel для отмены):",
+        parse_mode="HTML"
+    )
+    await state.set_state(AdminStates.waiting_for_admin_creator_promo)
+    await callback.answer()
+
+@router.message(AdminStates.waiting_for_admin_creator_promo)
+async def admin_creator_promo_process(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        await state.clear(); return
+    if message.text.casefold() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отменено.")
+        return
+    parts = message.text.split()
+    # Поддерживаем оба формата:
+    #   «промокод для кр КОД СУММА N»  и короткий  «КОД СУММА N»
+    if parts and parts[0].casefold() == "промокод" and len(parts) >= 2 and parts[1].casefold() == "для":
+        if len(parts) != 6:
+            await message.answer("❌ Неверный формат.\nПример: промокод для кр ANAPA 1ккк 13\n(или /cancel)")
+            return
+        code, sum_idx, act_idx = parts[3].upper(), parts[4], parts[5]
+    elif len(parts) == 3:
+        code, sum_idx, act_idx = parts[0].upper(), parts[1], parts[2]
+    else:
+        await message.answer("❌ Неверный формат.\nПример: промокод для кр ANAPA 1ккк 13\n(или /cancel)")
+        return
+    reward = parse_sum(sum_idx)
+    try:
+        activations = int(act_idx)
+    except Exception:
+        activations = 0
+    if not reward or reward <= 0 or activations <= 0:
+        await message.answer("❌ Ошибка суммы или количества людей.\nПример: промокод для кр ANAPA 1ккк 13")
+        return
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO creator_promo_codes (code, reward, activations_left) VALUES (%s, %s, %s) "
+        "ON CONFLICT (code) DO UPDATE SET reward = EXCLUDED.reward, activations_left = EXCLUDED.activations_left",
+        (code, reward, activations)
+    )
+    conn.commit()
+    conn.close()
+    await state.clear()
     await message.answer(f"✅ Промокод для креаторов {code} создан на {reward:,} ¢ (активаций: {activations})!".replace(",", " "))
 
 @router.message(AdminStates.waiting_for_creator_promo)
@@ -4040,15 +4102,33 @@ async def api_idea_status(request):
                 conn2.close()
                 await bot.send_message(
                     creator_id,
-                    "✅ Вы получили 500кк за хорошее предложение в обнове!"
+                    "✅ Вы получили 500кк за хорошую идею для обновы!"
                 )
             elif status == "rejected" and prev_status != "rejected":
                 await bot.send_message(
                     creator_id,
-                    "😔 К сожалению, ваше предложение к обнове было отклонено. Вы ничего не получите."
+                    "😔 Ваше предложение к обнове было, к сожалению, отклонено."
                 )
         except Exception as e:
             print(f"[ideas] Не удалось уведомить креатора {creator_id}: {e!r}")
+    return web.json_response({"success": True})
+
+async def api_idea_delete(request):
+    user_id = api_uid(request)
+    if user_id not in ADMIN_IDS:
+        return web.json_response({"error": "Только админ может удалять предложения"}, status=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    idea_id = int(data.get("id", 0) or 0)
+    if idea_id <= 0:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM update_ideas WHERE id = %s", (idea_id,))
+    conn.commit()
+    conn.close()
     return web.json_response({"success": True})
 
 async def api_creator_promo(request):
@@ -4137,6 +4217,7 @@ async def web_server():
     app.router.add_get("/api/ideas", api_ideas_get)
     app.router.add_post("/api/ideas", api_ideas_post)
     app.router.add_post("/api/idea/status", api_idea_status)
+    app.router.add_post("/api/idea/delete", api_idea_delete)
     app.router.add_post("/api/creator_promo", api_creator_promo)
     app.router.add_get("/api/banlist", api_banlist_get)
     
