@@ -906,11 +906,22 @@ async def callback_claim_drop(callback: CallbackQuery):
     await callback.answer(f"🎉 Вы успешно забрали {drop['per_user']:,} ¢!".replace(",", " "), show_alert=True)
 
     if drop["slots_left"] == 0:
+        kb_done = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Разобрано", callback_data="drop_done")]
+        ])
         try:
-            await callback.message.edit_text(callback.message.text + "\n\n❌ **Все разобрали:(**", parse_mode="MARKDOWN")
+            await callback.message.edit_text(
+                (callback.message.text or "") + "\n\n❌ **Все разобрали:(**",
+                reply_markup=kb_done,
+                parse_mode="MARKDOWN"
+            )
         except:
             pass
         del ACTIVE_DROPS[drop_id]
+
+@router.callback_query(F.data == "drop_done")
+async def callback_drop_done(callback: CallbackQuery):
+    await callback.answer("❌ Все разобрали:( ", show_alert=True)
 
 @router.message(F.text.casefold().in_(["📜 квесты", "квесты"]))
 async def text_quests(message: Message):
