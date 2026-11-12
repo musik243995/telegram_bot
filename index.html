@@ -92,7 +92,7 @@
         .battle-player b { color: #fff; }
         .battle-reel { position: relative; overflow: hidden; height: 64px; border-radius: 10px; background: #1f0e03; border: 1px solid #2a224c; }
         .battle-reel-track { display: flex; align-items: center; position: absolute; top: 0; left: 0; will-change: transform; }
-        .battle-reel-cell { width: 70px; flex-shrink: 0; text-align: center; padding: 4px 2px; }
+        .battle-reel-cell { width: 70px; flex-shrink: 0; text-align: center; padding: 4px 2px; box-sizing: border-box; }
         .battle-reel-cell .emoji { font-size: 1.4rem; }
         .battle-reel-cell .price { font-size: .58rem; color: #b8a0c8; }
         /* стрелка-указатель сверху и стенки по бокам рулетки */
@@ -1382,8 +1382,6 @@
                 if (!track || !c) { resolve(); return; }
                 const TARGET = 16, CELL = 70;
                 const reelW = track.parentElement.clientWidth || 150;
-                // останавливаем выигрышный предмет точно под стрелкой (по центру рулетки)
-                const offset = TARGET * CELL + CELL / 2 - reelW / 2;
                 const rnd = () => c.items[Math.floor(Math.random() * c.items.length)];
                 let cells = '';
                 for (let i = 0; i < TARGET; i++) {
@@ -1401,6 +1399,10 @@
                 track.style.transform = 'translateX(0px)';
                 track.innerHTML = cells;
                 void track.offsetWidth; // перезапуск CSS-перехода
+                // Измеряем реальную ширину ячейки — стрелка всегда точно на выигрыше
+                const firstCell = track.children[0];
+                const cellW = firstCell ? firstCell.getBoundingClientRect().width : CELL;
+                const offset = TARGET * cellW + cellW / 2 - reelW / 2;
                 track.style.transition = 'transform 2.4s cubic-bezier(.1,.8,.18,1)';
                 track.style.transform = `translateX(-${offset}px)`;
                 setTimeout(() => {
