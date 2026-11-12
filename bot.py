@@ -2221,7 +2221,7 @@ def get_creator_keyboard():
         [InlineKeyboardButton(text="🚫 Бан-лист", callback_data="creator_banlist")],
     ])
 
-@router.message(F.text.casefold().in_(["креатор", "🎬 креатор"]))
+@router.message(F.text.regexp(r"(?i)^(?:🎬\s*)?/?креатор(?:@\w+)?$"))
 async def text_creator_command(message: Message):
     if not await is_creator(message.from_user.id): return
     await message.answer("🎬 Панель креатора:", reply_markup=get_creator_keyboard())
