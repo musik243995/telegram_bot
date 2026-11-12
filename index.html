@@ -58,6 +58,53 @@
         .view-section { display: none; }
         .view-section.active { display: block; }
 
+        /* --- БИТВЫ КЕЙСОВ --- */
+        .battle-entry-btn { width: 100%; margin-top: 12px; padding: 14px; border: none; border-radius: 14px; background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer; transition: transform .1s ease; }
+        .battle-entry-btn:active { transform: scale(.97); }
+        .battle-create-btn { width: 100%; margin: 10px 0 6px; padding: 12px; border: none; border-radius: 12px; background: #22c55e; color: #fff; font-weight: 700; font-size: 1rem; cursor: pointer; }
+        .battle-hint { color: #b8a0c8; font-size: .78rem; text-align: center; margin-bottom: 10px; }
+        .empty-battles { text-align: center; color: #b8a0c8; padding: 20px 8px; font-size: .85rem; }
+        .battle-row { background: #120e24; border: 1px solid #2a224c; border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .battle-row-cases { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; min-width: 0; }
+        .battle-row-cases img { width: 34px; height: 34px; border-radius: 8px; background: #1f0e03; }
+        .battle-row-info { font-size: .72rem; color: #c8b6e4; margin-right: 6px; }
+        .battle-row-info b { color: #fff; display: block; font-size: .82rem; }
+        .battle-join-btn { padding: 10px 14px; border: none; border-radius: 10px; background: #22c55e; color: #fff; font-weight: 700; cursor: pointer; }
+        .battle-view-btn { padding: 10px 14px; border: none; border-radius: 10px; background: #6d28d9; color: #fff; font-weight: 700; cursor: pointer; }
+        .battle-view-btn.muted { background: #3b2a55; color: #8a7fae; }
+        .battle-pick { display: flex; align-items: center; background: #120e24; border: 1px solid #2a224c; border-radius: 12px; padding: 8px 10px; margin-bottom: 8px; gap: 8px; }
+        .battle-pick img { width: 42px; height: 42px; }
+        .battle-pick-info { flex: 1; min-width: 0; }
+        .battle-pick-name { font-size: .85rem; font-weight: 600; }
+        .battle-pick-price { font-size: .75rem; color: #b8a0c8; }
+        .battle-count-ctl { display: flex; align-items: center; gap: 6px; }
+        .battle-count-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #4c3a7a; background: #1f0e03; color: #fff; font-size: 1.05rem; cursor: pointer; }
+        .battle-count-num { width: 20px; text-align: center; font-weight: 700; }
+        .battle-total-row { background: #120e24; border: 1px solid #2a224c; border-radius: 12px; padding: 10px; text-align: center; font-size: .9rem; margin: 10px 0; }
+        .battle-start-btn { width: 100%; padding: 14px; border: none; border-radius: 12px; background: #22c55e; color: #fff; font-weight: 700; font-size: 1rem; cursor: pointer; }
+        .battle-start-btn:disabled { background: #3b2a55; color: #8a7fae; cursor: default; }
+        .battle-cases-window { display: flex; justify-content: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        .battle-cases-window img { width: 40px; height: 40px; border-radius: 8px; background: #1f0e03; border: 1px solid #2a224c; }
+        .battle-cols { display: flex; gap: 6px; align-items: flex-start; }
+        .battle-col { flex: 1; min-width: 0; }
+        .battle-vs { font-weight: 700; color: #ff8c00; padding-top: 10px; }
+        .battle-player { text-align: center; font-size: .72rem; color: #c8b6e4; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .battle-player b { color: #fff; }
+        .battle-reel { position: relative; overflow: hidden; height: 64px; border-radius: 10px; background: #1f0e03; border: 1px solid #2a224c; }
+        .battle-reel-track { display: flex; align-items: center; position: absolute; top: 0; left: 0; will-change: transform; }
+        .battle-reel-cell { width: 70px; flex-shrink: 0; text-align: center; padding: 4px 2px; }
+        .battle-reel-cell .emoji { font-size: 1.4rem; }
+        .battle-reel-cell .price { font-size: .58rem; color: #b8a0c8; }
+        .battle-items-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; min-height: 30px; }
+        .battle-item-chip { background: #120e24; border: 1px solid #2a224c; border-radius: 8px; padding: 3px 5px; font-size: .62rem; text-align: center; }
+        .battle-item-chip.none { opacity: .45; }
+        .battle-item-chip .price { color: #fbbf24; }
+        .battle-col-total { text-align: center; font-size: .8rem; font-weight: 700; color: #fff; margin-top: 6px; }
+        .battle-winner { margin-top: 12px; background: linear-gradient(135deg,#f59e0b,#f97316); border-radius: 12px; padding: 12px; text-align: center; font-weight: 700; color: #fff; }
+        .battle-wait { text-align: center; color: #b8a0c8; font-size: .85rem; margin-top: 10px; }
+        .battle-bot-btn { width: 100%; padding: 12px; border: none; border-radius: 12px; background: #7c3aed; color: #fff; font-weight: 700; margin-top: 8px; cursor: pointer; }
+
+
         .cases-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         .case-card { background: #120e24; border-radius: 18px; overflow: hidden; border: 1px solid #2a224c; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.2s; }
         .case-card:active { transform: scale(0.96); border-color: #8b5cf6; }
@@ -500,6 +547,7 @@
         <div id="view-cases-list" class="view-section active">
             <button class="bp-entry-btn" id="bp-entry-btn" style="display:none;" onclick="openBattlePass()">🎃 Батл-пасс · 31 день</button>
             <div class="cases-grid" id="cases-grid"></div>
+            <button class="battle-entry-btn" onclick="openBattlesMenu()">⚔️ Битва кейсов</button>
         </div>
         <div id="view-case-room" class="view-section">
             <div class="case-header">
@@ -520,6 +568,42 @@
                 <button class="open-btn" id="open-case-btn" onclick="openCurrentCase()">Открыть кейс</button>
             </div>
             <div class="drop-list" id="room-drop-list"></div>
+        </div>
+
+        <!-- БИТВЫ КЕЙСОВ -->
+        <div id="view-battles" class="view-section">
+            <div class="case-header">
+                <button class="back-btn" onclick="goBackToList()">❮</button>
+                <h2 style="margin: 0; font-size: 1.2rem;">⚔️ Битвы кейсов</h2>
+            </div>
+            <button class="battle-create-btn" onclick="openBattleCreate()">➕ Создать батл</button>
+            <div class="battle-hint">Зелёный Join — присоединиться · View — смотреть как играют</div>
+            <div id="battles-list"><div class="empty-battles">Загрузка…</div></div>
+        </div>
+
+        <div id="view-battle-create" class="view-section">
+            <div class="case-header">
+                <button class="back-btn" onclick="openBattlesMenu()">❮</button>
+                <h2 style="margin: 0; font-size: 1.2rem;">Создать батл</h2>
+            </div>
+            <div id="battle-pick-list"></div>
+            <div class="battle-total-row">Итого кейсов: <b id="battle-total-sum">0 ¢</b></div>
+            <button class="battle-start-btn" id="battle-start-btn" onclick="createBattle()">⚔️ Батл</button>
+        </div>
+
+        <div id="view-battle-room" class="view-section">
+            <div class="case-header">
+                <button class="back-btn" onclick="openBattlesMenu()">❮</button>
+                <h2 id="battle-room-title" style="margin: 0; font-size: 1.2rem;">Битва</h2>
+            </div>
+            <div class="battle-cases-window" id="battle-cases-window"></div>
+            <div class="battle-cols">
+                <div class="battle-col" id="battle-col-left"></div>
+                <div class="battle-vs">VS</div>
+                <div class="battle-col" id="battle-col-right"></div>
+            </div>
+            <div id="battle-room-extra"></div>
+            <div class="battle-winner" id="battle-winner-banner" style="display:none"></div>
         </div>
 
         <div id="view-battle-pass" class="view-section">
@@ -1025,6 +1109,321 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        // ================= БИТВЫ КЕЙСОВ =================
+        const battleCases = casesData.filter(c => c.id !== 5); // все кроме «Кейс электроника»
+        const battleCaseById = {};
+        battleCases.forEach(c => battleCaseById[c.id] = c);
+        const battleEmojiByName = {};
+        casesData.forEach(c => c.items.forEach(it => { battleEmojiByName[it.name] = it.emoji; }));
+
+        let battlePick = {};
+        let battleListTimer = null;
+        let battlePollTimer = null;
+        let battleBusy = false;
+        let battleAnimating = false;
+
+        function fmtB(n) { return n.toLocaleString('ru-RU'); }
+
+        function alertBattle(t) {
+            const tgx = window.Telegram && window.Telegram.WebApp;
+            if (tgx && tgx.showAlert) { try { tgx.showAlert(t); return; } catch (e) {} }
+            alert(t);
+        }
+
+        function showBattleView(id) {
+            ['view-battles', 'view-battle-create', 'view-battle-room'].forEach(v => {
+                document.getElementById(v).classList.toggle('active', v === id);
+            });
+            document.getElementById('section-cases').classList.add('active');
+        }
+
+        function openBattlesMenu() {
+            clearInterval(battlePollTimer);
+            showBattleView('view-battles');
+            loadBattlesList();
+            clearInterval(battleListTimer);
+            battleListTimer = setInterval(() => {
+                if (document.getElementById('view-battles').classList.contains('active')) loadBattlesList(true);
+            }, 4000);
+        }
+
+        async function loadBattlesList(silent) {
+            try {
+                const res = await fetch('/api/battles');
+                const data = await res.json();
+                if (!data.battles) {
+                    if (!silent) document.getElementById('battles-list').innerHTML = '<div class="empty-battles">Ошибка загрузки</div>';
+                    return;
+                }
+                renderBattlesList(data.battles, data.user_id);
+            } catch (e) {
+                if (!silent) document.getElementById('battles-list').innerHTML = '<div class="empty-battles">Ошибка загрузки</div>';
+            }
+        }
+
+        function battleCostOf(st) {
+            return st.case_ids.reduce((s, cid) => s + (battleCaseById[cid] ? battleCaseById[cid].price : 0), 0);
+        }
+
+        function renderBattlesList(battles, myId) {
+            const box = document.getElementById('battles-list');
+            if (!battles.length) {
+                box.innerHTML = '<div class="empty-battles">Пока нет битв. Создай свою! ⚔️</div>';
+                return;
+            }
+            box.innerHTML = battles.map(b => {
+                const total = battleCostOf(b);
+                const imgs = b.case_ids.map(cid => battleCaseById[cid] ? `<img src="${battleCaseById[cid].img}">` : '').join('');
+                let btn;
+                if (b.status === 'open' && b.creator_id !== myId) {
+                    btn = `<button class="battle-join-btn" onclick="joinBattle(${b.id})">Join</button>`;
+                } else if (b.status === 'open') {
+                    btn = `<button class="battle-view-btn muted" onclick="openBattleRoom(${b.id})">⏳ Ждём…</button>`;
+                } else {
+                    btn = `<button class="battle-view-btn" onclick="openBattleRoom(${b.id})">View</button>`;
+                }
+                const winnerInfo = (b.status === 'done' && b.winner_id)
+                    ? `🏆 ${b.winner_id === b.creator_id ? (b.creator_name || '') : (b.opponent_name || '🤖 Бот')}`
+                    : '';
+                return `<div class="battle-row">
+                    <div class="battle-row-cases">${imgs}</div>
+                    <div class="battle-row-info"><b>${b.creator_name || '—'}</b>${fmtB(total)} ¢ · ${b.case_ids.length} кейс.${winnerInfo ? '<br>' + winnerInfo : ''}</div>
+                    ${btn}
+                </div>`;
+            }).join('');
+        }
+
+        function openBattleCreate() {
+            clearInterval(battleListTimer);
+            battlePick = {};
+            showBattleView('view-battle-create');
+            const list = document.getElementById('battle-pick-list');
+            list.innerHTML = battleCases.map(c => `
+                <div class="battle-pick">
+                    <img src="${c.img}">
+                    <div class="battle-pick-info">
+                        <div class="battle-pick-name">${c.name}</div>
+                        <div class="battle-pick-price">${fmtB(c.price)} ¢</div>
+                    </div>
+                    <div class="battle-count-ctl">
+                        <button class="battle-count-btn" onclick="battlePickAdd(${c.id},-1)">−</button>
+                        <span class="battle-count-num" id="bp-count-${c.id}">0</span>
+                        <button class="battle-count-btn" onclick="battlePickAdd(${c.id},1)">+</button>
+                    </div>
+                </div>`).join('');
+            updateBattleTotal();
+        }
+
+        function battlePickAdd(cid, delta) {
+            battlePick[cid] = Math.max(0, (battlePick[cid] || 0) + delta);
+            document.getElementById(`bp-count-${cid}`).innerText = battlePick[cid];
+            updateBattleTotal();
+        }
+
+        function battleSelectedCases() {
+            const ids = [];
+            Object.entries(battlePick).forEach(([cid, n]) => {
+                for (let i = 0; i < n; i++) ids.push(Number(cid));
+            });
+            return ids;
+        }
+
+        function updateBattleTotal() {
+            const ids = battleSelectedCases();
+            const total = ids.reduce((s, cid) => s + battleCaseById[cid].price, 0);
+            document.getElementById('battle-total-sum').innerText = fmtB(total) + ' ¢';
+            const btn = document.getElementById('battle-start-btn');
+            btn.disabled = !ids.length || total > userBalance;
+            btn.innerText = total > userBalance ? '❌ Недостаточно средств' : '⚔️ Батл';
+        }
+
+        async function createBattle() {
+            if (battleBusy) return;
+            const ids = battleSelectedCases();
+            if (!ids.length) return;
+            const total = ids.reduce((s, cid) => s + battleCaseById[cid].price, 0);
+            if (total > userBalance) { alertBattle('❌ Недостаточно средств'); return; }
+            battleBusy = true;
+            try {
+                const res = await fetch('/api/battles/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ case_ids: ids })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    battlePick = {};
+                    await fetchData();
+                    openBattleRoom(data.battle_id);
+                } else alertBattle(data.error || 'Ошибка');
+            } catch (e) { alertBattle('Ошибка сети'); }
+            finally { battleBusy = false; }
+        }
+
+        async function joinBattle(id) {
+            if (battleBusy) return;
+            battleBusy = true;
+            try {
+                const res = await fetch('/api/battles/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    await fetchData();
+                    openBattleRoom(id);
+                } else alertBattle(data.error || 'Ошибка');
+            } catch (e) { alertBattle('Ошибка сети'); }
+            finally { battleBusy = false; }
+        }
+
+        async function joinBot(id) {
+            if (battleBusy) return;
+            battleBusy = true;
+            try {
+                const res = await fetch('/api/battles/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, bot: true })
+                });
+                const data = await res.json();
+                if (data.success) openBattleRoom(id);
+                else alertBattle(data.error || 'Ошибка');
+            } catch (e) { alertBattle('Ошибка сети'); }
+            finally { battleBusy = false; }
+        }
+
+        async function openBattleRoom(id) {
+            clearInterval(battleListTimer);
+            clearInterval(battlePollTimer);
+            showBattleView('view-battle-room');
+            try {
+                const res = await fetch(`/api/battle/state?id=${id}`);
+                const st = await res.json();
+                if (st.error) { alertBattle(st.error); openBattlesMenu(); return; }
+                renderBattleRoom(st);
+            } catch (e) { alertBattle('Ошибка загрузки битвы'); }
+        }
+
+        function battleSideHTML(side, nameHtml) {
+            return `<div class="battle-player">${nameHtml}</div>
+                <div class="battle-reel"><div class="battle-reel-track" id="reel-${side}"></div></div>
+                <div class="battle-items-row" id="items-${side}"></div>
+                <div class="battle-col-total" id="total-${side}">0 ¢</div>`;
+        }
+
+        function renderBattleRoom(st) {
+            document.getElementById('battle-winner-banner').style.display = 'none';
+            document.getElementById('battle-room-extra').innerHTML = '';
+            document.getElementById('battle-cases-window').innerHTML =
+                st.case_ids.map(cid => battleCaseById[cid] ? `<img src="${battleCaseById[cid].img}">` : '').join('');
+            document.getElementById('battle-room-title').innerText = `Битва #${st.id}`;
+            document.getElementById('battle-col-left').innerHTML =
+                battleSideHTML('left', `<b>${st.creator_name || 'Создатель'}</b> 👑`);
+            const rightName = st.status === 'open' ? '⏳ Ждём соперника…' : `<b>${st.opponent_name || 'Соперник'}</b>`;
+            document.getElementById('battle-col-right').innerHTML = battleSideHTML('right', rightName);
+
+            if (st.status === 'open') {
+                if (st.creator_id === st.user_id) {
+                    document.getElementById('battle-room-extra').innerHTML =
+                        `<div class="battle-wait">Битва открыта — любой игрок может нажать Join в списке битв.</div>
+                         <button class="battle-bot-btn" onclick="joinBot(${st.id})">🤖 Играть с ботом</button>`;
+                } else {
+                    document.getElementById('battle-room-extra').innerHTML =
+                        `<button class="battle-bot-btn" style="background:#22c55e" onclick="joinBattle(${st.id})">✋ Присоединиться (${fmtB(battleCostOf(st))} ¢)</button>`;
+                }
+                clearInterval(battlePollTimer);
+                battlePollTimer = setInterval(async () => {
+                    if (!document.getElementById('view-battle-room').classList.contains('active')) {
+                        clearInterval(battlePollTimer);
+                        return;
+                    }
+                    try {
+                        const res = await fetch(`/api/battle/state?id=${st.id}`);
+                        const s2 = await res.json();
+                        if (s2.status && s2.status !== 'open') {
+                            clearInterval(battlePollTimer);
+                            renderBattleRoom(s2);
+                        }
+                    } catch (e) {}
+                }, 3000);
+                return;
+            }
+            animateBattle(st);
+        }
+
+        function battleItemEmoji(name) { return battleEmojiByName[name] || '🎁'; }
+
+        function battleSpin(side, caseId, item) {
+            return new Promise(resolve => {
+                const c = battleCaseById[caseId];
+                const track = document.getElementById(`reel-${side}`);
+                if (!track || !c) { resolve(); return; }
+                const TARGET = 16, CELL = 70;
+                const rnd = () => c.items[Math.floor(Math.random() * c.items.length)];
+                let cells = '';
+                for (let i = 0; i < TARGET; i++) {
+                    const it = rnd();
+                    cells += `<div class="battle-reel-cell"><div class="emoji">${it.emoji}</div><div class="price">${fmtB(it.price)} ¢</div></div>`;
+                }
+                const winEmoji = item && item.name ? battleItemEmoji(item.name) : '💤';
+                const winPrice = item && item.name ? fmtB(item.price) + ' ¢' : '—';
+                cells += `<div class="battle-reel-cell"><div class="emoji">${winEmoji}</div><div class="price">${winPrice}</div></div>`;
+                for (let i = 0; i < 3; i++) {
+                    const it = rnd();
+                    cells += `<div class="battle-reel-cell"><div class="emoji">${it.emoji}</div><div class="price">${fmtB(it.price)} ¢</div></div>`;
+                }
+                track.style.transition = 'none';
+                track.style.transform = 'translateX(0px)';
+                track.innerHTML = cells;
+                void track.offsetWidth; // перезапуск CSS-перехода
+                track.style.transition = 'transform 1.6s cubic-bezier(.12,.75,.2,1)';
+                track.style.transform = `translateX(-${TARGET * CELL}px)`;
+                setTimeout(() => {
+                    const box = document.getElementById(`items-${side}`);
+                    if (box && item) {
+                        box.innerHTML += item.name
+                            ? `<div class="battle-item-chip">${battleItemEmoji(item.name)}<br><span class="price">${fmtB(item.price)} ¢</span></div>`
+                            : `<div class="battle-item-chip none">💤<br>—</div>`;
+                    }
+                    resolve();
+                }, 1700);
+            });
+        }
+
+        async function animateBattle(st) {
+            if (battleAnimating) return;
+            battleAnimating = true;
+            const rounds = st.case_ids.length;
+            const itemsL = st.creator_items || [], itemsR = st.opp_items || [];
+            let totL = 0, totR = 0;
+            for (let i = 0; i < rounds; i++) {
+                // обе стороны крутят одновременно
+                await Promise.all([
+                    battleSpin('left', st.case_ids[i], itemsL[i]),
+                    battleSpin('right', st.case_ids[i], itemsR[i])
+                ]);
+                if (itemsL[i] && itemsL[i].name) totL += itemsL[i].price;
+                if (itemsR[i] && itemsR[i].name) totR += itemsR[i].price;
+                document.getElementById('total-left').innerText = fmtB(totL) + ' ¢';
+                document.getElementById('total-right').innerText = fmtB(totR) + ' ¢';
+                await new Promise(r => setTimeout(r, 400));
+            }
+            const banner = document.getElementById('battle-winner-banner');
+            banner.style.display = 'block';
+            if (st.winner_id) {
+                const winnerName = st.winner_id === st.creator_id
+                    ? (st.creator_name || 'Создатель')
+                    : (st.opponent_name || 'Соперник');
+                banner.innerText = `🏆 Победил ${winnerName}! Забирает все предметы (${fmtB(totL + totR)} ¢)`;
+                if (st.winner_id === st.user_id) await fetchData(); // предметы уже в инвентаре
+            } else {
+                banner.innerText = `🤖 Бот победил! Предметы уходят боту 😈`;
+            }
+            battleAnimating = false;
         }
 
         function switchNavTab(tab) {

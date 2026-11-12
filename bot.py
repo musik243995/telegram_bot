@@ -373,6 +373,26 @@ def init_db():
             created_at REAL
         )
     """)
+    # --- Битвы кейсов (WebApp) ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS case_battles (
+            id SERIAL PRIMARY KEY,
+            creator_id BIGINT,
+            creator_name TEXT,
+            opponent_id BIGINT,
+            opponent_name TEXT,
+            vs_bot INTEGER DEFAULT 0,
+            cases TEXT,
+            status TEXT DEFAULT 'open',
+            creator_items TEXT,
+            opp_items TEXT,
+            creator_total BIGINT DEFAULT 0,
+            opp_total BIGINT DEFAULT 0,
+            winner_id BIGINT,
+            created_at REAL,
+            finished_at REAL
+        )
+    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_quests (
             user_id BIGINT,
@@ -4187,6 +4207,211 @@ async def api_banlist_get(request):
     conn.close()
     return web.json_response({"is_admin": user_id in ADMIN_IDS, "banned": banned})
 
+# --- БИТВЫ КЕЙСОВ (WebApp) ---
+BATTLE_CASES = {
+    1: {"name": "Игровой кейс", "price": 500000000, "items": [
+        ("Игровой Телефон", 150000000, 35), ("Xbox", 250000000, 30),
+        ("Плейстейшен 5", 650000000, 15), ("Игровой пк", 800000000, 5)]},
+    2: {"name": "Машина кейс", "price": 150000000, "items": [
+        ("Жигуль", 50000000, 45), ("Камри", 100000000, 35), ("БМВ", 200000000, 15), ("БУГАТИ", 250000000, 5)]},
+    3: {"name": "Кп кейс", "price": 250000000, "items": [
+        ("Кп по кв", 150000000, 45), ("Кп по мш", 200000000, 35), ("Кп по дм", 300000000, 15), ("Кп по флт", 400000000, 5)]},
+    4: {"name": "Дом кейс", "price": 100000000, "items": [
+        ("Ключи от маленького домика", 35000000, 45), ("Средний домик", 65000000, 35),
+        ("Большой дом", 125000000, 15), ("Пин Хаус", 200000000, 5)]},
+    6: {"name": "Хеллоуин кейс", "price": 10000000, "items": [
+        ("Тыква", 5000000, 35), ("Череп", 7500000, 30), ("Заколдованный телефон", 15000000, 20),
+        ("Заброшенный дом", 25000000, 10), ("Хеллоуин машина", 50000000, 5)]},
+}
+BATTLE_MAX_CASES = 10
+
+def _battle_player_name(cursor, user_id):
+    cursor.execute("SELECT custom_name, username FROM users WHERE user_id = %s", (user_id,))
+    u = cursor.fetchone()
+    if not u:
+        return str(user_id)
+    return u[0] or (("@" + u[1]) if u[1] else str(user_id))
+
+def _battle_roll(case_ids):
+    """Прокрутка кейсов: те же шансы, что и при обычном открытии."""
+    items, total = [], 0
+    for cid in case_ids:
+        info = BATTLE_CASES[cid]
+        roll = random.randint(1, 100)
+        cur = 0
+        won = None
+        for name, price, chance in info["items"]:
+            cur += chance
+            if roll <= cur:
+                won = (name, price)
+                break
+        if won:
+            items.append({"name": won[0], "price": won[1], "case_id": cid})
+            total += won[1]
+        else:
+            items.append({"name": None, "price": 0, "case_id": cid})
+    return items, total
+
+async def api_battles_list(request):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, creator_id, creator_name, opponent_id, opponent_name, vs_bot, "
+        "cases, status, creator_total, opp_total, winner_id, created_at "
+        "FROM case_battles ORDER BY id DESC LIMIT 30"
+    )
+    battles = [{
+        "id": r[0], "creator_id": r[1], "creator_name": r[2],
+        "opponent_id": r[3], "opponent_name": r[4], "vs_bot": r[5],
+        "case_ids": json.loads(r[6] or "[]"), "status": r[7],
+        "creator_total": r[8] or 0, "opp_total": r[9] or 0,
+        "winner_id": r[10], "created_at": float(r[11] or 0)
+    } for r in cursor.fetchall()]
+    conn.close()
+    return web.json_response({"battles": battles, "user_id": api_uid(request)})
+
+async def api_battle_create(request):
+    user_id = api_uid(request)
+    try:
+        data = await request.json()
+        case_ids = [int(x) for x in (data.get("case_ids") or [])]
+    except Exception:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    if not case_ids or len(case_ids) > BATTLE_MAX_CASES:
+        return web.json_response({"error": f"Выбери от 1 до {BATTLE_MAX_CASES} кейсов"}, status=400)
+    if any(cid not in BATTLE_CASES for cid in case_ids):
+        return web.json_response({"error": "Такой кейс нельзя использовать в битве"}, status=400)
+    total = sum(BATTLE_CASES[c]["price"] for c in case_ids)
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
+        row = cursor.fetchone()
+        if not row or row[0] < total:
+            return web.json_response({"error": "Недостаточно средств для создания битвы"}, status=400)
+        cursor.execute(
+            "UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s",
+            (total, user_id, total)
+        )
+        if cursor.rowcount == 0:
+            return web.json_response({"error": "Недостаточно средств"}, status=400)
+        cname = _battle_player_name(cursor, user_id)
+        cursor.execute(
+            "INSERT INTO case_battles (creator_id, creator_name, cases, status, created_at) "
+            "VALUES (%s, %s, %s, 'open', %s) RETURNING id",
+            (user_id, cname, json.dumps(case_ids), time.time())
+        )
+        bid = cursor.fetchone()[0]
+        conn.commit()
+        return web.json_response({"success": True, "battle_id": bid, "total": total})
+    except Exception as e:
+        conn.rollback()
+        print(f"[battles] Ошибка создания: {e!r}")
+        return web.json_response({"error": "Ошибка создания битвы"}, status=500)
+    finally:
+        conn.close()
+
+async def api_battle_join(request):
+    user_id = api_uid(request)
+    try:
+        data = await request.json()
+        bid = int(data.get("id", 0) or 0)
+        with_bot = bool(data.get("bot", False))
+    except Exception:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    if bid <= 0:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT creator_id, cases, status FROM case_battles WHERE id = %s FOR UPDATE", (bid,))
+        row = cursor.fetchone()
+        if not row or row[2] != "open":
+            return web.json_response({"error": "Битва не найдена или уже началась"}, status=400)
+        creator_id, case_ids = row[0], json.loads(row[1] or "[]")
+        total = sum(BATTLE_CASES[c]["price"] for c in case_ids if c in BATTLE_CASES)
+        if not with_bot:
+            if user_id == creator_id:
+                return web.json_response({"error": "Нельзя войти в свою битву"}, status=400)
+            cursor.execute("SELECT balance FROM users WHERE user_id = %s FOR UPDATE", (user_id,))
+            b = cursor.fetchone()
+            if not b or b[0] < total:
+                return web.json_response({"error": "Недостаточно средств для входа в битву"}, status=400)
+            cursor.execute(
+                "UPDATE users SET balance = balance - %s WHERE user_id = %s AND balance >= %s",
+                (total, user_id, total)
+            )
+            if cursor.rowcount == 0:
+                return web.json_response({"error": "Недостаточно средств"}, status=400)
+            opponent_id = user_id
+            oname = _battle_player_name(cursor, user_id)
+        else:
+            if user_id != creator_id:
+                return web.json_response({"error": "Только создатель может играть с ботом"}, status=400)
+            opponent_id = None
+            oname = "🤖 Бот"
+        # Прокрутка обеих сторон одновременно
+        creator_items, creator_total = _battle_roll(case_ids)
+        opp_items, opp_total = _battle_roll(case_ids)
+        # У кого суммарно дороже — тот забирает все предметы. Ничья — за создателем.
+        if creator_total >= opp_total:
+            winner_id = creator_id
+        else:
+            winner_id = opponent_id
+        if winner_id:
+            for it in creator_items + opp_items:
+                if it["name"]:
+                    cursor.execute(
+                        "INSERT INTO user_inventory (user_id, item_name, price, sold, item_type) "
+                        "VALUES (%s, %s, %s, 0, 'normal')",
+                        (winner_id, it["name"], it["price"])
+                    )
+        cursor.execute(
+            "UPDATE case_battles SET opponent_id=%s, opponent_name=%s, vs_bot=%s, status='done', "
+            "creator_items=%s, opp_items=%s, creator_total=%s, opp_total=%s, winner_id=%s, finished_at=%s "
+            "WHERE id=%s",
+            (opponent_id, oname, 1 if with_bot else 0,
+             json.dumps(creator_items), json.dumps(opp_items),
+             creator_total, opp_total, winner_id, time.time(), bid)
+        )
+        conn.commit()
+        return web.json_response({"success": True})
+    except Exception as e:
+        conn.rollback()
+        print(f"[battles] Ошибка входа: {e!r}")
+        return web.json_response({"error": "Ошибка входа в битву"}, status=500)
+    finally:
+        conn.close()
+
+async def api_battle_state(request):
+    try:
+        bid = int(request.query.get("id", 0) or 0)
+    except (TypeError, ValueError):
+        bid = 0
+    if bid <= 0:
+        return web.json_response({"error": "Некорректные данные"}, status=400)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, creator_id, creator_name, opponent_id, opponent_name, vs_bot, cases, status, "
+        "creator_items, opp_items, creator_total, opp_total, winner_id, created_at "
+        "FROM case_battles WHERE id = %s", (bid,))
+    r = cursor.fetchone()
+    conn.close()
+    if not r:
+        return web.json_response({"error": "Битва не найдена"}, status=404)
+    return web.json_response({
+        "id": r[0], "creator_id": r[1], "creator_name": r[2],
+        "opponent_id": r[3], "opponent_name": r[4], "vs_bot": r[5],
+        "case_ids": json.loads(r[6] or "[]"), "status": r[7],
+        "creator_items": json.loads(r[8]) if r[8] else None,
+        "opp_items": json.loads(r[9]) if r[9] else None,
+        "creator_total": r[10] or 0, "opp_total": r[11] or 0,
+        "winner_id": r[12], "created_at": float(r[13] or 0),
+        "user_id": api_uid(request)
+    })
+
 async def web_server():
     app = web.Application(middlewares=[telegram_auth_middleware])
     app.router.add_get("/", index_handler)
@@ -4226,6 +4451,12 @@ async def web_server():
     app.router.add_post("/api/idea/delete", api_idea_delete)
     app.router.add_post("/api/creator_promo", api_creator_promo)
     app.router.add_get("/api/banlist", api_banlist_get)
+
+    # --- Битвы кейсов ---
+    app.router.add_get("/api/battles", api_battles_list)
+    app.router.add_post("/api/battles/create", api_battle_create)
+    app.router.add_post("/api/battles/join", api_battle_join)
+    app.router.add_get("/api/battle/state", api_battle_state)
     
     runner = web.AppRunner(app)
     await runner.setup()
