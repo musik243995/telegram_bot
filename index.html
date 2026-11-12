@@ -1694,7 +1694,7 @@
 
                 // Батл-пасс: бесплатные кейсы, активный буст, сезон (кнопка исчезает после 31 дня)
                 if (typeof data.free_cases === 'number') userFreeCases = data.free_cases;
-                if (data.bp_boost) setBpBoost(data.bp_boost);
+                setBpBoost(data.bp_boost || null); // null тоже обновляем — чтобы убранное везение исчезало
                 if (typeof data.is_admin === 'boolean') {
                     const orb = document.getElementById('admin-orb');
                     if (orb) orb.style.display = data.is_admin ? 'flex' : 'none';
@@ -2883,6 +2883,20 @@
             }
         }
         setInterval(updateLuckClover, 500);
+
+        // Пока на экране клевер — периодически сверяемся с сервером:
+        // если админ нажал «Убрать все везения», счётчик исчезнет в течение минуты
+        setInterval(async () => {
+            if (bpBoost && bpBoostLeftSec() > 0) {
+                try {
+                    const res = await fetch(`/api/get_data?user_id=${userId}`);
+                    const data = await res.json();
+                    setBpBoost(data.bp_boost || null);
+                    updateLuckClover();
+                    updateBoostBadge();
+                } catch (e) {}
+            }
+        }, 45000);
 
         // Кружочек админа: тап — открыть панель, зажать и вести — перетащить
         (function initAdminOrb() {
