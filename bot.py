@@ -817,7 +817,7 @@ async def shop_buy_callback(callback: CallbackQuery):
 ACTIVE_DROPS = {}
 
 @router.message(F.text.regexp(r"(?i)^обранить\s+(\d+[ккмилн]*)\s+(\d+)$"))
-async def cmd_obran(message: Message, command: CommandObject):
+async def cmd_obran(message: Message):
     if not await check_ban_and_register(message): return
     parts = message.text.split()
     if len(parts) < 3:
@@ -868,15 +868,15 @@ async def cmd_obran(message: Message, command: CommandObject):
     }
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"💸 Забрать {per_person:,} ¢".replace(",", " "), callback_data=f"claim_{drop_id}")]
+        [InlineKeyboardButton(text="🤲 Подобрать", callback_data=f"claim_{drop_id}")]
     ])
 
     uname = message.from_user.username or message.from_user.first_name
     text = (
         f"🎁 **Пользователь @{uname} обранил деньги!**\n\n"
         f"💰 Сумма: `{effective:,}` ¢\n"
-        f"👥 Мест: `{count}` (по `{per_person:,}` ¢ на человека)\n"
-        f"👇 Успей забрать первым!"
+        f"👥 Мест: `{count}`\n"
+        f"👇 Жми кнопку, чтобы подобрать свою часть!"
     ).replace(",", " ")
     await message.answer(text, reply_markup=kb, parse_mode="MARKDOWN")
 
