@@ -237,6 +237,15 @@ def init_db():
             is_creator INTEGER DEFAULT 0,
             gang_name TEXT DEFAULT NULL,
             last_bank_calc REAL,
+            bank_balance BIGINT DEFAULT 0,
+            nyachka BIGINT DEFAULT 0,
+            invested BIGINT DEFAULT 0,
+            bottles INTEGER DEFAULT 0,
+            metal INTEGER DEFAULT 0,
+            banned INTEGER DEFAULT 0,
+            is_creator INTEGER DEFAULT 0,
+            gang_name TEXT DEFAULT NULL,
+            last_bank_calc REAL,
             last_bonus REAL DEFAULT 0,
             last_salary REAL DEFAULT 0,
             referrer_id BIGINT DEFAULT 0,
@@ -439,6 +448,9 @@ def init_db():
     cursor.execute("DELETE FROM market_sims a USING market_sims b WHERE a.number = b.number AND a.id > b.id")
     cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS user_sims_number_uniq ON user_sims (number)")
     cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS market_sims_number_uniq ON market_sims (number)")
+
+    # Удаляем промокоды 10 и 01, чтобы они не появлялись на сайте
+    cursor.execute("DELETE FROM creator_promo_codes WHERE code IN ('10', '01')")
 
     conn.commit()
     conn.close()
