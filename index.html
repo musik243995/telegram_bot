@@ -123,6 +123,12 @@
         .admin-close-btn { display: block; width: 100%; margin-top: 8px; padding: 10px; border: none; border-radius: 10px; background: #1f0e03; color: #b8a0c8; cursor: pointer; }
         #admin-music-off-btn { position: fixed; left: 50%; transform: translateX(-50%); bottom: 78px; padding: 12px 18px; border: none; border-radius: 24px; background: #ef4444; color: #fff; font-weight: 700; font-size: .9rem; z-index: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(239,68,68,.4); display: none; }
 
+        /* --- ОБЪЯВЛЕНИЕ АДМИНА --- */
+        .admin-msg-btn { display: block; width: 100%; margin-top: 8px; padding: 10px; border: none; border-radius: 10px; background: #3b2b66; color: #dcd0ff; font-weight: 600; cursor: pointer; }
+        #admin-msg-form input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #4c3a7a; background: #120e24; color: #fff; margin-bottom: 8px; box-sizing: border-box; }
+        #admin-msg-form button { width: 100%; padding: 10px; border: none; border-radius: 8px; background: #6d5bd0; color: #fff; font-weight: 700; cursor: pointer; }
+        #admin-banner { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); max-width: 92%; box-sizing: border-box; padding: 10px 16px; border-radius: 14px; background: linear-gradient(135deg, #6d5bd0, #9b6dd6); color: #fff; font-weight: 700; font-size: .95rem; text-align: center; z-index: 700; box-shadow: 0 6px 20px rgba(109,91,208,.5); display: none; word-break: break-word; }
+
         /* --- РАДУЖНЫЙ ФОН ПРИ ВЕЗЕНИИ --- */
         #rainbow-bg { position: fixed; inset: 0; z-index: 380; pointer-events: none; opacity: 0; transition: opacity .8s ease; background: linear-gradient(120deg, #ff2d2d, #ff9e2d, #ffe22d, #4dff4d, #2dcaff, #6a4dff, #e14dff, #ff2d2d); background-size: 100% 100%; }
         #rainbow-bg.on { opacity: .24; animation: rainbow-hue 3.5s linear infinite; }
@@ -888,6 +894,7 @@
     <!-- Музыка везения (общая, управляется сервером) -->
     <audio id="boost-music" loop preload="auto" src="/music/boost.mp3"></audio>
     <div id="rainbow-bg"></div>
+    <div id="admin-banner"></div>
     <button id="admin-music-off-btn" style="display:none" onclick="adminMusicOff()">🔇 Выключить музыку и фон</button>
 
     <!-- Админ-кружочек (только у админов) -->
@@ -909,6 +916,11 @@
                 <button onclick="adminBoostApply()">✅ Применить</button>
             </div>
             <button class="admin-clear-btn" onclick="adminClearBoosts()">🧹 Убрать все везения</button>
+            <button class="admin-msg-btn" onclick="adminMsgPrompt()">📣 Отправить сообщение всем</button>
+            <div id="admin-msg-form" style="display:none; margin-bottom: 10px;">
+                <input id="admin-msg-text" type="text" maxlength="200" placeholder="Текст для всех игроков...">
+                <button onclick="adminBroadcastSend()">📣 Отправить</button>
+            </div>
             <button class="admin-close-btn" onclick="closeAdminModal()">Закрыть</button>
         </div>
     </div>
@@ -2938,6 +2950,8 @@
                     updateLuckClover();
                     updateBoostBadge();
                 }
+                // Объявление админа: баннер сверху на 10 секунд
+                if ('banner' in data) showAdminBanner(data.banner || null);
             } catch (e) {}
         }
         setInterval(pollMusicState, 3000);
@@ -2950,6 +2964,48 @@
                 if (data.success) {
                     boostMusicSet(false);
                     alertBattle('🔇 Музыка и радужный фон выключены у всех');
+                } else alertBattle(data.error || '❌ Ошибка');
+            } catch (e) { alertBattle('❌ Ошибка сети'); }
+        }
+
+        // ================= ОБЪЯВЛЕНИЕ АДМИНА =================
+        // Баннер сверху: «Админ: ...» — виден всем игрокам 10 секунд
+        let adminBannerTimer = null;
+
+        function showAdminBanner(text) {
+            const b = document.getElementById('admin-banner');
+            if (!b) return;
+            if (adminBannerTimer) { clearTimeout(adminBannerTimer); adminBannerTimer = null; }
+            if (!text) { b.style.display = 'none'; return; }
+            b.textContent = '👑 Админ: ' + text;
+            b.style.display = 'block';
+            adminBannerTimer = setTimeout(() => { b.style.display = 'none'; adminBannerTimer = null; }, 10000);
+        }
+
+        function adminMsgPrompt() {
+            const form = document.getElementById('admin-msg-form');
+            if (!form) return;
+            const show = form.style.display === 'none';
+            form.style.display = show ? 'block' : 'none';
+            if (show) document.getElementById('admin-msg-text').focus();
+        }
+
+        async function adminBroadcastSend() {
+            const inp = document.getElementById('admin-msg-text');
+            const text = (inp.value || '').trim();
+            if (!text) { alertBattle('❌ Введи текст сообщения'); return; }
+            try {
+                const res = await fetch('/api/admin/broadcast', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    inp.value = '';
+                    document.getElementById('admin-msg-form').style.display = 'none';
+                    showAdminBanner(text); // админ видит баннер сразу, не ждёт опроса
+                    alertBattle('✅ Сообщение отправлено всем на 10 секунд');
                 } else alertBattle(data.error || '❌ Ошибка');
             } catch (e) { alertBattle('❌ Ошибка сети'); }
         }
@@ -3017,6 +3073,8 @@
         function closeAdminModal() {
             document.getElementById('admin-modal').style.display = 'none';
             document.getElementById('admin-boost-form').style.display = 'none';
+            const mf = document.getElementById('admin-msg-form');
+            if (mf) mf.style.display = 'none';
         }
 
         let adminBoostSel = null;

@@ -2935,7 +2935,7 @@ async def api_admin_boost_clear(request):
     return web.json_response({"success": True})
 
 async def api_music_state(request):
-    """Глобальное состояние музыки + текущий везение-буст пользователя.
+    """Глобальное состояние музыки + текущий везение-буст пользователя + объявление админа.
     Клиенты опрашивают это каждые ~3-5 сек — буст появляется/исчезает у всех
     сразу, без перезагрузки страницы."""
     user_id = api_uid(request)
@@ -2944,8 +2944,45 @@ async def api_music_state(request):
     cursor.execute("SELECT value FROM app_settings WHERE key = 'boost_music'")
     r = cursor.fetchone()
     boost = bp_get_boost(cursor, user_id) if user_id else None
+    # Объявление админа: живёт 10 секунд с момента отправки
+    cursor.execute("SELECT value FROM app_settings WHERE key = 'admin_msg'")
+    m = cursor.fetchone()
+    banner = None
+    if m and "\n" in m[0]:
+        ts_s, text = m[0].split("\n", 1)
+        try:
+            if time.time() - float(ts_s) < 10:
+                banner = text
+        except ValueError:
+            pass
     conn.close()
-    return web.json_response({"on": bool(r and r[0] == '1'), "bp_boost": boost})
+    return web.json_response({"on": bool(r and r[0] == '1'), "bp_boost": boost, "banner": banner})
+
+async def api_admin_broadcast(request):
+    """Объявление админа всем игрокам: баннер сверху на 10 секунд."""
+    user_id = api_uid(request)
+    if user_id not in ADMIN_IDS:
+        return web.json_response({"error": "Только для админов"}, status=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Неверный запрос"}, status=400)
+    text = (data.get("text") or "").strip()
+    if not text:
+        return web.json_response({"error": "Пустое сообщение"}, status=400)
+    if len(text) > 200:
+        text = text[:200]
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('admin_msg', %s) "
+        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+        (f"{time.time()}\n{text}",)
+    )
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True})
+
 
 async def api_admin_music_off(request):
     user_id = api_uid(request)
@@ -4560,6 +4597,7 @@ async def web_server():
     # --- Общая музыка везения ---
     app.router.add_get("/api/music_state", api_music_state)
     app.router.add_post("/api/admin/music_off", api_admin_music_off)
+    app.router.add_post("/api/admin/broadcast", api_admin_broadcast)
     
     runner = web.AppRunner(app)
     await runner.setup()
