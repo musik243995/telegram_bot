@@ -2927,9 +2927,15 @@
                 const res = await fetch('/api/music_state');
                 const data = await res.json();
                 boostMusicSet(!!data.on);
+                // Везение у всех появляется/исчезает сразу, без перезагрузки страницы
+                if ('bp_boost' in data) {
+                    setBpBoost(data.bp_boost || null);
+                    updateLuckClover();
+                    updateBoostBadge();
+                }
             } catch (e) {}
         }
-        setInterval(pollMusicState, 5000);
+        setInterval(pollMusicState, 3000);
         pollMusicState();
 
         async function adminMusicOff() {

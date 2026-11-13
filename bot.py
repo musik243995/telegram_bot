@@ -2935,13 +2935,17 @@ async def api_admin_boost_clear(request):
     return web.json_response({"success": True})
 
 async def api_music_state(request):
-    """Глобальное состояние музыки для всех клиентов WebApp."""
+    """Глобальное состояние музыки + текущий везение-буст пользователя.
+    Клиенты опрашивают это каждые ~3-5 сек — буст появляется/исчезает у всех
+    сразу, без перезагрузки страницы."""
+    user_id = api_uid(request)
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM app_settings WHERE key = 'boost_music'")
     r = cursor.fetchone()
+    boost = bp_get_boost(cursor, user_id) if user_id else None
     conn.close()
-    return web.json_response({"on": bool(r and r[0] == '1')})
+    return web.json_response({"on": bool(r and r[0] == '1'), "bp_boost": boost})
 
 async def api_admin_music_off(request):
     user_id = api_uid(request)
