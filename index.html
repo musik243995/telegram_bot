@@ -2915,10 +2915,6 @@
             updateAdminMusicBtn();
         }
 
-        function playBoostMusic() {
-            boostMusicSet(true); // админ нажал х2-х10 — включает сразу у себя
-        }
-
         // Если автоплей заблокирован — музыка включится при первом касании экрана
         document.addEventListener('pointerdown', () => {
             if (boostMusicOn) {
@@ -3026,7 +3022,7 @@
         let adminBoostSel = null;
         function adminBoostPrompt(mult) {
             adminBoostSel = mult;
-            playBoostMusic(); // 🎵 Michael Jackson при создании везения
+            // Музыка и радуга стартуют только ПОСЛЕ активации везения (кнопка «Применить»)
             document.getElementById('admin-boost-form').style.display = 'block';
             const inp = document.getElementById('admin-boost-seconds');
             inp.value = '';
@@ -3046,6 +3042,7 @@
                 const data = await res.json();
                 if (data.success) {
                     alertBattle(`✅ Везение х${adminBoostSel} выдано всем на ${sec} сек.!`);
+                    boostMusicSet(true); // 🎵🌈 музыка и радуга у всех сразу
                     document.getElementById('admin-boost-form').style.display = 'none';
                     await fetchData();
                 } else alertBattle(data.error || '❌ Ошибка');
