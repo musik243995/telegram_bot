@@ -2883,27 +2883,44 @@
             if (!audio || !btn) return;
             audio.volume = 0.18; // негромко
             const KEY = 'bg_music_on';
-            let enabled = localStorage.getItem(KEY) !== '0'; // по умолчанию включена
+            let enabled = true;
+            try { enabled = localStorage.getItem(KEY) !== '0'; } catch (e) {} // по умолчанию включена
             let started = false;
 
-            function updateBtn() { btn.textContent = enabled ? '🔊' : '🔇'; }
+            // 🎵 — включена, ждёт первого касания · 🔊 — играет · 🔇 — выключена
+            function updateBtn() {
+                btn.textContent = !enabled ? '🔇' : (started ? '🔊' : '🎵');
+            }
             function tryStart() {
                 if (!enabled || started) return;
                 const p = audio.play();
-                if (p && p.then) p.then(() => { started = true; }).catch(() => {});
+                if (p && p.then) {
+                    p.then(() => { started = true; updateBtn(); })
+                     .catch(err => { console.log('[music] play fail:', err && err.name); });
+                }
                 if (!audio.paused) started = true;
+                updateBtn();
             }
             btn.addEventListener('click', () => {
                 enabled = !enabled;
-                localStorage.setItem(KEY, enabled ? '1' : '0');
-                updateBtn();
+                try { localStorage.setItem(KEY, enabled ? '1' : '0'); } catch (e) {}
                 if (enabled) tryStart(); else audio.pause();
+                updateBtn();
             });
-            // Браузеры запрещают автоплей без касания — стартуем на первом тапе
-            document.addEventListener('pointerdown', function once() {
+            // Браузеры/WebView запрещают автоплей без жеста пользователя.
+            // Вешаем на все виды касаний и не снимаем, пока музыка реально не заиграла.
+            function gestureHandler(e) {
+                if (e && e.target && e.target.closest && e.target.closest('#music-btn')) return;
                 tryStart();
-                if (started) document.removeEventListener('pointerdown', once);
-            });
+                if (started) {
+                    document.removeEventListener('pointerdown', gestureHandler);
+                    document.removeEventListener('touchend', gestureHandler);
+                    document.removeEventListener('click', gestureHandler);
+                }
+            }
+            document.addEventListener('pointerdown', gestureHandler, true);
+            document.addEventListener('touchend', gestureHandler, true);
+            document.addEventListener('click', gestureHandler, true);
             updateBtn();
         })();
 
