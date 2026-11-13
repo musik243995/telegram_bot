@@ -122,6 +122,11 @@
         .admin-clear-btn { display: block; width: 100%; margin-top: 6px; padding: 12px; border: none; border-radius: 10px; background: #334155; color: #fff; font-weight: 700; cursor: pointer; }
         .admin-close-btn { display: block; width: 100%; margin-top: 8px; padding: 10px; border: none; border-radius: 10px; background: #1f0e03; color: #b8a0c8; cursor: pointer; }
         #admin-music-off-btn { position: fixed; left: 50%; transform: translateX(-50%); bottom: 78px; padding: 12px 18px; border: none; border-radius: 24px; background: #ef4444; color: #fff; font-weight: 700; font-size: .9rem; z-index: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(239,68,68,.4); display: none; }
+
+        /* --- РАДУЖНЫЙ ФОН ПРИ ВЕЗЕНИИ --- */
+        #rainbow-bg { position: fixed; inset: 0; z-index: 380; pointer-events: none; opacity: 0; transition: opacity .8s ease; background: linear-gradient(120deg, #ff2d2d, #ff9e2d, #ffe22d, #4dff4d, #2dcaff, #6a4dff, #e14dff, #ff2d2d); background-size: 100% 100%; }
+        #rainbow-bg.on { opacity: .24; animation: rainbow-hue 3.5s linear infinite; }
+        @keyframes rainbow-hue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }
         #admin-boost-form input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #4c3a7a; background: #120e24; color: #fff; margin-bottom: 8px; box-sizing: border-box; }
         #admin-boost-form button { width: 100%; padding: 10px; border: none; border-radius: 8px; background: #22c55e; color: #fff; font-weight: 700; cursor: pointer; }
 
@@ -882,7 +887,8 @@
 
     <!-- Музыка везения (общая, управляется сервером) -->
     <audio id="boost-music" loop preload="auto" src="/music/boost.mp3"></audio>
-    <button id="admin-music-off-btn" style="display:none" onclick="adminMusicOff()">🔇 Выключить музыку у всех</button>
+    <div id="rainbow-bg"></div>
+    <button id="admin-music-off-btn" style="display:none" onclick="adminMusicOff()">🔇 Выключить музыку и фон</button>
 
     <!-- Админ-кружочек (только у админов) -->
     <div id="admin-orb">А</div>
@@ -2890,6 +2896,9 @@
         function boostMusicSet(on) {
             const wasOn = boostMusicOn;
             boostMusicOn = on;
+            // Радужный фон светится, пока событие включено (вместе с музыкой)
+            const rb = document.getElementById('rainbow-bg');
+            if (rb) rb.classList.toggle('on', on);
             const a = document.getElementById('boost-music');
             if (!a) { updateAdminMusicBtn(); return; }
             if (on) {
@@ -2944,7 +2953,7 @@
                 const data = await res.json();
                 if (data.success) {
                     boostMusicSet(false);
-                    alertBattle('🔇 Музыка выключена у всех');
+                    alertBattle('🔇 Музыка и радужный фон выключены у всех');
                 } else alertBattle(data.error || '❌ Ошибка');
             } catch (e) { alertBattle('❌ Ошибка сети'); }
         }
