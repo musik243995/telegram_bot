@@ -121,6 +121,7 @@
         .admin-boost-btn.b10 { background: #ef4444; }
         .admin-clear-btn { display: block; width: 100%; margin-top: 6px; padding: 12px; border: none; border-radius: 10px; background: #334155; color: #fff; font-weight: 700; cursor: pointer; }
         .admin-close-btn { display: block; width: 100%; margin-top: 8px; padding: 10px; border: none; border-radius: 10px; background: #1f0e03; color: #b8a0c8; cursor: pointer; }
+        #admin-music-off-btn { position: fixed; left: 50%; transform: translateX(-50%); bottom: 78px; padding: 12px 18px; border: none; border-radius: 24px; background: #ef4444; color: #fff; font-weight: 700; font-size: .9rem; z-index: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(239,68,68,.4); display: none; }
         #admin-boost-form input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #4c3a7a; background: #120e24; color: #fff; margin-bottom: 8px; box-sizing: border-box; }
         #admin-boost-form button { width: 100%; padding: 10px; border: none; border-radius: 8px; background: #22c55e; color: #fff; font-weight: 700; cursor: pointer; }
 
@@ -879,8 +880,9 @@
         <span class="timer" id="bp-boost-timer">1:00</span>
     </div>
 
-    <!-- Музыка создания везения (админ) -->
-    <audio id="boost-music" preload="auto" src="/music/boost.mp3"></audio>
+    <!-- Музыка везения (общая, управляется сервером) -->
+    <audio id="boost-music" loop preload="auto" src="/music/boost.mp3"></audio>
+    <button id="admin-music-off-btn" style="display:none" onclick="adminMusicOff()">🔇 Выключить музыку у всех</button>
 
     <!-- Админ-кружочек (только у админов) -->
     <div id="admin-orb">А</div>
@@ -1699,8 +1701,10 @@
                 if (typeof data.free_cases === 'number') userFreeCases = data.free_cases;
                 setBpBoost(data.bp_boost || null); // null тоже обновляем — чтобы убранное везение исчезало
                 if (typeof data.is_admin === 'boolean') {
+                    webIsAdmin = data.is_admin;
                     const orb = document.getElementById('admin-orb');
                     if (orb) orb.style.display = data.is_admin ? 'flex' : 'none';
+                    updateAdminMusicBtn();
                 }
                 if (data.bp_season) {
                     bpSeason = data.bp_season;
@@ -2871,22 +2875,72 @@
         }
         setInterval(updateBoostBadge, 500);
 
-        // ================= МУЗЫКА ПРИ СОЗДАНИИ ВЕЗЕНИЯ =================
-        // Играется, когда админ нажимает х2/х4/х6/х10 — клик по кнопке
-        // является жестом пользователя, поэтому браузер разрешает play()
-        function playBoostMusic() {
+        // ================= ОБЩАЯ МУЗЫКА ВЕЗЕНИЯ =================
+        // Состояние музыки глобальное (сервер): админ выдал х2-х10 — у всех играет,
+        // пока админ не нажмёт «🔇 Выключить музыку у всех».
+        let boostMusicOn = false;
+        let webIsAdmin = false;
+
+        function updateAdminMusicBtn() {
+            const btn = document.getElementById('admin-music-off-btn');
+            if (!btn) return;
+            btn.style.display = (webIsAdmin && boostMusicOn) ? 'block' : 'none';
+        }
+
+        function boostMusicSet(on) {
+            const wasOn = boostMusicOn;
+            boostMusicOn = on;
             const a = document.getElementById('boost-music');
-            if (!a) return;
-            try {
-                a.volume = 0.7;
+            if (!a) { updateAdminMusicBtn(); return; }
+            if (on) {
+                if (a.paused) {
+                    a.loop = true;
+                    const p = a.play();
+                    if (p && p.catch) p.catch(() => {});
+                    // если браузер заблокировал без жеста — включится на следующем тапе (см. слушатель ниже)
+                }
+            } else if (wasOn && !a.paused) {
+                a.pause();
                 a.currentTime = 0;
-                const p = a.play();
-                if (p && p.catch) p.catch(err => console.log('[music]', err && err.name));
+            }
+            updateAdminMusicBtn();
+        }
+
+        function playBoostMusic() {
+            boostMusicSet(true); // админ нажал х2-х10 — включает сразу у себя
+        }
+
+        // Если автоплей заблокирован — музыка включится при первом касании экрана
+        document.addEventListener('pointerdown', () => {
+            if (boostMusicOn) {
+                const a = document.getElementById('boost-music');
+                if (a && a.paused) {
+                    a.loop = true;
+                    const p = a.play();
+                    if (p && p.catch) p.catch(() => {});
+                }
+            }
+        }, true);
+
+        async function pollMusicState() {
+            try {
+                const res = await fetch('/api/music_state');
+                const data = await res.json();
+                boostMusicSet(!!data.on);
             } catch (e) {}
         }
-        function stopBoostMusic() {
-            const a = document.getElementById('boost-music');
-            if (a && !a.paused) { a.pause(); }
+        setInterval(pollMusicState, 5000);
+        pollMusicState();
+
+        async function adminMusicOff() {
+            try {
+                const res = await fetch('/api/admin/music_off', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    boostMusicSet(false);
+                    alertBattle('🔇 Музыка выключена у всех');
+                } else alertBattle(data.error || '❌ Ошибка');
+            } catch (e) { alertBattle('❌ Ошибка сети'); }
         }
 
         // ================= АДМИН-КРУЖОЧЕК И КЛЕВЕР =================
@@ -2952,7 +3006,6 @@
         function closeAdminModal() {
             document.getElementById('admin-modal').style.display = 'none';
             document.getElementById('admin-boost-form').style.display = 'none';
-            stopBoostMusic();
         }
 
         let adminBoostSel = null;
@@ -2978,7 +3031,6 @@
                 const data = await res.json();
                 if (data.success) {
                     alertBattle(`✅ Везение х${adminBoostSel} выдано всем на ${sec} сек.!`);
-                    stopBoostMusic();
                     document.getElementById('admin-boost-form').style.display = 'none';
                     await fetchData();
                 } else alertBattle(data.error || '❌ Ошибка');

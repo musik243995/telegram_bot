@@ -463,6 +463,13 @@ def init_db():
             started_at REAL NOT NULL
         )
     """)
+    # Глобальные настройки WebApp (состояние музыки и т.п.)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
 
     # Номера сим-карт должны быть уникальны во всей игре:
     # убираем старые дубликаты (оставляем самый ранний) и ставим индексы
@@ -2907,6 +2914,11 @@ async def api_admin_boost(request):
         "ON CONFLICT (user_id) DO UPDATE SET boost = EXCLUDED.boost, until_ts = EXCLUDED.until_ts",
         (boost, time.time() + seconds)
     )
+    # Музыка включается у всех, пока админ её явно не выключит
+    cursor.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('boost_music', '1') "
+        "ON CONFLICT (key) DO UPDATE SET value = '1'"
+    )
     conn.commit()
     conn.close()
     return web.json_response({"success": True, "boost": boost, "seconds": seconds})
@@ -2918,6 +2930,29 @@ async def api_admin_boost_clear(request):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM battle_pass_boosts")
+    conn.commit()
+    conn.close()
+    return web.json_response({"success": True})
+
+async def api_music_state(request):
+    """Глобальное состояние музыки для всех клиентов WebApp."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM app_settings WHERE key = 'boost_music'")
+    r = cursor.fetchone()
+    conn.close()
+    return web.json_response({"on": bool(r and r[0] == '1')})
+
+async def api_admin_music_off(request):
+    user_id = api_uid(request)
+    if user_id not in ADMIN_IDS:
+        return web.json_response({"error": "Только для админов"}, status=403)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('boost_music', '0') "
+        "ON CONFLICT (key) DO UPDATE SET value = '0'"
+    )
     conn.commit()
     conn.close()
     return web.json_response({"success": True})
@@ -4518,6 +4553,9 @@ async def web_server():
     # --- Админ: везение всем игрокам ---
     app.router.add_post("/api/admin_boost", api_admin_boost)
     app.router.add_post("/api/admin_boost_clear", api_admin_boost_clear)
+    # --- Общая музыка везения ---
+    app.router.add_get("/api/music_state", api_music_state)
+    app.router.add_post("/api/admin/music_off", api_admin_music_off)
     
     runner = web.AppRunner(app)
     await runner.setup()
