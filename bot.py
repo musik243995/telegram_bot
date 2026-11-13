@@ -2845,7 +2845,7 @@ def api_uid(request) -> int:
 @web.middleware
 async def telegram_auth_middleware(request, handler):
     # Главная страница и статические файлы отдаются без проверки: initData подставит сам Telegram
-    if request.path == "/" or request.path == "/creator" or request.path == "/creator.html" or request.path.startswith("/cases/"):
+    if request.path == "/" or request.path == "/creator" or request.path == "/creator.html" or request.path.startswith("/cases/") or request.path.startswith("/music/"):
         return await handler(request)
     if verify_init_data(request.headers.get("X-Init-Data", "")) is None:
         return web.json_response({"error": "Не авторизовано"}, status=401)
@@ -4474,6 +4474,9 @@ async def web_server():
     # 3D-кейсы (SVG с прозрачным фоном)
     cases_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cases")
     app.router.add_static("/cases/", path=cases_dir, name="cases")
+    # Фоновая музыка WebApp
+    music_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "music")
+    app.router.add_static("/music/", path=music_dir, name="music")
     app.router.add_get("/api/get_data", api_get_data)
     app.router.add_get("/api/get_inventory", api_get_inventory)
     app.router.add_post("/api/open_case", api_open_case)
