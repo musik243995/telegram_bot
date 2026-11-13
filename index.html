@@ -124,10 +124,6 @@
         #admin-boost-form input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #4c3a7a; background: #120e24; color: #fff; margin-bottom: 8px; box-sizing: border-box; }
         #admin-boost-form button { width: 100%; padding: 10px; border: none; border-radius: 8px; background: #22c55e; color: #fff; font-weight: 700; cursor: pointer; }
 
-        /* --- ФОНОВАЯ МУЗЫКА --- */
-        #music-btn { position: fixed; right: 10px; bottom: 80px; width: 42px; height: 42px; border-radius: 50%; background: rgba(18,12,36,.92); border: 1px solid #4c3a7a; color: #fff; font-size: 1.1rem; z-index: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        #music-btn:active { transform: scale(.94); }
-
 
         .cases-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         .case-card { background: #120e24; border-radius: 18px; overflow: hidden; border: 1px solid #2a224c; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.2s; }
@@ -883,9 +879,8 @@
         <span class="timer" id="bp-boost-timer">1:00</span>
     </div>
 
-    <!-- Фоновая музыка -->
-    <audio id="bg-music" loop preload="none" src="/music/spooky_waltz.m4a"></audio>
-    <button id="music-btn" title="Музыка">🔇</button>
+    <!-- Музыка создания везения (админ) -->
+    <audio id="boost-music" preload="auto" src="/music/boost.mp3"></audio>
 
     <!-- Админ-кружочек (только у админов) -->
     <div id="admin-orb">А</div>
@@ -2876,53 +2871,23 @@
         }
         setInterval(updateBoostBadge, 500);
 
-        // ================= ФОНОВАЯ МУЗЫКА =================
-        (function initBgMusic() {
-            const audio = document.getElementById('bg-music');
-            const btn = document.getElementById('music-btn');
-            if (!audio || !btn) return;
-            audio.volume = 0.18; // негромко
-            const KEY = 'bg_music_on';
-            let enabled = true;
-            try { enabled = localStorage.getItem(KEY) !== '0'; } catch (e) {} // по умолчанию включена
-            let started = false;
-
-            // 🎵 — включена, ждёт первого касания · 🔊 — играет · 🔇 — выключена
-            function updateBtn() {
-                btn.textContent = !enabled ? '🔇' : (started ? '🔊' : '🎵');
-            }
-            function tryStart() {
-                if (!enabled || started) return;
-                const p = audio.play();
-                if (p && p.then) {
-                    p.then(() => { started = true; updateBtn(); })
-                     .catch(err => { console.log('[music] play fail:', err && err.name); });
-                }
-                if (!audio.paused) started = true;
-                updateBtn();
-            }
-            btn.addEventListener('click', () => {
-                enabled = !enabled;
-                try { localStorage.setItem(KEY, enabled ? '1' : '0'); } catch (e) {}
-                if (enabled) tryStart(); else audio.pause();
-                updateBtn();
-            });
-            // Браузеры/WebView запрещают автоплей без жеста пользователя.
-            // Вешаем на все виды касаний и не снимаем, пока музыка реально не заиграла.
-            function gestureHandler(e) {
-                if (e && e.target && e.target.closest && e.target.closest('#music-btn')) return;
-                tryStart();
-                if (started) {
-                    document.removeEventListener('pointerdown', gestureHandler);
-                    document.removeEventListener('touchend', gestureHandler);
-                    document.removeEventListener('click', gestureHandler);
-                }
-            }
-            document.addEventListener('pointerdown', gestureHandler, true);
-            document.addEventListener('touchend', gestureHandler, true);
-            document.addEventListener('click', gestureHandler, true);
-            updateBtn();
-        })();
+        // ================= МУЗЫКА ПРИ СОЗДАНИИ ВЕЗЕНИЯ =================
+        // Играется, когда админ нажимает х2/х4/х6/х10 — клик по кнопке
+        // является жестом пользователя, поэтому браузер разрешает play()
+        function playBoostMusic() {
+            const a = document.getElementById('boost-music');
+            if (!a) return;
+            try {
+                a.volume = 0.7;
+                a.currentTime = 0;
+                const p = a.play();
+                if (p && p.catch) p.catch(err => console.log('[music]', err && err.name));
+            } catch (e) {}
+        }
+        function stopBoostMusic() {
+            const a = document.getElementById('boost-music');
+            if (a && !a.paused) { a.pause(); }
+        }
 
         // ================= АДМИН-КРУЖОЧЕК И КЛЕВЕР =================
         function updateLuckClover() {
@@ -2987,11 +2952,13 @@
         function closeAdminModal() {
             document.getElementById('admin-modal').style.display = 'none';
             document.getElementById('admin-boost-form').style.display = 'none';
+            stopBoostMusic();
         }
 
         let adminBoostSel = null;
         function adminBoostPrompt(mult) {
             adminBoostSel = mult;
+            playBoostMusic(); // 🎵 Michael Jackson при создании везения
             document.getElementById('admin-boost-form').style.display = 'block';
             const inp = document.getElementById('admin-boost-seconds');
             inp.value = '';
@@ -3011,6 +2978,7 @@
                 const data = await res.json();
                 if (data.success) {
                     alertBattle(`✅ Везение х${adminBoostSel} выдано всем на ${sec} сек.!`);
+                    stopBoostMusic();
                     document.getElementById('admin-boost-form').style.display = 'none';
                     await fetchData();
                 } else alertBattle(data.error || '❌ Ошибка');
